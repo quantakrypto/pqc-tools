@@ -23,6 +23,17 @@ expert pass. They cite `file:line` and propose concrete fixes.
 | Performance | Hot path, complexity, parallelism, incremental scans | [audits/performance.md](audits/performance.md) |
 | Testing / DevEx | Coverage, CI, lint/format, OSS governance | [audits/testing-devex.md](audits/testing-devex.md) |
 
+## Validation & accuracy
+
+Empirical, reproducible measurements of detector behaviour — locked as
+regression guards in the test suite.
+
+| Doc | What it measures |
+|---|---|
+| [validation/detection-benchmark.md](validation/detection-benchmark.md) | qScan detector precision / recall / F1 against a labeled corpus (current: P 0.969 · R 1.000 · F1 0.984), with a frank list of known false positives / false negatives |
+| [validation/sieve-real-impl.md](validation/sieve-real-impl.md) | Sieve driven against a real audited PQC implementation (`@noble/post-quantum`): passes ML-KEM/ML-DSA/SLH-DSA, catches a broken variant, and surfaced one genuine FIPS 203 §7.2 deviation |
+| [validation/qscan-dogfood.md](validation/qscan-dogfood.md) | qScan run on real repositories (`jsonwebtoken`, `jose`) — accurate inventory + readiness verdict on crypto-heavy code |
+
 ## Security & threat model
 
 - **[THREAT-MODEL.md](THREAT-MODEL.md)** — assets, trust boundaries, data flows,
