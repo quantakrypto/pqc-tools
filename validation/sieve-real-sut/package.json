@@ -1,0 +1,9 @@
+{
+  "name": "sieve-real-sut",
+  "private": true,
+  "type": "module",
+  "description": "Validation-only: drives a real, audited PQC implementation (@noble/post-quantum) over the Sieve JSON protocol. NOT part of the published monorepo (outside npm workspaces) — keeps @qproof/* zero-dependency.",
+  "dependencies": {
+    "@noble/post-quantum": "^0.4.0"
+  }
+}

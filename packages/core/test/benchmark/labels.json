@@ -1,0 +1,139 @@
+{
+  "$comment": [
+    "Ground-truth labels for the detection benchmark. Each key is a corpus file",
+    "path relative to packages/core/test/benchmark/corpus/. The value is the array",
+    "of findings the scanner is EXPECTED to produce, each described by its stable",
+    "ruleId plus (where applicable) the classical algorithm family and the hndl",
+    "(harvest-now-decrypt-later) flag. Negative / false-positive bait files map to",
+    "an empty array: any finding on them is a regression. The `category` is",
+    "informational and drives the per-category breakdown in the scorer.",
+    "These labels are hand-derived from packages/core/src/detectors/* and verified",
+    "against the live detectors; see docs/validation/detection-benchmark.md."
+  ],
+  "positive/rsa-keygen-sign.ts": {
+    "category": "rsa",
+    "expected": [
+      { "ruleId": "node-crypto-keygen", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "node-crypto-sign", "algorithm": "unknown", "hndl": false }
+    ]
+  },
+  "positive/rsa-oneshot-sign.mjs": {
+    "category": "signature-oneshot",
+    "expected": [
+      { "ruleId": "node-crypto-sign-oneshot", "algorithm": "unknown", "hndl": false },
+      { "ruleId": "node-crypto-sign-oneshot", "algorithm": "unknown", "hndl": false }
+    ]
+  },
+  "positive/rsa-encrypt.js": {
+    "category": "rsa",
+    "expected": [{ "ruleId": "node-crypto-rsa-encrypt", "algorithm": "RSA", "hndl": true }]
+  },
+  "positive/ecdh-createecdh.ts": {
+    "category": "ecdh",
+    "expected": [{ "ruleId": "node-crypto-ecdh", "algorithm": "ECDH", "hndl": true }]
+  },
+  "positive/ec-keygen.ts": {
+    "category": "ec-keygen",
+    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "ECDH", "hndl": true }]
+  },
+  "positive/ecdsa-webcrypto.ts": {
+    "category": "ecdsa",
+    "expected": [{ "ruleId": "webcrypto-classical", "algorithm": "ECDSA", "hndl": false }]
+  },
+  "positive/ecdh-webcrypto-derivekey.ts": {
+    "category": "ecdh",
+    "expected": [{ "ruleId": "webcrypto-classical", "algorithm": "ECDH", "hndl": true }]
+  },
+  "positive/dh-creatediffiehellman.js": {
+    "category": "dh",
+    "expected": [{ "ruleId": "node-crypto-dh", "algorithm": "DH", "hndl": true }]
+  },
+  "positive/dh-modp-group.ts": {
+    "category": "dh",
+    "expected": [{ "ruleId": "node-crypto-dh-modp", "algorithm": "DH", "hndl": true }]
+  },
+  "positive/dsa-keygen.ts": {
+    "category": "dsa",
+    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "DSA", "hndl": false }]
+  },
+  "positive/ed25519-keygen.ts": {
+    "category": "eddsa",
+    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "EdDSA", "hndl": false }]
+  },
+  "positive/x25519-keygen.mjs": {
+    "category": "x25519",
+    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "X25519", "hndl": true }]
+  },
+  "positive/jwt-rs256.ts": {
+    "category": "jwt-jose",
+    "expected": [{ "ruleId": "jwt-classical-alg", "algorithm": "RSA", "hndl": false }]
+  },
+  "positive/jwt-es256.js": {
+    "category": "jwt-jose",
+    "expected": [{ "ruleId": "jwt-classical-alg", "algorithm": "ECDSA", "hndl": false }]
+  },
+  "positive/jose-ecdh-es.ts": {
+    "category": "jwt-jose",
+    "expected": [{ "ruleId": "jose-ecdh-es", "algorithm": "ECDH", "hndl": true }]
+  },
+  "positive/forge-rsa.js": {
+    "category": "library",
+    "expected": [{ "ruleId": "forge-rsa-keygen", "algorithm": "RSA", "hndl": true }]
+  },
+  "positive/elliptic-ec.ts": {
+    "category": "library",
+    "expected": [{ "ruleId": "elliptic-ec", "algorithm": "ECDSA", "hndl": false }]
+  },
+  "positive/secp256k1-usage.ts": {
+    "category": "library",
+    "expected": [{ "ruleId": "secp256k1-usage", "algorithm": "ECDSA", "hndl": false }]
+  },
+  "positive/jsrsasign-usage.js": {
+    "category": "library",
+    "expected": [
+      { "ruleId": "jsrsasign-keygen", "algorithm": "unknown", "hndl": false },
+      { "ruleId": "jsrsasign-sign", "algorithm": "unknown", "hndl": false }
+    ]
+  },
+  "positive/node-rsa-usage.mjs": {
+    "category": "library",
+    "expected": [{ "ruleId": "node-rsa", "algorithm": "RSA", "hndl": true }]
+  },
+  "positive/package.json": {
+    "category": "dependency",
+    "expected": [
+      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true }
+    ]
+  },
+  "positive/rsa-private-key.pem": {
+    "category": "pem",
+    "expected": [{ "ruleId": "pem-rsa-private-key", "algorithm": "RSA", "hndl": true }]
+  },
+  "positive/ec-private-key.pem": {
+    "category": "pem",
+    "expected": [{ "ruleId": "pem-ec-private-key", "algorithm": "ECDSA", "hndl": true }]
+  },
+  "positive/authorized_keys": {
+    "category": "ssh",
+    "expected": [
+      { "ruleId": "ssh-public-key", "algorithm": "RSA", "hndl": false },
+      { "ruleId": "ssh-public-key", "algorithm": "EdDSA", "hndl": false }
+    ]
+  },
+  "positive/tls-legacy-config.ts": {
+    "category": "tls",
+    "expected": [
+      { "ruleId": "tls-legacy-version", "algorithm": null, "hndl": false },
+      { "ruleId": "tls-reject-unauthorized", "algorithm": null, "hndl": false }
+    ]
+  },
+  "negative/password-hashing.ts": { "category": "negative", "expected": [] },
+  "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
+  "negative/hashing-hmac.js": { "category": "negative", "expected": [] },
+  "negative/noble-hashes.mjs": { "category": "negative", "expected": [] },
+  "negative/random-base64.txt": { "category": "negative", "expected": [] },
+  "negative/comments-and-names.ts": { "category": "negative", "expected": [] },
+  "negative/safe-package.json": { "category": "negative", "expected": [] },
+  "negative/crypto-words-in-comment.ts": { "category": "negative", "expected": [] }
+}

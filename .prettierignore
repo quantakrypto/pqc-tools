@@ -17,3 +17,8 @@ package-lock.json
 # REUSE / licensing data
 LICENSES/
 REUSE.toml
+
+# Detector benchmark fixtures: intentionally "bad" crypto + exact-byte PEM/SSH
+# material; their formatting is part of the test, so don't reflow them.
+**/test/benchmark/corpus/
+

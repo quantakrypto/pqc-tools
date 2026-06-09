@@ -1,0 +1,8 @@
+Random base64-ish data blobs that are NOT PEM keys or certificates.
+Expected: no findings (no -----BEGIN markers, no crypto calls).
+
+aGVsbG8gd29ybGQgdGhpcyBpcyBqdXN0IHNvbWUgcmFuZG9tIGJhc2U2NCBkYXRh
+Tm90aGluZyBjcnlwdG9ncmFwaGljIGFib3V0IHRoaXMgYXQgYWxsLCBwcm9taXNl
+ZXljYXRjaGVyIHBheWxvYWQgaWRlbnRpZmllciB0b2tlbiBibG9iIDEyMzQ1Njc4
+U29tZSBwZW9wbGUgd3JpdGUgUlNBIGFuZCBFQ0RTQSBpbiBwcm9zZSBidXQgaXQn
+cyBqdXN0IHRleHQgaGVyZSwgbm90IGEgY3J5cHRvIGNhbGwgb3IgYSBQRU0ga2V5

@@ -23,6 +23,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/*.d.ts",
       "**/examples/**", // mock SUT / sample vulnerable trees, intentionally "bad"
+      "**/test/benchmark/corpus/**", // labeled detector fixtures, intentionally "bad"
     ],
   },
 
@@ -69,7 +70,7 @@ export default tseslint.config(
   // scripts/ are zero-dep Node utilities (not part of any tsconfig project);
   // lint them lightly without the type-aware program to avoid project errors.
   {
-    files: ["scripts/**/*.{js,mjs,cjs}"],
+    files: ["scripts/**/*.{js,mjs,cjs}", "validation/**/*.{js,mjs,cjs}"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       globals: {

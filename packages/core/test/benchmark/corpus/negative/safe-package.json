@@ -1,0 +1,15 @@
+{
+  "name": "benchmark-safe-deps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Negative bait: depends only on libraries with no classical asymmetric crypto.",
+  "dependencies": {
+    "express": "^4.18.0",
+    "lodash": "^4.17.21",
+    "@noble/hashes": "^1.3.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
