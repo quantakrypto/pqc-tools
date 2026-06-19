@@ -1,13 +1,13 @@
 /**
  * Baseline support for qScan — a thin adapter over the **canonical** baseline
- * implementation in `@qproof/core` (P1-1).
+ * implementation in `@quantakrypto/core` (P1-1).
  *
  * Historically qScan carried its own baseline scheme (12-char hash of
  * `ruleId|file|snippet|line`) that was incompatible with the GitHub Action's.
  * Both have been unified onto core's single source of truth, so this module no
  * longer defines its own format or hashing — it re-exports core's primitives
  * and adds only the small filename-resolution / API-shape conveniences the CLI
- * and `@qproof/action` rely on.
+ * and `@quantakrypto/action` rely on.
  *
  * The on-disk format is core's {@link Baseline}: `{ version, fingerprints }`,
  * where each fingerprint is a full, line-INSENSITIVE SHA-256 (so unrelated edits
@@ -21,11 +21,11 @@ import {
   fingerprintFinding,
   loadBaseline,
   saveBaseline,
-} from "@qproof/core";
-import type { Baseline, Finding } from "@qproof/core";
+} from "@quantakrypto/core";
+import type { Baseline, Finding } from "@quantakrypto/core";
 
 // Re-export core's canonical primitives so downstream tools (and tests) can use
-// them through `@qproof/qscan` without reaching into `@qproof/core` internals.
+// them through `@quantakrypto/qscan` without reaching into `@quantakrypto/core` internals.
 export { baselineFromFindings, BASELINE_VERSION, fingerprintFinding, loadBaseline, saveBaseline };
 export type { Baseline };
 

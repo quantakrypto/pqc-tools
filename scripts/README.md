@@ -7,19 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 
 Zero-dependency Node utilities that support development but are not part of any
 published package. They use only Node built-ins plus, where noted, a workspace
-package (`@qproof/core`).
+package (`@quantakrypto/core`).
 
 ## `bench.mjs` — scan benchmark harness (P2-4)
 
 Generates a synthetic source tree seeded with sample quantum-vulnerable crypto
 (RSA/EC key generation, ECDH, classical TLS ciphers, a vulnerable dependency
 import), then times the serial `scan()` against the worker-pool
-`scanParallel()` from the **built** `@qproof/core` and prints a small table:
+`scanParallel()` from the **built** `@quantakrypto/core` and prints a small table:
 `files`, `ms`, `files/s`, and the serial→parallel `speedup`.
 
 ### Prerequisites
 
-It imports from `dist/` via the `@qproof/core` workspace package, so build
+It imports from `dist/` via the `@quantakrypto/core` workspace package, so build
 first:
 
 ```bash
@@ -77,7 +77,7 @@ result's `ruleId`, `level` (`error|warning|note|none`), `message.text`, and
 > require a JSON-Schema engine, and this repo is zero-dependency. The check
 > catches the field-presence/type mistakes that actually break consumers.
 
-The no-argument mode imports the **built** `@qproof/core` (run `npm run build`
+The no-argument mode imports the **built** `@quantakrypto/core` (run `npm run build`
 first) to scan `packages/` and validate the SARIF it emits — this is what the
 CI **sarif** job runs end-to-end. CI invokes it directly against a produced
 file: `node scripts/validate-sarif.mjs /tmp/q.sarif.json`.

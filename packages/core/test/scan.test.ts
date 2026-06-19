@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { scan, VERSION } from "../src/index.js";
 
 async function makeProject(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-scan-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-scan-"));
   await mkdir(path.join(dir, "src"), { recursive: true });
   await writeFile(
     path.join(dir, "src", "crypto.ts"),

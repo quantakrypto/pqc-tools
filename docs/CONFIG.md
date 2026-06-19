@@ -1,7 +1,7 @@
-# `qproof.config.json` — Configuration
+# `quantakrypto.config.json` — Configuration
 
 **Status: IMPLEMENTED** ([ROADMAP P2-9](ROADMAP.md)). This document describes the
-*optional* project configuration file that `qScan` and `@qproof/core` consume.
+*optional* project configuration file that `qScan` and `@quantakrypto/core` consume.
 core's `loadConfig` reads + validates the file; qScan applies it under the
 precedence rule below. This page is both the spec and the reference; where the
 implementation narrows a "proposed" detail (see notes inline), the behavior here
@@ -19,8 +19,8 @@ and local runs agree without repeating long flag lists.
 
 ## 2. Discovery
 
-- File name: **`qproof.config.json`**, discovered at the scan `root` (i.e.
-  `<root>/qproof.config.json`). An absent file is tolerated — the scan proceeds
+- File name: **`quantakrypto.config.json`**, discovered at the scan `root` (i.e.
+  `<root>/quantakrypto.config.json`). An absent file is tolerated — the scan proceeds
   on flags + defaults. *(The implementation looks at the scan root directly
   rather than walking up the tree; root-relative discovery is simpler and
   auditable, and `--config` covers the "config lives elsewhere" case.)*
@@ -40,7 +40,7 @@ config; config beats defaults.** There is no environment-variable layer in this
 spec.
 
 ```
-CLI flags  >  qproof.config.json  >  built-in defaults
+CLI flags  >  quantakrypto.config.json  >  built-in defaults
 (highest)                                      (lowest)
 ```
 
@@ -59,7 +59,7 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 
 ```jsonc
 {
-  "$schema": "https://qproof.com/schema/qproof.config.v1.json",
+  "$schema": "https://quantakrypto.com/schema/quantakrypto.config.v1.json",
   "version": 1,
 
   // ── file selection ──────────────────────────────────────────────
@@ -82,7 +82,7 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 
   // ── policy ──────────────────────────────────────────────────────
   "severityThreshold": "high",                     // gate: critical|high|medium|low|info
-  "baseline": ".qproof/baseline.json"              // path to a baseline file
+  "baseline": ".quantakrypto/baseline.json"              // path to a baseline file
 }
 ```
 
@@ -95,7 +95,7 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 | `exclude` | string[] | `[]` | `ScanOptions.exclude` | **Added to** the built-in default ignores unless `noDefaultIgnores`. |
 | `noDefaultIgnores` | bool | `false` | `ScanOptions.noDefaultIgnores` | Disables `node_modules`/`.git`/`dist`/… defaults. |
 | `maxFileSize` | int (bytes) | `2097152` | `ScanOptions.maxFileSize` | Files larger are skipped; the [perf](audits/performance.md)/[security](audits/security.md) 2 MiB cap rationale applies. |
-| `detectors.<family>` | bool | `true` | maps to `source`/`config`/`dependencies` scan toggles + per-family selection | Family names mirror `@qproof/core`'s detector families and the `--no-source`/`--no-deps`/`--no-config` flags. Turning a family off is equivalent to its `--no-*` flag. |
+| `detectors.<family>` | bool | `true` | maps to `source`/`config`/`dependencies` scan toggles + per-family selection | Family names mirror `@quantakrypto/core`'s detector families and the `--no-source`/`--no-deps`/`--no-config` flags. Turning a family off is equivalent to its `--no-*` flag. |
 | `languages` | string[] | (all built-in) | (forward-looking) | See §4.3 — has no effect until the detector-registry/plugin work ([ROADMAP P1-4](ROADMAP.md)) lands. |
 | `severityThreshold` | enum | `high` | `runQscan({severityThreshold})` | Drives the exit code. CLI `--severity-threshold` overrides. |
 | `baseline` | string (path) | none | `runQscan({baseline})` | Relative to the config file's directory. CLI `--baseline` overrides. |
@@ -125,7 +125,7 @@ detector set by declared language (e.g. `["python","go"]`).
 - `baseline` in the config is equivalent to passing `--baseline` (resolved
   relative to the config file's directory); `--write-baseline` remains CLI-only
   (it is an action, not config state).
-- In CI, committing `qproof.config.json` lets a local `qscan` run and CI share
+- In CI, committing `quantakrypto.config.json` lets a local `qscan` run and CI share
   one policy. The [Action](../packages/action/README.md) reuses `runQscan`; its
   inputs still take precedence as "flags" in the §3 order. (Auto-discovery from
   the Action's own inputs is a follow-on; the qScan CLI honors the file today.)

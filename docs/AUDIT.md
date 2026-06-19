@@ -1,6 +1,6 @@
-# qproof-tools — Post-Build Audit & Improvement Roadmap
+# quantakrypto-tools — Post-Build Audit & Improvement Roadmap
 
-Audit of the `qproof-tools` monorepo (v0.1.0) at commit time of writing.
+Audit of the `quantakrypto-tools` monorepo (v0.1.0) at commit time of writing.
 Scope: all five packages (`core`, `qscan`, `mcp`, `action`, `sieve`), READMEs,
 sources, and tests. No code was modified.
 
@@ -8,19 +8,19 @@ sources, and tests. No code was modified.
 
 ## 1. Executive summary
 
-`qproof-tools` is a zero-runtime-dependency TypeScript monorepo (ESM, NodeNext,
+`quantakrypto-tools` is a zero-runtime-dependency TypeScript monorepo (ESM, NodeNext,
 strict, Node ≥ 20) that ships a post-quantum readiness toolchain:
 
-- **`@qproof/core`** — a lexical crypto-detection engine: a filesystem walker,
+- **`@quantakrypto/core`** — a lexical crypto-detection engine: a filesystem walker,
   six regex-based detector families, a curated vulnerable-dependency DB,
   inventory + readiness scoring, and SARIF/JSON/human reporters.
-- **`@qproof/qscan`** — a CLI shell over core, with baselines, severity-gated
+- **`@quantakrypto/qscan`** — a CLI shell over core, with baselines, severity-gated
   exit codes, and three output formats.
-- **`@qproof/mcp`** — a from-scratch JSON-RPC 2.0 / MCP server (stdio + HTTP
+- **`@quantakrypto/mcp`** — a from-scratch JSON-RPC 2.0 / MCP server (stdio + HTTP
   transports) exposing five tools backed by core.
-- **`@qproof/action`** — a zero-dependency GitHub Action wrapping a scan, SARIF
+- **`@quantakrypto/action`** — a zero-dependency GitHub Action wrapping a scan, SARIF
   output, inline annotations, baselines, and optional PR comments.
-- **`@qproof/sieve`** — a standalone conformance battery that drives a
+- **`@quantakrypto/sieve`** — a standalone conformance battery that drives a
   user-supplied ML-KEM / ML-DSA implementation (the SUT) over an NDJSON
   child-process protocol and runs eight test categories.
 
@@ -55,7 +55,7 @@ without short-circuiting. None are blocking; all are addressable.
 
 ## 2. Per-package review
 
-### 2.1 `@qproof/core`
+### 2.1 `@quantakrypto/core`
 
 **Strengths.** Clear module boundaries (`walk` → `scan` → `detectors` →
 `inventory` → `report`). Detectors are pure and stateless (`Detector` contract in
@@ -119,7 +119,7 @@ gets fully scanned (see §3).
   README repo is `dandelionlabs-io/qproof-tools`. Three different URLs for one
   project.
 
-### 2.2 `@qproof/qscan`
+### 2.2 `@quantakrypto/qscan`
 
 **Strengths.** Clean separation: `cli.ts` does I/O + exit codes only; `index.ts`
 (`runQscan`) is pure and injectable (`scanFn` hook, `index.ts:81`) — this is why
@@ -153,7 +153,7 @@ message, **excluding** line) — see 2.4. Two packages, two baseline semantics, 
 on-disk formats (qscan: `{version,fingerprints[]}`; action: a whole prior
 report). This is the single biggest cross-package inconsistency.
 
-### 2.3 `@qproof/mcp`
+### 2.3 `@quantakrypto/mcp`
 
 **Strengths.** Textbook transport/protocol/engine split: `McpServer.handle`
 (`server.ts:87`) is pure and async, transports only frame I/O. JSON-RPC error
@@ -195,7 +195,7 @@ errors (`server.ts:166`) — correct MCP semantics, lets the model react. The
 `safe()` wrapper (`tools.ts:49`) and "core may be stubbed" comments are now stale
 (core is implemented) but harmless.
 
-### 2.4 `@qproof/action`
+### 2.4 `@quantakrypto/action`
 
 **Strengths.** The GitHub Actions toolkit reimplementation (`io.ts`) is
 faithful: workflow-command escaping (`escapeData`/`escapeProperty`,
@@ -227,7 +227,7 @@ while only **new** findings gate the build (`main.ts:163` comment + `main.ts:302
   (`main.ts:248`) over HTTPS to the GitHub API, and is **never logged** — failures
   log only status text (`main.ts:258`). Good. One gap: there is **no comment
   de-duplication** — every run posts a *new* comment (`main.ts:245` POSTs to
-  `/issues/{n}/comments`), so a chatty PR accumulates one qproof comment per push.
+  `/issues/{n}/comments`), so a chatty PR accumulates one quantakrypto comment per push.
   Find-and-update (or a hidden marker + PATCH) is the expected behavior.
 - **`comment-pr` requires `pull-requests: write`**, correctly documented in the
   README. No token is required for the core scan, limiting blast radius.
@@ -237,7 +237,7 @@ while only **new** findings gate the build (`main.ts:163` comment + `main.ts:302
 action, but it bypasses the `setFailed`-then-let-caller-decide pattern the rest
 of `io.ts` follows.
 
-### 2.5 `@qproof/sieve`
+### 2.5 `@quantakrypto/sieve`
 
 **Strengths.** The honest design is the headline: Sieve ships **no** KAT vectors
 and refuses to fabricate them (`vectors.ts` header; `kat.ts:41` skips cleanly
@@ -333,7 +333,7 @@ cap memory, but PEM blocks and multi-line matches make this fiddly. Lower
 priority than I1/I2.
 
 **(I6) qScan startup time — Low/Medium.** Startup is dominated by ESM module
-graph resolution (`@qproof/core` pulls in all detectors, reporters, deps DB) and,
+graph resolution (`@quantakrypto/core` pulls in all detectors, reporters, deps DB) and,
 in dev, `tsx` transpilation. For `npx` users the install/resolve dominates. Wins:
 ship prebuilt JS (already the plan via `dist`), lazy-import the SARIF/JSON
 reporters only when that format is requested, and avoid importing the full deps
@@ -475,8 +475,8 @@ not order-sensitive sequences; the timing category opts out of all concurrency.
   set. This is the highest-leverage execution feature for CI.
 
 **Baseline workflow.**
-- Adopt on legacy code: `qscan . --write-baseline qproof-baseline.json`, commit
-  it, then `qscan . --baseline qproof-baseline.json` so only new findings fail.
+- Adopt on legacy code: `qscan . --write-baseline quantakrypto-baseline.json`, commit
+  it, then `qscan . --baseline quantakrypto-baseline.json` so only new findings fail.
 - **Caveat (from §2.2/2.4):** qscan and the action use *different* fingerprints
   and *different* baseline file formats today. Pick one tool's baseline per
   pipeline; do not share a baseline file between the CLI and the action until they
@@ -512,8 +512,8 @@ that SSE/`GET /mcp` are deferred until long-running scans need progress. Few
 open-source MCP servers document hosting this well.
 
 **Recommendation: yes, host it — but as a thin, sandboxed "advisory" service,
-not as a remote code scanner.** The strategic value to qproof (lead capture +
-demonstrating technical authority) is real: a hosted qproof MCP that any AI
+not as a remote code scanner.** The strategic value to quantakrypto (lead capture +
+demonstrating technical authority) is real: a hosted quantakrypto MCP that any AI
 agent can add gives the brand a permanent surface in developer workflows. But the
 **`scan_path` tool must not run server-side against client-supplied paths** — that
 is an arbitrary-file-read service (§2.3). Resolve the tension by splitting the
@@ -564,7 +564,7 @@ edge layer, exactly as `HOSTING.md` argues.
 3. **P2 — Sandboxed scan-on-submitted-content.** Accept uploaded file content
    (not paths), scan in a locked-down worker with hard caps, return findings +
    SARIF. SSE for progress on large submissions. This is the upsell into the
-   paid qproof audit practice.
+   paid quantakrypto audit practice.
 
 Tie-in to the business is natural and not overreaching: the free hosted advisory
 tools establish authority and capture leads (every API key is a contact), while

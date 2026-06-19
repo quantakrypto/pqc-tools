@@ -55,7 +55,7 @@ const VALUES = [
   "out.json",
   "src",
   "origin/main",
-  "./qproof.config.json",
+  "./quantakrypto.config.json",
 ];
 
 /** Build a random argv: a mix of real flags, `--flag=value`, junk, positionals. */

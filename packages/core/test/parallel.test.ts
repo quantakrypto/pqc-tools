@@ -63,7 +63,7 @@ test("mergeChunkResults is deterministic regardless of chunk order", () => {
 });
 
 test("scanParallel falls back to serial on a small repo and matches scan()", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-par-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-par-"));
   try {
     await mkdir(path.join(dir, "src"), { recursive: true });
     await writeFile(path.join(dir, "src", "a.ts"), "const e = crypto.createECDH('p256');\n");
@@ -85,7 +85,7 @@ test("scanParallel falls back to serial on a small repo and matches scan()", asy
 });
 
 test("scanParallel with concurrency 1 runs in-process", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-par1-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-par1-"));
   try {
     await writeFile(path.join(dir, "a.ts"), "const e = crypto.createECDH('p256');\n");
     const r = await scanParallel({ root: dir, concurrency: 1 });

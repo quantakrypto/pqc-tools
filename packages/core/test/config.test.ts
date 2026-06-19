@@ -1,5 +1,5 @@
 /**
- * Tests for the `qproof.config.json` loader (P2-9): parsing, type validation,
+ * Tests for the `quantakrypto.config.json` loader (P2-9): parsing, type validation,
  * detector-family mapping, baseline path resolution, and tolerant absence.
  */
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ import { loadConfig, ConfigError, CONFIG_FILENAME } from "../src/config.js";
 
 /** Create a temp dir, run `fn`, then clean up. */
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(join(tmpdir(), "qproof-config-"));
+  const dir = await mkdtemp(join(tmpdir(), "quantakrypto-config-"));
   try {
     return await fn(dir);
   } finally {
@@ -20,7 +20,7 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   }
 }
 
-/** Write `qproof.config.json` into `dir` with the given object. */
+/** Write `quantakrypto.config.json` into `dir` with the given object. */
 async function writeConfig(dir: string, obj: unknown): Promise<string> {
   const file = join(dir, CONFIG_FILENAME);
   await writeFile(file, JSON.stringify(obj), "utf8");
@@ -87,9 +87,9 @@ test("detector families map onto source/config/dependencies toggles", async () =
 
 test("baseline path is resolved relative to the config file's directory", async () => {
   await withTempDir(async (dir) => {
-    await writeConfig(dir, { baseline: ".qproof/baseline.json" });
+    await writeConfig(dir, { baseline: ".quantakrypto/baseline.json" });
     const res = await loadConfig(dir);
-    assert.equal(res.config.baseline, join(dir, ".qproof", "baseline.json"));
+    assert.equal(res.config.baseline, join(dir, ".quantakrypto", "baseline.json"));
   });
 });
 

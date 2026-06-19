@@ -3,7 +3,7 @@
 ## Our pledge
 
 We as members, contributors, and leaders pledge to make participation in the
-qproof-tools community a harassment-free experience for everyone, regardless of
+quantakrypto-tools community a harassment-free experience for everyone, regardless of
 age, body size, visible or invisible disability, ethnicity, sex characteristics,
 gender identity and expression, level of experience, education, socio-economic
 status, nationality, personal appearance, race, religion, or sexual identity and
@@ -27,7 +27,7 @@ inappropriate in a professional setting.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behaviour may be
-reported to the maintainers at **conduct@qproof.com**. All complaints will be
+reported to the maintainers at **conduct@quantakrypto.com**. All complaints will be
 reviewed and investigated promptly and fairly. Maintainers are obligated to
 respect the privacy and security of the reporter.
 

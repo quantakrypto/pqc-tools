@@ -8,7 +8,13 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
-import type { CryptoInventory, Finding, ScanOptions, ScanResult, Severity } from "@qproof/core";
+import type {
+  CryptoInventory,
+  Finding,
+  ScanOptions,
+  ScanResult,
+  Severity,
+} from "@quantakrypto/core";
 
 /** Build a Finding with sensible defaults; override any field. */
 export function makeFinding(overrides: Partial<Finding> = {}): Finding {
@@ -70,7 +76,7 @@ export function makeResult(findings: Finding[], root = "."): ScanResult {
  *
  * It really walks the given `root` (so the test exercises file traversal and
  * the full runQscan/baseline/report pipeline) and emits findings from a small
- * set of patterns that mirror what `@qproof/core` is contracted to detect.
+ * set of patterns that mirror what `@quantakrypto/core` is contracted to detect.
  * This lets the e2e test pass against the *locked contract* even while core's
  * own `scan` is still a stub.
  */

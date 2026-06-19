@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * qproof MCP — hostable HTTP transport (Streamable-HTTP-style JSON-RPC).
+ * quantakrypto MCP — hostable HTTP transport (Streamable-HTTP-style JSON-RPC).
  *
  * A zero-dependency {@link node:http} server that exposes the same
- * {@link McpServer} over HTTP so the qproof MCP can run as a remote service:
+ * {@link McpServer} over HTTP so the quantakrypto MCP can run as a remote service:
  *
  *   POST /mcp     — body is a single JSON-RPC 2.0 message; the JSON-RPC
  *                   response is returned as the 200 response body
@@ -20,19 +20,19 @@
  * local user and stays fully featured — the HTTP transport is hardened because a
  * hosted endpoint is reachable by untrusted peers:
  *
- *   - Binds to 127.0.0.1 by default (NOT 0.0.0.0). Override with QPROOF_MCP_HOST.
- *   - Bearer-token auth: when QPROOF_MCP_TOKEN is set, every /mcp request must
+ *   - Binds to 127.0.0.1 by default (NOT 0.0.0.0). Override with QUANTAKRYPTO_MCP_HOST.
+ *   - Bearer-token auth: when QUANTAKRYPTO_MCP_TOKEN is set, every /mcp request must
  *     send `Authorization: Bearer <token>` (else 401). Binding to a non-loopback
  *     host WITHOUT a token is refused at startup (it would be an open relay).
  *   - The filesystem tools (scan_path, inventory_crypto, generate_cbom) read
- *     arbitrary server paths and are DISABLED over HTTP unless QPROOF_MCP_ALLOW_FS=1
+ *     arbitrary server paths and are DISABLED over HTTP unless QUANTAKRYPTO_MCP_ALLOW_FS=1
  *     (security audit Q-01). The knowledge tools (explain_finding, suggest_hybrid,
  *     list_rules) are always available. Gating is enforced by registering only the
  *     permitted tools, so tools/list and tools/call both reflect it.
- *   - Per-request timeout (QPROOF_MCP_TIMEOUT_MS) and a response-size cap
- *     (QPROOF_MCP_MAX_RESPONSE_BYTES), in addition to the 1 MiB request-body cap.
+ *   - Per-request timeout (QUANTAKRYPTO_MCP_TIMEOUT_MS) and a response-size cap
+ *     (QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES), in addition to the 1 MiB request-body cap.
  *
- * Run with `node dist/http.js` (PORT/QPROOF_MCP_* from env).
+ * Run with `node dist/http.js` (PORT/QUANTAKRYPTO_MCP_* from env).
  */
 
 import { createServer } from "node:http";
@@ -42,10 +42,10 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 
-import { createQproofServer } from "./index.js";
+import { createQuantakryptoServer } from "./index.js";
 import { ErrorCode, makeFailure } from "./protocol.js";
 import type { JsonRpcResponse, ToolDefinition } from "./protocol.js";
-import { qproofTools, FS_TOOL_NAMES } from "./tools.js";
+import { quantakryptoTools, FS_TOOL_NAMES } from "./tools.js";
 import type { McpServer } from "./server.js";
 
 /** Header carrying the MCP session id (per the Streamable HTTP transport). */
@@ -66,15 +66,15 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 export interface HttpServerOptions {
   /** Port to listen on. Defaults to env PORT or 3000. */
   port?: number;
-  /** Host/interface to bind. Defaults to QPROOF_MCP_HOST / HOST or "127.0.0.1". */
+  /** Host/interface to bind. Defaults to QUANTAKRYPTO_MCP_HOST / HOST or "127.0.0.1". */
   host?: string;
-  /** Bearer token required on /mcp. Defaults to QPROOF_MCP_TOKEN (empty = none). */
+  /** Bearer token required on /mcp. Defaults to QUANTAKRYPTO_MCP_TOKEN (empty = none). */
   token?: string;
-  /** Expose the filesystem tools over HTTP. Defaults to QPROOF_MCP_ALLOW_FS=1. */
+  /** Expose the filesystem tools over HTTP. Defaults to QUANTAKRYPTO_MCP_ALLOW_FS=1. */
   allowFs?: boolean;
-  /** Per-request tool-execution timeout (ms). Defaults to QPROOF_MCP_TIMEOUT_MS. */
+  /** Per-request tool-execution timeout (ms). Defaults to QUANTAKRYPTO_MCP_TIMEOUT_MS. */
   timeoutMs?: number;
-  /** Response-body size cap (bytes). Defaults to QPROOF_MCP_MAX_RESPONSE_BYTES. */
+  /** Response-body size cap (bytes). Defaults to QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES. */
   maxResponseBytes?: number;
 }
 
@@ -104,15 +104,16 @@ export interface HttpConfig {
  * no I/O and never reads `process` directly. Overrides win over env.
  */
 export function resolveHttpConfig(env: HttpEnv, options: HttpServerOptions = {}): HttpConfig {
-  const host = options.host ?? env.QPROOF_MCP_HOST ?? env.HOST ?? "127.0.0.1";
+  const host = options.host ?? env.QUANTAKRYPTO_MCP_HOST ?? env.HOST ?? "127.0.0.1";
   const port = options.port ?? toInt(env.PORT, 3000);
-  const token = (options.token ?? env.QPROOF_MCP_TOKEN ?? "").trim();
+  const token = (options.token ?? env.QUANTAKRYPTO_MCP_TOKEN ?? "").trim();
   const allowFs =
-    options.allowFs ?? (env.QPROOF_MCP_ALLOW_FS === "1" || env.QPROOF_MCP_ALLOW_FS === "true");
-  const timeoutMs = options.timeoutMs ?? toInt(env.QPROOF_MCP_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+    options.allowFs ??
+    (env.QUANTAKRYPTO_MCP_ALLOW_FS === "1" || env.QUANTAKRYPTO_MCP_ALLOW_FS === "true");
+  const timeoutMs = options.timeoutMs ?? toInt(env.QUANTAKRYPTO_MCP_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
   const maxResponseBytes =
     options.maxResponseBytes ??
-    toInt(env.QPROOF_MCP_MAX_RESPONSE_BYTES, DEFAULT_MAX_RESPONSE_BYTES);
+    toInt(env.QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES, DEFAULT_MAX_RESPONSE_BYTES);
   return {
     host,
     port,
@@ -150,7 +151,7 @@ export function startupDecision(config: HttpConfig): {
       ok: false,
       reason:
         `refusing to bind to non-loopback host "${config.host}" without a token. ` +
-        `Set QPROOF_MCP_TOKEN to require Bearer auth, or bind to 127.0.0.1.`,
+        `Set QUANTAKRYPTO_MCP_TOKEN to require Bearer auth, or bind to 127.0.0.1.`,
     };
   }
   return { ok: true };
@@ -296,7 +297,7 @@ async function handleRequest(
   const path = url.split("?")[0];
 
   if (method === "GET" && path === "/health") {
-    sendJson(res, 200, { status: "ok", server: "qproof", transport: "http" });
+    sendJson(res, 200, { status: "ok", server: "quantakrypto", transport: "http" });
     return;
   }
 
@@ -392,7 +393,7 @@ async function handleMcpPost(
  * with the filesystem tools gated per policy. Exposed for tests.
  */
 export function createHttpMcpServer(config: HttpConfig): McpServer {
-  return createQproofServer({ tools: gateHttpTools(qproofTools, config.allowFs) });
+  return createQuantakryptoServer({ tools: gateHttpTools(quantakryptoTools, config.allowFs) });
 }
 
 /** Start the HTTP server, resolving once it is listening. */
@@ -405,7 +406,7 @@ export function startHttpServer(options: HttpServerOptions = {}): Promise<Server
   }
   if (!config.loopback) {
     process.stderr.write(
-      `qproof MCP (http): WARNING binding to non-loopback host ${config.host}; ` +
+      `quantakrypto MCP (http): WARNING binding to non-loopback host ${config.host}; ` +
         `Bearer auth is required and active.\n`,
     );
   }
@@ -417,7 +418,7 @@ export function startHttpServer(options: HttpServerOptions = {}): Promise<Server
       const auth = config.token ? "bearer-auth" : "no-auth";
       const fs = config.allowFs ? "fs-tools:on" : "fs-tools:off";
       process.stderr.write(
-        `qproof MCP server (http) listening on http://${config.host}:${config.port} ` +
+        `quantakrypto MCP server (http) listening on http://${config.host}:${config.port} ` +
           `[${auth}, ${fs}]\n`,
       );
       process.stderr.write(
@@ -433,7 +434,7 @@ export function startHttpServer(options: HttpServerOptions = {}): Promise<Server
 function main(): void {
   startHttpServer().catch((err: unknown) => {
     const messageText = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`qproof MCP (http) failed to start: ${messageText}\n`);
+    process.stderr.write(`quantakrypto MCP (http) failed to start: ${messageText}\n`);
     process.exitCode = 1;
   });
 }

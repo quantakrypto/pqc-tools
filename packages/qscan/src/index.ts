@@ -1,8 +1,8 @@
 /**
- * @qproof/qscan — programmatic API.
+ * @quantakrypto/qscan — programmatic API.
  *
  * `runQscan` is the single entry point shared by the CLI (`src/cli.ts`) and by
- * `@qproof/action`. It runs a scan via `@qproof/core`, applies an optional
+ * `@quantakrypto/action`. It runs a scan via `@quantakrypto/core`, applies an optional
  * baseline, decides an exit code from the severity threshold, and (optionally)
  * renders a report. The CLI is a thin shell around it.
  *
@@ -10,8 +10,8 @@
  * downstream tools can reuse them without reaching into internal paths.
  */
 
-import { changedFiles, scan, scanParallel } from "@qproof/core";
-import type { Baseline, Finding, ParallelScanOptions, ScanResult } from "@qproof/core";
+import { changedFiles, scan, scanParallel } from "@quantakrypto/core";
+import type { Baseline, Finding, ParallelScanOptions, ScanResult } from "@quantakrypto/core";
 
 import { applyBaseline, loadBaseline, saveBaseline } from "./baseline.js";
 import { defaultOptions, meetsThreshold } from "./args.js";
@@ -74,7 +74,7 @@ export interface QscanRun {
 }
 
 /**
- * The scan implementation `runQscan` calls. Matches `@qproof/core`'s `scan` /
+ * The scan implementation `runQscan` calls. Matches `@quantakrypto/core`'s `scan` /
  * `scanParallel` (parallel options are a superset of `ScanOptions`).
  * Injectable so the GitHub Action and tests can supply a custom scanner.
  */
@@ -90,9 +90,9 @@ export type ChangedFilesFn = (root: string, since?: string) => Promise<string[]>
 export interface RunQscanHooks {
   /** Emit raw ANSI color in the human report. Default: false. */
   color?: boolean;
-  /** Override the scanner. Default: `scan` / `scanParallel` from `@qproof/core`. */
+  /** Override the scanner. Default: `scan` / `scanParallel` from `@quantakrypto/core`. */
   scanFn?: ScanFn;
-  /** Override changed-file resolution. Default: `changedFiles` from `@qproof/core`. */
+  /** Override changed-file resolution. Default: `changedFiles` from `@quantakrypto/core`. */
   changedFilesFn?: ChangedFilesFn;
 }
 
@@ -215,4 +215,4 @@ export function renderReport(
 }
 
 /** Re-export the core result types consumers commonly need. */
-export type { Finding, ScanResult, ScanOptions } from "@qproof/core";
+export type { Finding, ScanResult, ScanOptions } from "@quantakrypto/core";

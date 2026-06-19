@@ -1,5 +1,5 @@
 {
-  "name": "@qproof/core",
+  "name": "@quantakrypto/core",
   "version": "0.1.0",
   "description": "Shared post-quantum readiness library: crypto detectors, vulnerable-dependency database, inventory + SARIF reporting. Zero runtime dependencies.",
   "license": "Apache-2.0",

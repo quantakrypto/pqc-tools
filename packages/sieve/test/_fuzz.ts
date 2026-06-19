@@ -1,7 +1,7 @@
 /**
  * Tiny DETERMINISTIC fuzzing helpers for Sieve (no third-party deps, no
  * Math.random). Mirrors core/test/_fuzz.ts but kept local since Sieve does not
- * depend on @qproof/core. The PRNG is a fixed-seed `mulberry32` so every run is
+ * depend on @quantakrypto/core. The PRNG is a fixed-seed `mulberry32` so every run is
  * reproducible.
  */
 

@@ -1,7 +1,7 @@
 {
-  "name": "@qproof/mcp",
+  "name": "@quantakrypto/mcp",
   "version": "0.1.0",
-  "description": "qproof MCP — post-quantum readiness for AI coding agents via the Model Context Protocol. Zero runtime dependencies (stdio JSON-RPC implemented in-house).",
+  "description": "quantakrypto MCP — post-quantum readiness for AI coding agents via the Model Context Protocol. Zero runtime dependencies (stdio JSON-RPC implemented in-house).",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
   "homepage": "https://github.com/dandelionlabs-io/qproof-tools/tree/main/packages/mcp#readme",
@@ -15,7 +15,7 @@
   },
   "type": "module",
   "bin": {
-    "qproof-mcp": "./dist/stdio.js"
+    "quantakrypto-mcp": "./dist/stdio.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -38,7 +38,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@qproof/core": "0.1.0"
+    "@quantakrypto/core": "0.1.0"
   },
   "scripts": {
     "build": "tsc -b",

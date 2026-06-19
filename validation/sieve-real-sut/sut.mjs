@@ -3,7 +3,7 @@
  * audited, pure-JS implementation of ML-KEM / ML-DSA / SLH-DSA.
  *
  * This is VALIDATION-ONLY tooling. It lives outside the npm workspaces and is
- * never published, so the @qproof/* packages stay zero-dependency. Its purpose
+ * never published, so the @quantakrypto/* packages stay zero-dependency. Its purpose
  * is to prove that Sieve's conformance battery drives a real implementation and
  * agrees with it (and that a deliberately broken variant fails).
  *

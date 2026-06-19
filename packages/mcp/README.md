@@ -1,26 +1,26 @@
-# @qproof/mcp
+# @quantakrypto/mcp
 
 A **Model Context Protocol (MCP) server** that gives AI coding agents post-quantum
 readiness superpowers. It scans code for classical (quantum-vulnerable) asymmetric
 cryptography and recommends NIST post-quantum / hybrid migrations, all backed by
-[`@qproof/core`](../core).
+[`@quantakrypto/core`](../core).
 
 - **Zero runtime dependencies.** The MCP / JSON-RPC 2.0 protocol is implemented
   from scratch on Node built-ins (`node:readline`, `node:http`, `node:process`).
-  The only dependency is `@qproof/core`.
-- **Two transports.** A `stdio` transport (the `qproof-mcp` bin) for local agents
-  like Claude, and a hostable `http` transport for running qproof as a remote
+  The only dependency is `@quantakrypto/core`.
+- **Two transports.** A `stdio` transport (the `quantakrypto-mcp` bin) for local agents
+  like Claude, and a hostable `http` transport for running quantakrypto as a remote
   service (see [HOSTING.md](./HOSTING.md)).
 - **Transport-agnostic core.** All protocol logic lives in a pure, unit-tested
   `McpServer` class; transports only do I/O.
 
 ## Install / register with an MCP client
 
-The published package exposes a `qproof-mcp` binary that speaks MCP over stdio:
+The published package exposes a `quantakrypto-mcp` binary that speaks MCP over stdio:
 
 ```bash
 # Claude Code / Claude Desktop
-claude mcp add qproof npx @qproof/mcp
+claude mcp add quantakrypto npx @quantakrypto/mcp
 ```
 
 Equivalently, in an MCP client config:
@@ -28,15 +28,15 @@ Equivalently, in an MCP client config:
 ```json
 {
   "mcpServers": {
-    "qproof": {
+    "quantakrypto": {
       "command": "npx",
-      "args": ["@qproof/mcp"]
+      "args": ["@quantakrypto/mcp"]
     }
   }
 }
 ```
 
-The bin is `qproof-mcp` (→ `dist/stdio.js`). You can also run it directly:
+The bin is `quantakrypto-mcp` (→ `dist/stdio.js`). You can also run it directly:
 
 ```bash
 node dist/stdio.js
@@ -50,7 +50,7 @@ framing). Supported methods:
 
 | Method | Notes |
 | --- | --- |
-| `initialize` | Replies with `protocolVersion`, `capabilities.tools.listChanged = false`, and `serverInfo { name: "qproof", version }`. |
+| `initialize` | Replies with `protocolVersion`, `capabilities.tools.listChanged = false`, and `serverInfo { name: "quantakrypto", version }`. |
 | `notifications/initialized` | Notification; no response. |
 | `ping` | Replies `{}`. |
 | `tools/list` | Lists all tools with JSON-Schema `inputSchema`. |
@@ -122,7 +122,7 @@ Recommend a PQC / hybrid migration from an `algorithm` or free-text `context`.
 
 ### `list_rules`
 
-List the qproof detector catalog (ids + descriptions). No input.
+List the quantakrypto detector catalog (ids + descriptions). No input.
 
 ```json
 { "type": "object", "properties": {} }
@@ -150,38 +150,38 @@ is fully featured; the **HTTP transport is hardened**, because a hosted endpoint
 is reachable by untrusted peers:
 
 - **Binds to `127.0.0.1` by default** (not `0.0.0.0`). Override via
-  `QPROOF_MCP_HOST`. Binding to a non-loopback host **without a token is refused
+  `QUANTAKRYPTO_MCP_HOST`. Binding to a non-loopback host **without a token is refused
   at startup** (it would be an open, unauthenticated tool relay).
-- **Bearer-token auth.** Set `QPROOF_MCP_TOKEN` and every `/mcp` request must
+- **Bearer-token auth.** Set `QUANTAKRYPTO_MCP_TOKEN` and every `/mcp` request must
   send `Authorization: Bearer <token>`, else `401`. With no token set, only the
   loopback bind is allowed.
 - **Filesystem tools are disabled by default.** `scan_path`, `inventory_crypto`
   and `generate_cbom` read arbitrary server paths, so over HTTP they are exposed
-  only when `QPROOF_MCP_ALLOW_FS=1`. The knowledge tools (`explain_finding`,
+  only when `QUANTAKRYPTO_MCP_ALLOW_FS=1`. The knowledge tools (`explain_finding`,
   `suggest_hybrid`, `list_rules`) are always available. `tools/list` and
   `tools/call` both reflect the gating.
 - **Limits.** A 1 MiB request-body cap (always), a per-request tool timeout
-  (`QPROOF_MCP_TIMEOUT_MS`, default 30000 → `504` on timeout) and a response-size
-  cap (`QPROOF_MCP_MAX_RESPONSE_BYTES`, default 4 MiB).
+  (`QUANTAKRYPTO_MCP_TIMEOUT_MS`, default 30000 → `504` on timeout) and a response-size
+  cap (`QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES`, default 4 MiB).
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `QPROOF_MCP_HOST` (or `HOST`) | `127.0.0.1` | Bind interface. Non-loopback requires a token. |
+| `QUANTAKRYPTO_MCP_HOST` (or `HOST`) | `127.0.0.1` | Bind interface. Non-loopback requires a token. |
 | `PORT` | `3000` | Listen port. |
-| `QPROOF_MCP_TOKEN` | _(unset)_ | When set, requires `Authorization: Bearer <token>`. |
-| `QPROOF_MCP_ALLOW_FS` | _(off)_ | `1`/`true` exposes the filesystem tools over HTTP. |
-| `QPROOF_MCP_TIMEOUT_MS` | `30000` | Per-request tool-execution deadline. |
-| `QPROOF_MCP_MAX_RESPONSE_BYTES` | `4194304` | Response-body size cap. |
+| `QUANTAKRYPTO_MCP_TOKEN` | _(unset)_ | When set, requires `Authorization: Bearer <token>`. |
+| `QUANTAKRYPTO_MCP_ALLOW_FS` | _(off)_ | `1`/`true` exposes the filesystem tools over HTTP. |
+| `QUANTAKRYPTO_MCP_TIMEOUT_MS` | `30000` | Per-request tool-execution deadline. |
+| `QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES` | `4194304` | Response-body size cap. |
 
 ```bash
 # Local, knowledge tools only (default safe posture)
 node dist/http.js
 
 # Local with the filesystem tools enabled
-QPROOF_MCP_ALLOW_FS=1 node dist/http.js
+QUANTAKRYPTO_MCP_ALLOW_FS=1 node dist/http.js
 
 # Reachable from the network: a token is mandatory
-QPROOF_MCP_HOST=0.0.0.0 QPROOF_MCP_TOKEN="$(openssl rand -hex 32)" node dist/http.js
+QUANTAKRYPTO_MCP_HOST=0.0.0.0 QUANTAKRYPTO_MCP_TOKEN="$(openssl rand -hex 32)" node dist/http.js
 ```
 
 Endpoints:
@@ -206,9 +206,9 @@ sessions, rate limiting, scaling). A sample request/response transcript lives in
 ## Programmatic use
 
 ```ts
-import { createQproofServer } from "@qproof/mcp";
+import { createQuantakryptoServer } from "@quantakrypto/mcp";
 
-const server = createQproofServer();
+const server = createQuantakryptoServer();
 const res = await server.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
 ```
 

@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2025-06-09
-- **Deciders:** qproof-tools maintainers
+- **Deciders:** quantakrypto-tools maintainers
 - **Supersedes / Superseded by:** —
 
 ## Context
 
-`@qproof/sieve` is a **conformance battery**: it drives an external ML-KEM
+`@quantakrypto/sieve` is a **conformance battery**: it drives an external ML-KEM
 (FIPS 203) / ML-DSA (FIPS 204) implementation (the SUT) over an NDJSON protocol
 and reports deviations. It performs **no cryptography itself**. The integrity of
 a `PASS` therefore depends entirely on the provenance of what it asserts against.

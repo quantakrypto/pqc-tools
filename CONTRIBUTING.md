@@ -1,7 +1,7 @@
-# Contributing to qproof-tools
+# Contributing to quantakrypto-tools
 
 Thanks for helping make post-quantum readiness tooling better. This is an
-Apache-2.0 project by [qproof](https://qproof.com); the methodology is open and
+Apache-2.0 project by [quantakrypto](https://quantakrypto.com); the methodology is open and
 contributions are welcome.
 
 ## Principles (please read first)
@@ -10,8 +10,8 @@ contributions are welcome.
    built-ins alone. Dev-only tooling (TypeScript, `tsx`) is fine; a new runtime
    dependency needs a strong justification and a maintainer's sign-off.
 2. **Simple, reusable, documented.** Prefer small pure functions, clear names,
-   and a doc comment that says *why*. Shared logic belongs in `@qproof/core`.
-3. **Honesty over coverage.** Especially in `@qproof/sieve`: never fabricate
+   and a doc comment that says *why*. Shared logic belongs in `@quantakrypto/core`.
+3. **Honesty over coverage.** Especially in `@quantakrypto/sieve`: never fabricate
    cryptographic test vectors. If we can't verify it correctly, we skip and say so.
 
 ## Getting started
@@ -20,7 +20,7 @@ Requires Node ≥ 20.
 
 ```bash
 git clone git@github.com:dandelionlabs-io/qproof-tools.git
-cd qproof-tools
+cd quantakrypto-tools
 npm install        # links the workspaces
 npm run build      # tsc --build (project references)
 npm test           # node:test across all packages
@@ -41,7 +41,7 @@ git config core.hooksPath .githooks
 
 On a fresh checkout the hook file may need the executable bit
 (`chmod +x .githooks/pre-commit`). For a large, test-heavy commit you can gate
-on only build + lint + format:check with `QPROOF_PRECOMMIT_FAST=1 git commit`,
+on only build + lint + format:check with `QUANTAKRYPTO_PRECOMMIT_FAST=1 git commit`,
 or skip the hook entirely for a WIP checkpoint with `git commit --no-verify`.
 
 ## Conventions
@@ -49,7 +49,7 @@ or skip the hook entirely for a WIP checkpoint with `git commit --no-verify`.
 - **TypeScript strict**, ESM, `module: NodeNext` — **relative imports must end
   in `.js`** (e.g. `import { scan } from "./scan.js"`), and use `import type` for
   type-only imports.
-- The `@qproof/core` public surface (`packages/core/src/index.ts` +
+- The `@quantakrypto/core` public surface (`packages/core/src/index.ts` +
   `types.ts`) is a contract shared by every tool — coordinate changes to it.
 - Add or update tests for any behaviour change. Add an example when you add a
   user-facing feature.

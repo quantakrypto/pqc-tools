@@ -1,4 +1,4 @@
-// ESLint flat config for qproof-tools (P2-5).
+// ESLint flat config for quantakrypto-tools (P2-5).
 //
 // Pragmatic ruleset for an already-strict TypeScript codebase: it should pass
 // (close to) clean out of the box. We enable typescript-eslint's recommended

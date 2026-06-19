@@ -17,8 +17,8 @@
  * I/O — so it is directly unit-testable.
  */
 
-import { defaultRegistry, detectors } from "@qproof/core";
-import type { AlgorithmFamily, Detector } from "@qproof/core";
+import { defaultRegistry, detectors } from "@quantakrypto/core";
+import type { AlgorithmFamily, Detector } from "@quantakrypto/core";
 
 /** A resolved rule: the detector it belongs to (if any) and its algorithm. */
 export interface ResolvedRule {
@@ -36,7 +36,7 @@ export interface ResolvedRule {
  * Canonical core ruleId → { detector id, algorithm } index.
  *
  * Mirrors the `ruleId`s emitted by the built-in detectors in
- * `@qproof/core` (see `packages/core/src/detectors/*` and `dependencies.ts`).
+ * `@quantakrypto/core` (see `packages/core/src/detectors/*` and `dependencies.ts`).
  * The `detectorId` values reference real detector ids in {@link
  * defaultRegistry}; the descriptions are not duplicated here — they are read
  * live from the registry so they never drift. Algorithms that a single rule

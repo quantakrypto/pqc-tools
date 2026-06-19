@@ -1,6 +1,6 @@
-# qproof-tools — documentation
+# quantakrypto-tools — documentation
 
-Engineering, audit, and compliance docs for the [qproof-tools](../README.md)
+Engineering, audit, and compliance docs for the [quantakrypto-tools](../README.md)
 monorepo. Start here.
 
 ## Roadmap & gaps
@@ -46,11 +46,11 @@ regression guards in the test suite.
 |---|---|
 | [adr/README.md](adr/README.md) | ADR index + template |
 | [adr/0001](adr/0001-zero-runtime-dependencies.md) | Zero runtime dependencies (Node built-ins only) |
-| [adr/0002](adr/0002-shared-core-contract.md) | `@qproof/core` is the single shared contract |
+| [adr/0002](adr/0002-shared-core-contract.md) | `@quantakrypto/core` is the single shared contract |
 | [adr/0003](adr/0003-monorepo-and-build.md) | npm-workspaces monorepo + `tsc -b` project references |
 | [adr/0004](adr/0004-sieve-no-fabricated-vectors.md) | Sieve ships no KAT vectors / never fabricates values |
-| [VERSIONING.md](VERSIONING.md) | SemVer + deprecation policy for `@qproof/*`; what's breaking on the core contract |
-| [CONFIG.md](CONFIG.md) | Spec for the optional `qproof.config.json` (schema + precedence) |
+| [VERSIONING.md](VERSIONING.md) | SemVer + deprecation policy for `@quantakrypto/*`; what's breaking on the core contract |
+| [CONFIG.md](CONFIG.md) | Spec for the optional `quantakrypto.config.json` (schema + precedence) |
 
 ## Standards & compliance
 
@@ -70,7 +70,7 @@ regression guards in the test suite.
 
 ## Per-package & protocol docs
 
-- [`@qproof/core`](../packages/core/README.md) · [`qscan`](../packages/qscan/README.md) · [`mcp`](../packages/mcp/README.md) · [`action`](../packages/action/README.md) · [`sieve`](../packages/sieve/README.md)
+- [`@quantakrypto/core`](../packages/core/README.md) · [`qscan`](../packages/qscan/README.md) · [`mcp`](../packages/mcp/README.md) · [`action`](../packages/action/README.md) · [`sieve`](../packages/sieve/README.md)
 - [MCP hosting design](../packages/mcp/HOSTING.md)
 - [Sieve ↔ SUT protocol](../packages/sieve/PROTOCOL.md) · [obtaining NIST ACVP vectors](../packages/sieve/vectors/README.md)
 

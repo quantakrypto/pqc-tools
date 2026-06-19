@@ -1,6 +1,6 @@
-# qproof-tools — Cryptographic-Correctness Audit (PQC Domain Review)
+# quantakrypto-tools — Cryptographic-Correctness Audit (PQC Domain Review)
 
-Read-only domain audit of the `qproof-tools` monorepo, scoped strictly to
+Read-only domain audit of the `quantakrypto-tools` monorepo, scoped strictly to
 **cryptographic correctness against the NIST PQC standards** (FIPS 203/204/205,
 SP 800-56A/B/C, SP 800-208, NIST IR 8547) and adjacent transition guidance
 (CNSA 2.0, BSI TR-02102). No source was modified. This complements — and does
@@ -267,6 +267,6 @@ right and should be preserved exactly as written.
 ---
 
 *This audit was performed read-only against the working tree of
-`/Users/dandelionlabs/development/qproof-tools`; no source files were modified.*
+`/Users/dandelionlabs/development/quantakrypto-tools`; no source files were modified.*
 
 The audit report has been written to `docs/audits/cryptography.md`.

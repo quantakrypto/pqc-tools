@@ -1,8 +1,8 @@
-# 0002 — `@qproof/core` is the single shared contract
+# 0002 — `@quantakrypto/core` is the single shared contract
 
 - **Status:** Accepted
 - **Date:** 2025-06-09
-- **Deciders:** qproof-tools maintainers
+- **Deciders:** quantakrypto-tools maintainers
 - **Supersedes / Superseded by:** —
 
 ## Context
@@ -21,12 +21,12 @@ reporters — is the asset. It must live in exactly one place.
 
 ## Decision
 
-We will keep **all** cryptographic-analysis logic in `@qproof/core` and treat its
+We will keep **all** cryptographic-analysis logic in `@quantakrypto/core` and treat its
 public surface (`src/index.ts` re-exports + the types in `src/types.ts`) as **the
 contract**. `qscan`, `mcp`, and `action` are thin shells that consume `core`;
 they do **I/O and policy**, never detection. The MCP [HOSTING.md](../../packages/mcp/HOSTING.md)
 states the rule directly: *transports do I/O and policy; `McpServer` does
-protocol; `@qproof/core` does cryptographic analysis.*
+protocol; `@quantakrypto/core` does cryptographic analysis.*
 
 The locked contract is:
 - `scan(ScanOptions): Promise<ScanResult>` and the walker `walkFiles`.

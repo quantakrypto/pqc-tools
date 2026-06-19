@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 
-import { createQproofServer } from "../src/index.js";
+import { createQuantakryptoServer } from "../src/index.js";
 import { runStdioServer } from "../src/stdio.js";
 import { __test } from "../src/tools.js";
 
@@ -27,7 +27,7 @@ test("normalizeAlgorithm maps aliases onto canonical families", () => {
 });
 
 test("stdio loop frames responses as newline-delimited JSON", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const input = new PassThrough();
   const output = new PassThrough();
 
@@ -60,7 +60,7 @@ test("stdio loop frames responses as newline-delimited JSON", async () => {
 });
 
 test("stdio loop replies with a parse error on malformed JSON", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const input = new PassThrough();
   const output = new PassThrough();
   const collected: string[] = [];

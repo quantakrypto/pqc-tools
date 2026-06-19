@@ -1,5 +1,5 @@
 /**
- * @qproof/core — shared types (the locked public contract).
+ * @quantakrypto/core — shared types (the locked public contract).
  *
  * These types are the stable interface between every tool in the monorepo
  * (qScan, the MCP server, the GitHub Action). Treat additions as backwards

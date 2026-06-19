@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { ParallelScanOptions } from "@qproof/core";
+import type { ParallelScanOptions } from "@quantakrypto/core";
 
 import { renderReport, runQscan } from "../src/index.js";
 import { makeFinding, makeResult } from "./helpers.js";

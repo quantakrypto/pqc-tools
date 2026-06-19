@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2025-06-09
-- **Deciders:** qproof-tools maintainers
+- **Deciders:** quantakrypto-tools maintainers
 - **Supersedes / Superseded by:** —
 
 ## Context
 
-`qproof-tools` is security-positioning software: it tells users where their
+`quantakrypto-tools` is security-positioning software: it tells users where their
 quantum-vulnerable cryptography lives and it runs in privileged contexts (CI with
 write tokens, AI agents with filesystem access, a potential hosted MCP service).
 For such a tool, the **supply chain is part of the threat model**. The dominant
@@ -25,7 +25,7 @@ built-ins (`node:fs`, `node:http`, `node:readline`, `node:crypto`,
 ## Decision
 
 We will ship **zero runtime dependencies** across every published package. The
-only permitted runtime imports are Node built-ins and internal `@qproof/*`
+only permitted runtime imports are Node built-ins and internal `@quantakrypto/*`
 workspace packages. No package may declare a third-party `dependencies` entry.
 
 We will also keep the **dev-tooling surface minimal** (`typescript`, `tsx`,
@@ -51,9 +51,9 @@ four of them: Sieve protocol/base64, manifest JSON, SARIF, qScan args). We accep
 this tradeoff: a small amount of audited first-party parsing code is preferable to
 a large unaudited dependency tree.
 
-**Enforcement:** keep `dependencies` empty (sans `@qproof/*`) in every
+**Enforcement:** keep `dependencies` empty (sans `@quantakrypto/*`) in every
 `package.json`; build/release with `npm ci` (lockfile integrity); a CI check that
-fails on any non-`@qproof/*` runtime dependency or any lifecycle script keeps the
+fails on any non-`@quantakrypto/*` runtime dependency or any lifecycle script keeps the
 invariant from eroding. The `runtime deps: 0` README badge is a public commitment.
 
 ## Alternatives considered

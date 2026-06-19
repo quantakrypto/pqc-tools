@@ -1,6 +1,6 @@
 # Sieve — ACVP Vector Provenance Design
 
-**Status: DESIGN ONLY.** This document designs how `@qproof/sieve` should record
+**Status: DESIGN ONLY.** This document designs how `@quantakrypto/sieve` should record
 the **provenance** of any official NIST ACVP test vectors an operator supplies, so
 a passing `kat` (Known-Answer-Test) run is **traceable to authentic NIST inputs**.
 It is the design for [ROADMAP COMPLIANCE #10 / P2-8](../ROADMAP.md); nothing here is
@@ -20,7 +20,7 @@ Today, exact-value conformance runs **only** when the operator passes
 *where*, at *what version*, drove a passing `kat` run. So a `PASS` is honest about
 *what was asserted* but not *traceable to the authentic source* — a gap for anyone
 who wants to reproduce or trust the result (the `Repudiation` row in the
-[threat model](../THREAT-MODEL.md#45-qproofsieve-drives-an-untrusted-sut-with-full-harness-privileges)).
+[threat model](../THREAT-MODEL.md#45-quantakryptosieve-drives-an-untrusted-sut-with-full-harness-privileges)).
 
 ## 2. What to record (per vector file)
 

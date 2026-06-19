@@ -2,7 +2,7 @@
  * Baseline + fingerprint tests.
  *
  * qScan's baseline is now a thin adapter over the canonical implementation in
- * `@qproof/core` (P1-1): a full, line-INSENSITIVE SHA-256 fingerprint and the
+ * `@quantakrypto/core` (P1-1): a full, line-INSENSITIVE SHA-256 fingerprint and the
  * shared `{ version, fingerprints }` on-disk format. These tests assert the
  * adapter preserves qScan's historical API shape (`fingerprint`, `kept`/
  * `suppressed`, strict `readBaseline`) while delegating identity to core.
@@ -18,7 +18,7 @@ import {
   fingerprintFinding as coreFingerprint,
   loadBaseline as coreLoadBaseline,
   saveBaseline as coreSaveBaseline,
-} from "@qproof/core";
+} from "@quantakrypto/core";
 
 import {
   applyBaseline,

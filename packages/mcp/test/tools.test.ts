@@ -1,7 +1,7 @@
 /**
  * Tool-level tests, driven through {@link McpServer.handle} via `tools/call`.
  *
- * `@qproof/core` is partly stubbed (scan/buildInventory/remediationFor throw
+ * `@quantakrypto/core` is partly stubbed (scan/buildInventory/remediationFor throw
  * "not implemented"). These tests assert the MCP envelope contract and the
  * behaviour that holds regardless of core's stub state:
  *   - tool handlers never crash the server (no protocol error from a stub);
@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createQproofServer } from "../src/index.js";
+import { createQuantakryptoServer } from "../src/index.js";
 import type { JsonRpcSuccess } from "../src/protocol.js";
 
 interface ToolCallResult {
@@ -22,7 +22,7 @@ interface ToolCallResult {
 
 /** Call a tool and return its (validated) ToolResult. */
 async function callTool(name: string, args: Record<string, unknown>): Promise<ToolCallResult> {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = await server.handle({
     jsonrpc: "2.0",
     id: 1,

@@ -1,6 +1,6 @@
-# @qproof/core
+# @quantakrypto/core
 
-Shared post-quantum readiness library for the qproof toolchain. It finds
+Shared post-quantum readiness library for the quantakrypto toolchain. It finds
 **classical, non-quantum-safe asymmetric cryptography** in a codebase — inline
 crypto calls, embedded keys/certificates, and quantum-vulnerable npm
 dependencies — and turns the results into an inventory, a readiness score, and
@@ -8,7 +8,7 @@ machine- or human-readable reports.
 
 - **Zero runtime dependencies.** Node built-ins only.
 - **ESM + NodeNext**, TypeScript strict, Node ≥ 20.
-- Powers `@qproof/qscan` (CLI), the MCP server, and the GitHub Action.
+- Powers `@quantakrypto/qscan` (CLI), the MCP server, and the GitHub Action.
 
 ## Why it exists
 
@@ -22,20 +22,20 @@ Shor's algorithm breaks RSA, (EC)DH, ECDSA, DSA and EdDSA. Two threats follow:
   can be forged by a quantum attacker. These are `hndl: false` but still high
   severity.
 
-`@qproof/core` flags both, and points each finding at a NIST PQC replacement
+`@quantakrypto/core` flags both, and points each finding at a NIST PQC replacement
 (ML-KEM / FIPS 203, ML-DSA / FIPS 204, SLH-DSA / FIPS 205, hybrid
 `X25519MLKEM768`).
 
 ## Install
 
 ```bash
-npm install @qproof/core
+npm install @quantakrypto/core
 ```
 
 ## Quick start
 
 ```ts
-import { scan, formatSummary, toSarif, toJson } from "@qproof/core";
+import { scan, formatSummary, toSarif, toJson } from "@quantakrypto/core";
 
 const result = await scan({ root: "./", onFile: (f) => process.stderr.write(`scanning ${f}\n`) });
 
@@ -142,7 +142,7 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 registry is the plugin point:
 
 ```ts
-import { DetectorRegistry, defaultRegistry, scan } from "@qproof/core";
+import { DetectorRegistry, defaultRegistry, scan } from "@quantakrypto/core";
 
 const registry = defaultRegistry.clone().register(myDetector);
 const result = await scan({ root: ".", detectors: registry.all() });
@@ -222,10 +222,10 @@ is `{ version, fingerprints: string[] }`. A fingerprint is the SHA-256 hex of
 and snippet-whitespace-normalized (survives reformatting).
 
 ```ts
-import { saveBaseline, loadBaseline, applyBaseline } from "@qproof/core";
+import { saveBaseline, loadBaseline, applyBaseline } from "@quantakrypto/core";
 
-await saveBaseline(".qproof-baseline.json", result.findings);          // write
-const baseline = await loadBaseline(".qproof-baseline.json");          // read (tolerant)
+await saveBaseline(".quantakrypto-baseline.json", result.findings);          // write
+const baseline = await loadBaseline(".quantakrypto-baseline.json");          // read (tolerant)
 const { newFindings, suppressed } = applyBaseline(result.findings, baseline);
 ```
 

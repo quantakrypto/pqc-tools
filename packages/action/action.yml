@@ -1,9 +1,9 @@
-name: "qproof — Quantum Readiness Scan"
+name: "quantakrypto — Quantum Readiness Scan"
 description: >-
   Fail CI when new quantum-vulnerable cryptography lands. Scans your codebase
   with qScan, writes a SARIF report for GitHub code scanning, annotates
   findings inline, and (optionally) comments a summary on the pull request.
-author: "qproof"
+author: "quantakrypto"
 branding:
   icon: "shield"
   color: "green"
@@ -32,10 +32,10 @@ inputs:
   output:
     description: "Path of the report file to write (relative to the workspace)."
     required: false
-    default: "qproof.sarif.json"
+    default: "quantakrypto.sarif.json"
   baseline:
     description: >-
-      Optional path to a baseline file (a previously written qproof report).
+      Optional path to a baseline file (a previously written quantakrypto report).
       Findings already present in the baseline are suppressed, so only NEW
       quantum-vulnerable crypto fails the build.
     required: false

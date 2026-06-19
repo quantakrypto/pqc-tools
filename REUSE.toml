@@ -1,8 +1,8 @@
 # REUSE configuration (https://reuse.software, REUSE.toml format / spec 3.3).
 #
-# qproof-tools uses a BULK licensing declaration instead of per-file SPDX
+# quantakrypto-tools uses a BULK licensing declaration instead of per-file SPDX
 # headers: every source file in the repository is Apache-2.0, copyright
-# "qproof / Dandelion Labs JSC". This file is the machine-readable, REUSE-compliant
+# "quantakrypto / Dandelion Labs JSC". This file is the machine-readable, REUSE-compliant
 # statement of that fact, so `reuse lint` passes without touching any source.
 #
 # The full license text lives at LICENSES/Apache-2.0.txt (and the root LICENSE).
@@ -17,7 +17,7 @@ version = 1
 [[annotations]]
 path = "**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright 2026 qproof / Dandelion Labs JSC"
+SPDX-FileCopyrightText = "Copyright 2026 quantakrypto / Dandelion Labs JSC"
 SPDX-License-Identifier = "Apache-2.0"
 
 # ── Generated / data / config without their own copyright ────────────────────
@@ -32,7 +32,7 @@ path = [
   "graphify-out/**",
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright 2026 qproof / Dandelion Labs JSC"
+SPDX-FileCopyrightText = "Copyright 2026 quantakrypto / Dandelion Labs JSC"
 SPDX-License-Identifier = "CC0-1.0"
 
 # NOTE: Sieve ships NO third-party NIST ACVP vectors (see

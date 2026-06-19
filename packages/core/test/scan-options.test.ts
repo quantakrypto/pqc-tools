@@ -19,7 +19,7 @@ async function collect(iter: AsyncIterable<string>): Promise<string[]> {
 }
 
 async function makeTree(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-opts-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-opts-"));
   await mkdir(path.join(dir, "src"), { recursive: true });
   await mkdir(path.join(dir, "lib"), { recursive: true });
   await writeFile(path.join(dir, "src", "a.ts"), "const e = crypto.createECDH('p256');\n");
@@ -82,7 +82,7 @@ test("looksMinified flags long single-line content; isGeneratedPath flags bundle
 });
 
 test("scan skips minified content by default but scans it with scanMinified", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-min-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-min-"));
   try {
     // A long single-line file containing a crypto call.
     const line = "const x=1;".repeat(8000) + "crypto.createECDH('p256');";
@@ -131,7 +131,7 @@ test("scan accepts a detectors override", async () => {
 });
 
 test("large lockfiles over the size cap are still scanned for deps", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-lock-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-lock-"));
   try {
     // A package-lock.json larger than a small maxFileSize, containing a vuln dep.
     const lock = {

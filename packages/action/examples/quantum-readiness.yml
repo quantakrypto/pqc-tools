@@ -18,24 +18,24 @@ permissions:
   pull-requests: write # comment on pull requests
 
 jobs:
-  qproof:
-    name: qproof — Quantum Readiness Scan
+  quantakrypto:
+    name: quantakrypto — Quantum Readiness Scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Scan for quantum-vulnerable crypto
-        id: qproof
+        id: quantakrypto
         uses: dandelionlabs-io/qproof-tools/packages/action@v1
         with:
           path: "."
           severity-threshold: "high"
           fail-on-findings: "true"
           format: "sarif"
-          output: "qproof.sarif.json"
+          output: "quantakrypto.sarif.json"
           # Only fail on NEW findings relative to a committed baseline:
-          # baseline: ".qproof/baseline.sarif.json"
+          # baseline: ".quantakrypto/baseline.sarif.json"
           comment-pr: "true"
           github-token: ${{ github.token }}
 
@@ -43,10 +43,10 @@ jobs:
         if: always() # upload even when the scan failed the job
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.qproof.outputs.sarif-file }}
+          sarif_file: ${{ steps.quantakrypto.outputs.sarif-file }}
 
       - name: Show readiness score
         if: always()
         run: |
-          echo "Readiness score: ${{ steps.qproof.outputs.readiness-score }}/100"
-          echo "Blocking findings: ${{ steps.qproof.outputs.findings-count }}"
+          echo "Readiness score: ${{ steps.quantakrypto.outputs.readiness-score }}/100"
+          echo "Blocking findings: ${{ steps.quantakrypto.outputs.findings-count }}"

@@ -22,8 +22,8 @@ dependencies.
 - **qscan:** `--include`, `--max-file-size`, `--no-default-ignores`,
   `--scan-minified`, `--changed`/`--since` (incremental), `--parallel`/
   `--concurrency`, and `--cbom` output.
-- **mcp:** safe-by-default HTTP transport (loopback bind, `QPROOF_MCP_TOKEN`
-  auth, filesystem tools gated behind `QPROOF_MCP_ALLOW_FS`, per-request
+- **mcp:** safe-by-default HTTP transport (loopback bind, `QUANTAKRYPTO_MCP_TOKEN`
+  auth, filesystem tools gated behind `QUANTAKRYPTO_MCP_ALLOW_FS`, per-request
   timeout + response cap); `generate_cbom` tool.
 - **sieve:** SLH-DSA (FIPS 205); FIPS 203 §7.2 encapsulation-key modulus-range
   check; deeper ML-DSA + deterministic/hedged signing probe; bounded pipelining.
@@ -33,7 +33,7 @@ dependencies.
 
 #### Follow-ups landed (previously documented designs)
 
-- **core/qscan:** `qproof.config.json` support — `loadConfig` in core plus
+- **core/qscan:** `quantakrypto.config.json` support — `loadConfig` in core plus
   flags > config > defaults precedence in qScan, with `--config <path>` and
   `--no-config-file` (distinct from the `--no-config` *detector* toggle). [P2-9]
 - **tests:** deterministic, seeded-PRNG fuzz targets for the hand-rolled parsers
@@ -58,22 +58,22 @@ dependencies.
 
 ## [0.1.0] — 2026-06-03
 
-Initial release of the `qproof-tools` monorepo — a zero-runtime-dependency
+Initial release of the `quantakrypto-tools` monorepo — a zero-runtime-dependency
 TypeScript toolset for post-quantum readiness.
 
 ### Added
 
-- **`@qproof/core`** — shared engine: JavaScript/TypeScript + config crypto
+- **`@quantakrypto/core`** — shared engine: JavaScript/TypeScript + config crypto
   detectors, a vulnerable-dependency database, a cryptographic inventory with a
   0–100 readiness score, and SARIF 2.1.0 / JSON / text reporters.
-- **`@qproof/qscan`** — CLI to scan any codebase for quantum-vulnerable
+- **`@quantakrypto/qscan`** — CLI to scan any codebase for quantum-vulnerable
   cryptography, with baselines, severity gating, and SARIF output.
-- **`@qproof/mcp`** — Model Context Protocol server (stdio JSON-RPC implemented
+- **`@quantakrypto/mcp`** — Model Context Protocol server (stdio JSON-RPC implemented
   in-house) exposing scan/inventory/explain/suggest tools to AI coding agents,
   plus a hostable HTTP transport scaffold.
-- **`@qproof/action`** — GitHub Action that fails CI when newly introduced
+- **`@quantakrypto/action`** — GitHub Action that fails CI when newly introduced
   quantum-vulnerable cryptography lands, with baseline suppression and SARIF.
-- **`@qproof/sieve`** — conformance battery for ML-KEM / ML-DSA implementations
+- **`@quantakrypto/sieve`** — conformance battery for ML-KEM / ML-DSA implementations
   driven over a JSON protocol; ships no KAT vectors and never fabricates them.
 - Project governance, CI, and a multi-discipline audit set under `docs/`.
 

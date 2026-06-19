@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createQproofServer, SERVER_NAME } from "../src/index.js";
+import { createQuantakryptoServer, SERVER_NAME } from "../src/index.js";
 import { MCP_PROTOCOL_VERSION, ErrorCode } from "../src/protocol.js";
 import type { JsonRpcSuccess, JsonRpcFailure } from "../src/protocol.js";
 
@@ -27,7 +27,7 @@ function expectFailure(res: unknown): JsonRpcFailure {
 }
 
 test("initialize returns the expected handshake shape", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectSuccess(
     await server.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
   );
@@ -48,7 +48,7 @@ test("initialize returns the expected handshake shape", async () => {
 });
 
 test("notifications/initialized produces no response", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   // Notification: no id field present → handle() returns null.
   const res = await server.handle({ jsonrpc: "2.0", method: "notifications/initialized" });
   assert.equal(res, null);
@@ -56,13 +56,13 @@ test("notifications/initialized produces no response", async () => {
 });
 
 test("ping responds with an empty result", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectSuccess(await server.handle({ jsonrpc: "2.0", id: 7, method: "ping" }));
   assert.deepEqual(res.result, {});
 });
 
 test("tools/list returns every tool with a valid object inputSchema", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectSuccess(await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" }));
 
   const { tools } = res.result as {
@@ -86,7 +86,7 @@ test("tools/list returns every tool with a valid object inputSchema", async () =
 });
 
 test("unknown method yields JSON-RPC error -32601", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectFailure(
     await server.handle({ jsonrpc: "2.0", id: 3, method: "does/not/exist" }),
   );
@@ -96,7 +96,7 @@ test("unknown method yields JSON-RPC error -32601", async () => {
 });
 
 test("malformed (non-JSON-RPC) request yields InvalidRequest", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
 
   // Missing jsonrpc/method entirely.
   const res1 = expectFailure(await server.handle({ foo: "bar" }));
@@ -113,7 +113,7 @@ test("malformed (non-JSON-RPC) request yields InvalidRequest", async () => {
 });
 
 test("tools/call with a bad tool name yields InvalidParams", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectFailure(
     await server.handle({
       jsonrpc: "2.0",
@@ -126,7 +126,7 @@ test("tools/call with a bad tool name yields InvalidParams", async () => {
 });
 
 test("tools/call missing name yields InvalidParams", async () => {
-  const server = createQproofServer();
+  const server = createQuantakryptoServer();
   const res = expectFailure(
     await server.handle({
       jsonrpc: "2.0",

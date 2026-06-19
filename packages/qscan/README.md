@@ -1,4 +1,4 @@
-# @qproof/qscan
+# @quantakrypto/qscan
 
 **Find quantum-vulnerable cryptography in any codebase.**
 
@@ -10,7 +10,7 @@ manifests, and configuration, then prints a readiness score and a concrete next
 step.
 
 - **Zero runtime dependencies.** Node built-ins only; the engine is
-  [`@qproof/core`](../core).
+  [`@quantakrypto/core`](../core).
 - **CI-friendly.** Severity thresholds drive the exit code; baselines suppress
   known findings so the build only fails on *new* problems.
 - **Multiple formats.** `human` (default), `json`, SARIF 2.1.0 for code-scanning
@@ -21,9 +21,9 @@ step.
 ## Install
 
 ```bash
-npm install -g @qproof/qscan
+npm install -g @quantakrypto/qscan
 # or run without installing
-npx @qproof/qscan .
+npx @quantakrypto/qscan .
 ```
 
 Requires Node ≥ 20.
@@ -47,8 +47,8 @@ qscan [path] [options]
 | `--no-source` | Skip scanning source files for inline crypto. | scan on |
 | `--no-deps` | Skip scanning dependency manifests. | scan on |
 | `--no-config` | Skip scanning config files (TLS/certificates). Toggles config *detectors* — not the config file below. | scan on |
-| `--config <path>` | Use this `qproof.config.json` instead of auto-discovering one at the scan root. | auto |
-| `--no-config-file` | Disable `qproof.config.json` auto-discovery. | discovery on |
+| `--config <path>` | Use this `quantakrypto.config.json` instead of auto-discovering one at the scan root. | auto |
+| `--no-config-file` | Disable `quantakrypto.config.json` auto-discovery. | discovery on |
 | `--ignore <pattern>` | Exclude paths matching `<pattern>`. Repeatable. | — |
 | `--include <pattern>` | Restrict the scan to paths matching `<pattern>`. Repeatable. | all files |
 | `--max-file-size <bytes>` | Skip files larger than `<bytes>`. | 2 MiB |
@@ -72,9 +72,9 @@ qscan [path] [options]
 | `1` | One or more findings at/above the severity threshold. |
 | `2` | Usage error or I/O failure. |
 
-### Config file (`qproof.config.json`)
+### Config file (`quantakrypto.config.json`)
 
-qScan auto-discovers a `qproof.config.json` at the scan root and applies it
+qScan auto-discovers a `quantakrypto.config.json` at the scan root and applies it
 under a strict precedence: **CLI flags > config file > built-in defaults**
 (per-key). It encodes `include` / `exclude` / `maxFileSize` / `noDefaultIgnores`
 / `scanMinified`, the detector-family toggles, `severityThreshold`, and a
@@ -113,7 +113,7 @@ file or piped are always plain text.
 
 A baseline records the **fingerprints** of findings you have already triaged.
 qScan uses the **canonical baseline** shared across the whole monorepo
-(`@qproof/core`, the GitHub Action, and this CLI): a single on-disk format and a
+(`@quantakrypto/core`, the GitHub Action, and this CLI): a single on-disk format and a
 single fingerprint algorithm, so a baseline written by one tool is understood by
 the others.
 
@@ -203,12 +203,12 @@ jobs:
         with:
           node-version: 20
       - name: Scan for quantum-vulnerable crypto
-        run: npx @qproof/qscan . --severity-threshold high --baseline qscan-baseline.json
+        run: npx @quantakrypto/qscan . --severity-threshold high --baseline qscan-baseline.json
 
       # Optional: upload SARIF to GitHub code scanning.
       - name: Generate SARIF
         if: always()
-        run: npx @qproof/qscan . --format sarif -o qscan.sarif
+        run: npx @quantakrypto/qscan . --format sarif -o qscan.sarif
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
@@ -217,10 +217,10 @@ jobs:
 
 ## Programmatic API
 
-The CLI is a thin shell over `runQscan`, which `@qproof/action` reuses:
+The CLI is a thin shell over `runQscan`, which `@quantakrypto/action` reuses:
 
 ```ts
-import { runQscan, EXIT } from "@qproof/qscan";
+import { runQscan, EXIT } from "@quantakrypto/qscan";
 
 const { result, exitCode, suppressed } = await runQscan({
   path: "src",
@@ -237,7 +237,7 @@ if (exitCode === EXIT.FINDINGS) process.exitCode = 1;
 string and a suggested `exitCode`, leaving I/O to the caller. The package also
 re-exports the argument parser (`parseArgs`, `defaultOptions`), severity helpers
 (`severityRank`, `meetsThreshold`), and the **canonical** baseline utilities from
-`@qproof/core` (`fingerprintFinding`, `baselineFromFindings`, `applyBaseline`,
+`@quantakrypto/core` (`fingerprintFinding`, `baselineFromFindings`, `applyBaseline`,
 `loadBaseline`, `saveBaseline`) plus their legacy aliases (`fingerprint`,
 `buildBaseline`, `readBaseline`, `writeBaseline`) for source compatibility.
 

@@ -7,12 +7,12 @@
  *  - `json`   — the structured scan result via core's `toJson`.
  *  - `sarif`  — SARIF 2.1.0 via core's `toSarif`.
  *
- * Only `human` lives here; `json`/`sarif` delegate to `@qproof/core` so the
+ * Only `human` lives here; `json`/`sarif` delegate to `@quantakrypto/core` so the
  * serialized shape stays consistent across every tool in the monorepo.
  */
 
-import { toCbom, toJson, toSarif } from "@qproof/core";
-import type { Finding, ScanResult, Severity } from "@qproof/core";
+import { toCbom, toJson, toSarif } from "@quantakrypto/core";
+import type { Finding, ScanResult, Severity } from "@quantakrypto/core";
 import { SEVERITY_ORDER, severityRank } from "./args.js";
 
 /** Minimal ANSI palette. Empty strings when color is disabled. */

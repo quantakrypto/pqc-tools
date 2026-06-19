@@ -1,11 +1,11 @@
 /**
- * qScan-side resolution of `qproof.config.json` (ROADMAP P2-9, docs/CONFIG.md).
+ * qScan-side resolution of `quantakrypto.config.json` (ROADMAP P2-9, docs/CONFIG.md).
  *
  * core's {@link loadConfig} does the reading + type-validation; this module
  * applies the file's values onto parsed CLI options with the documented
  * precedence:
  *
- *     CLI flags  >  qproof.config.json  >  built-in defaults
+ *     CLI flags  >  quantakrypto.config.json  >  built-in defaults
  *
  * Resolution is **per-key**: a key set by a flag (tracked in the `explicit` set
  * from `parseArgs`) is left alone; otherwise the config value fills it. The
@@ -13,8 +13,8 @@
  * provides a base set and any CLI flags add to it (docs/CONFIG.md §4.2).
  */
 
-import { loadConfig } from "@qproof/core";
-import type { QproofFileConfig } from "@qproof/core";
+import { loadConfig } from "@quantakrypto/core";
+import type { QuantakryptoFileConfig } from "@quantakrypto/core";
 
 import type { ConfigurableKey, QscanOptions } from "./args.js";
 
@@ -29,7 +29,7 @@ export interface ResolvedConfig {
 }
 
 /**
- * Load and merge `qproof.config.json` into the parsed CLI options.
+ * Load and merge `quantakrypto.config.json` into the parsed CLI options.
  *
  * @param options Fully-resolved options from {@link parseArgs} (defaults filled).
  * @param explicit The set of configurable keys the user set via a flag.
@@ -67,7 +67,7 @@ export async function resolveConfig(
  */
 export function applyConfig(
   options: QscanOptions,
-  config: QproofFileConfig,
+  config: QuantakryptoFileConfig,
   explicit: ReadonlySet<ConfigurableKey>,
 ): QscanOptions {
   const out: QscanOptions = {

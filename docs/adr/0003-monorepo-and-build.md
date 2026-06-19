@@ -2,15 +2,15 @@
 
 - **Status:** Accepted
 - **Date:** 2025-06-09
-- **Deciders:** qproof-tools maintainers
+- **Deciders:** quantakrypto-tools maintainers
 - **Supersedes / Superseded by:** —
 
 ## Context
 
-Four of the five packages share `@qproof/core` ([ADR-0002](0002-shared-core-contract.md)),
+Four of the five packages share `@quantakrypto/core` ([ADR-0002](0002-shared-core-contract.md)),
 and the tools are developed, audited, and released together. They must build and
 test as one unit, with the shared contract built before its consumers, while still
-being **independently publishable** under the `@qproof/*` npm scope. The
+being **independently publishable** under the `@quantakrypto/*` npm scope. The
 zero-dependency rule ([ADR-0001](0001-zero-runtime-dependencies.md)) means the
 toolchain itself should stay tiny.
 

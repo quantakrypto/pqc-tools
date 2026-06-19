@@ -8,7 +8,7 @@
  * path. Unknown flags are a usage error.
  */
 
-import type { ReportFormat, Severity } from "@qproof/core";
+import type { ReportFormat, Severity } from "@quantakrypto/core";
 
 /** Severities ordered most → least severe; index 0 is the most severe. */
 export const SEVERITY_ORDER: readonly Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -72,20 +72,20 @@ export interface QscanOptions {
   /** Suppress the human summary banner (still writes reports/output files). */
   quiet: boolean;
   /**
-   * Explicit path to a `qproof.config.json` (`--config <path>`). Overrides
+   * Explicit path to a `quantakrypto.config.json` (`--config <path>`). Overrides
    * auto-discovery at the scan root. Distinct from `--no-config`, which toggles
    * config/TLS *detector* scanning — this names the config FILE.
    */
   configFile?: string;
   /**
-   * Disable `qproof.config.json` auto-discovery (`--no-config-file`). Distinct
+   * Disable `quantakrypto.config.json` auto-discovery (`--no-config-file`). Distinct
    * from `--no-config` (which skips config-file *detectors*).
    */
   noConfigFile: boolean;
 }
 
 /**
- * Option keys that a `qproof.config.json` may also set. When such a key was set
+ * Option keys that a `quantakrypto.config.json` may also set. When such a key was set
  * by a CLI flag, the flag wins (precedence: flags > config > defaults); when it
  * was left at its default, config may fill it. {@link parseArgs} records which
  * of these keys came from an explicit flag in {@link ParsedRun.explicit}.
@@ -229,7 +229,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         explicit.add("scanMinified");
         break;
 
-      // `qproof.config.json` FILE controls (distinct from `--no-config`, which
+      // `quantakrypto.config.json` FILE controls (distinct from `--no-config`, which
       // toggles config/TLS *detector* scanning above).
       case "--config":
         options.configFile = takeValue();

@@ -1,6 +1,6 @@
-# Hosting qproof MCP as a remote service
+# Hosting quantakrypto MCP as a remote service
 
-This document describes how to run `@qproof/mcp` as a hosted, multi-tenant
+This document describes how to run `@quantakrypto/mcp` as a hosted, multi-tenant
 service rather than a per-user local stdio process. The shipped `src/http.ts` is
 the minimal, working core of this design; everything below is the path from that
 scaffold to production.
@@ -11,11 +11,11 @@ The stdio transport trusts the local user and is fully featured. The HTTP
 transport is **hardened by default** (P0-1 / security-audit Q-01–Q-03) because a
 hosted endpoint is reachable by untrusted peers. Out of the box `node dist/http.js`:
 
-- **Binds to `127.0.0.1`**, not `0.0.0.0`. Override with `QPROOF_MCP_HOST`.
+- **Binds to `127.0.0.1`**, not `0.0.0.0`. Override with `QUANTAKRYPTO_MCP_HOST`.
   Binding to a **non-loopback host without a token is refused at startup** — an
   unauthenticated, network-reachable tool server would be an open relay into the
   arbitrary-file-read tools.
-- **Requires Bearer auth when `QPROOF_MCP_TOKEN` is set.** Every `/mcp` request
+- **Requires Bearer auth when `QUANTAKRYPTO_MCP_TOKEN` is set.** Every `/mcp` request
   must carry `Authorization: Bearer <token>`; auth is checked *before* the body
   is read or dispatched. Missing/invalid token → `401` with `WWW-Authenticate: Bearer`.
   `GET /health` is unauthenticated.
@@ -23,25 +23,25 @@ hosted endpoint is reachable by untrusted peers. Out of the box `node dist/http.
   and `generate_cbom` take a client-supplied path straight into `core.scan` and
   would otherwise be an arbitrary-directory reader (`/etc`, `/root/.ssh`, …) with
   matched-line snippets echoed back. Over HTTP they are registered **only when
-  `QPROOF_MCP_ALLOW_FS=1`**, so both `tools/list` and `tools/call` reflect the
+  `QUANTAKRYPTO_MCP_ALLOW_FS=1`**, so both `tools/list` and `tools/call` reflect the
   gate. The knowledge tools (`explain_finding`, `suggest_hybrid`, `list_rules`)
   are pure and always exposed. The gating is a pure function (`gateHttpTools`),
   unit-tested in `test/http.test.ts`.
 - **Bounds each request.** A 1 MiB request-body cap (always), a per-request tool
-  timeout (`QPROOF_MCP_TIMEOUT_MS`, default 30 s → `504`) and a response-size cap
-  (`QPROOF_MCP_MAX_RESPONSE_BYTES`, default 4 MiB → `500`).
+  timeout (`QUANTAKRYPTO_MCP_TIMEOUT_MS`, default 30 s → `504`) and a response-size cap
+  (`QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES`, default 4 MiB → `500`).
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `QPROOF_MCP_HOST` (or `HOST`) | `127.0.0.1` | Bind interface. Non-loopback **requires** a token. |
+| `QUANTAKRYPTO_MCP_HOST` (or `HOST`) | `127.0.0.1` | Bind interface. Non-loopback **requires** a token. |
 | `PORT` | `3000` | Listen port. |
-| `QPROOF_MCP_TOKEN` | _(unset)_ | When set, requires `Authorization: Bearer <token>`. |
-| `QPROOF_MCP_ALLOW_FS` | _(off)_ | `1`/`true` exposes the filesystem tools over HTTP. |
-| `QPROOF_MCP_TIMEOUT_MS` | `30000` | Per-request tool-execution deadline. |
-| `QPROOF_MCP_MAX_RESPONSE_BYTES` | `4194304` | Response-body size cap. |
+| `QUANTAKRYPTO_MCP_TOKEN` | _(unset)_ | When set, requires `Authorization: Bearer <token>`. |
+| `QUANTAKRYPTO_MCP_ALLOW_FS` | _(off)_ | `1`/`true` exposes the filesystem tools over HTTP. |
+| `QUANTAKRYPTO_MCP_TIMEOUT_MS` | `30000` | Per-request tool-execution deadline. |
+| `QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES` | `4194304` | Response-body size cap. |
 
 **Design choice — refuse vs. warn on a wide-open bind.** Binding to a
-non-loopback host with `QPROOF_MCP_TOKEN` unset is **refused** (startup fails)
+non-loopback host with `QUANTAKRYPTO_MCP_TOKEN` unset is **refused** (startup fails)
 rather than merely warned, because the failure mode is severe and silent (an
 internet-reachable arbitrary-tool endpoint). A non-loopback bind *with* a token
 is allowed but emits a hard `WARNING` to stderr. Even then, the recommendation
@@ -65,7 +65,7 @@ request/response half (sufficient for stateless tool calls). To fully conform,
 add:
 
 - **SSE responses**: when a client sends `Accept: text/event-stream`, reply with
-  an event stream so the server can push notifications/progress. qproof's tools
+  an event stream so the server can push notifications/progress. quantakrypto's tools
   are currently synchronous request/response, so this is optional until we add
   long-running scans with progress events.
 - **`GET /mcp`**: opens a standalone SSE stream for server→client messages.
@@ -83,7 +83,7 @@ add:
                                                     └────────┬─────────┘
                                                              │ tools
                                                     ┌────────▼─────────┐
-                                                    │   @qproof/core   │
+                                                    │   @quantakrypto/core   │
                                                     └──────────────────┘
 ```
 
@@ -159,26 +159,26 @@ stdio trusts the local user; a hosted endpoint must not.
 | HTTP framing, sessions, auth, rate limiting, metering | **HTTP transport / gateway** (`src/http.ts` + infra) |
 | JSON-RPC 2.0 dispatch, MCP methods, error mapping | **`McpServer`** (`src/server.ts`) — pure, reused by every transport |
 | Tool schemas, argument validation, result shaping | **Tools** (`src/tools.ts`) |
-| Crypto detection, inventory, remediation knowledge | **`@qproof/core`** — the single source of truth; transports never reimplement detection logic |
+| Crypto detection, inventory, remediation knowledge | **`@quantakrypto/core`** — the single source of truth; transports never reimplement detection logic |
 
 The guiding principle: **transports do I/O and policy; `McpServer` does protocol;
-`@qproof/core` does cryptographic analysis.** Hosting adds an HTTP/edge layer
+`@quantakrypto/core` does cryptographic analysis.** Hosting adds an HTTP/edge layer
 around the exact same `McpServer` used over stdio, so behaviour is identical
-whether qproof runs locally or as a service.
+whether quantakrypto runs locally or as a service.
 
 ## 7. Minimal deployment example
 
 ```bash
 # Container entrypoint. A non-loopback bind REQUIRES a token (else startup is
-# refused). Leave QPROOF_MCP_ALLOW_FS unset to keep the filesystem tools off.
+# refused). Leave QUANTAKRYPTO_MCP_ALLOW_FS unset to keep the filesystem tools off.
 PORT=8080 \
-QPROOF_MCP_HOST=0.0.0.0 \
-QPROOF_MCP_TOKEN="$(cat /run/secrets/qproof_mcp_token)" \
+QUANTAKRYPTO_MCP_HOST=0.0.0.0 \
+QUANTAKRYPTO_MCP_TOKEN="$(cat /run/secrets/quantakrypto_mcp_token)" \
 node dist/http.js
 ```
 
 Put it behind a gateway that terminates TLS, validates API keys, applies rate
 limits, and forwards to `/mcp`. Run ≥2 replicas with a shared session store and a
 health check on `/health`. The built-in Bearer check is a backstop; the gateway
-should remain the primary auth boundary. Enable `QPROOF_MCP_ALLOW_FS=1` only when
+should remain the primary auth boundary. Enable `QUANTAKRYPTO_MCP_ALLOW_FS=1` only when
 the scanned path surface is sandboxed (e.g. a read-only, dedicated mount).

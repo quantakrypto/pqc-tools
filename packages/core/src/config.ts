@@ -1,5 +1,5 @@
 /**
- * `qproof.config.json` loader (ROADMAP P2-9, see docs/CONFIG.md).
+ * `quantakrypto.config.json` loader (ROADMAP P2-9, see docs/CONFIG.md).
  *
  * Reads an optional project configuration file, validates the *types* of known
  * keys, ignores unknown keys (forward compatibility), and maps it onto a
@@ -19,7 +19,7 @@ import * as path from "node:path";
 import type { ScanOptions, Severity } from "./types.js";
 
 /** Canonical config file name discovered at a scan root. */
-export const CONFIG_FILENAME = "qproof.config.json";
+export const CONFIG_FILENAME = "quantakrypto.config.json";
 
 /** Severity levels accepted by `severityThreshold`, for validation. */
 const SEVERITIES: readonly Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -36,14 +36,14 @@ const DETECTOR_FAMILIES = [
 ] as const;
 
 /**
- * The slice of options a `qproof.config.json` can set. A subset of
+ * The slice of options a `quantakrypto.config.json` can set. A subset of
  * {@link ScanOptions} (the file-selection + scope keys) extended with the two
  * policy keys qScan owns: `severityThreshold` and `baseline`.
  *
  * `root`, `files`, `detectors` (the programmatic detector array), and `onFile`
  * are intentionally NOT configurable from a file — they are call-site concerns.
  */
-export interface QproofFileConfig extends Partial<
+export interface QuantakryptoFileConfig extends Partial<
   Pick<
     ScanOptions,
     | "include"
@@ -65,7 +65,7 @@ export interface QproofFileConfig extends Partial<
 /** Result of {@link loadConfig}: the resolved config plus where it came from. */
 export interface LoadConfigResult {
   /** Validated, mapped config. Empty object when no file was found. */
-  config: QproofFileConfig;
+  config: QuantakryptoFileConfig;
   /** Absolute path of the file that was loaded, when one was. */
   path?: string;
   /**
@@ -125,7 +125,7 @@ function asStringArray(
 }
 
 /**
- * Map the validated raw JSON object onto a {@link QproofFileConfig}. Throws
+ * Map the validated raw JSON object onto a {@link QuantakryptoFileConfig}. Throws
  * {@link ConfigError} on a malformed *value* for any known key; collects
  * warnings for unknown keys and unrecognised `version`.
  */
@@ -133,7 +133,7 @@ function mapConfig(
   raw: Record<string, unknown>,
   file: string,
   warnings: string[],
-): QproofFileConfig {
+): QuantakryptoFileConfig {
   // Known top-level keys. Anything else is a warning, not an error.
   const KNOWN = new Set([
     "$schema",
@@ -163,7 +163,7 @@ function mapConfig(
     }
   }
 
-  const out: QproofFileConfig = {};
+  const out: QuantakryptoFileConfig = {};
 
   const include = asStringArray(raw, "include", file);
   if (include) out.include = include;
@@ -243,11 +243,11 @@ function mapConfig(
 }
 
 /**
- * Load a `qproof.config.json` for a scan.
+ * Load a `quantakrypto.config.json` for a scan.
  *
- * By default reads `<root>/qproof.config.json`. Pass an explicit file path as
+ * By default reads `<root>/quantakrypto.config.json`. Pass an explicit file path as
  * `root` (or via the caller's `--config` flag) to read a named file instead —
- * if the path's basename is `qproof.config.json` it is read directly; otherwise
+ * if the path's basename is `quantakrypto.config.json` it is read directly; otherwise
  * the path is treated as a directory and the file is looked up inside it. When
  * an explicit path is given but missing, that is an error; an *absent*
  * auto-discovered file is tolerated (returns an empty config).

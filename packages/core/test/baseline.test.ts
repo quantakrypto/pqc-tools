@@ -86,7 +86,7 @@ test("applyBaseline splits new vs suppressed", () => {
 });
 
 test("saveBaseline / loadBaseline round-trip", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-baseline-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-baseline-"));
   try {
     const file = path.join(dir, "baseline.json");
     const saved = await saveBaseline(file, [finding(), finding({ ruleId: "x" })]);
@@ -100,6 +100,6 @@ test("saveBaseline / loadBaseline round-trip", async () => {
 });
 
 test("loadBaseline tolerates a missing / malformed file", async () => {
-  const empty = await loadBaseline(path.join(tmpdir(), "does-not-exist-qproof.json"));
+  const empty = await loadBaseline(path.join(tmpdir(), "does-not-exist-quantakrypto.json"));
   assert.deepEqual(empty, { version: BASELINE_VERSION, fingerprints: [] });
 });

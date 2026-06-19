@@ -30,6 +30,6 @@ qscan packages/qscan/examples/vulnerable-app --baseline baseline.json
 Running without building, via the workspace:
 
 ```bash
-npm run build -w @qproof/qscan
+npm run build -w @quantakrypto/qscan
 node packages/qscan/dist/cli.js packages/qscan/examples/vulnerable-app
 ```

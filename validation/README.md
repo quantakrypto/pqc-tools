@@ -3,7 +3,7 @@
 Validation-only harnesses that exercise the tools against **real** inputs. These
 live **outside the npm workspaces** on purpose: they may depend on third-party
 packages (e.g. a real PQC implementation), and keeping them out of `packages/*`
-ensures every **published `@qproof/*` package stays zero-dependency**. CI does not
+ensures every **published `@quantakrypto/*` package stays zero-dependency**. CI does not
 install or run anything here.
 
 ## Contents

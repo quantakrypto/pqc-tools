@@ -1,5 +1,5 @@
 /**
- * @qproof/sieve — programmatic API.
+ * @quantakrypto/sieve — programmatic API.
  *
  * Sieve is a conformance battery for ML-KEM (FIPS 203) and ML-DSA (FIPS 204)
  * implementations. It TESTS other people's implementations; it implements no
@@ -8,7 +8,7 @@
  *
  * Typical use:
  * ```ts
- * import { runSieve } from "@qproof/sieve";
+ * import { runSieve } from "@quantakrypto/sieve";
  * const report = await runSieve({ command: ["node", "./my-impl.js"], param: "ml-kem-768" });
  * console.log(report.overall);
  * ```

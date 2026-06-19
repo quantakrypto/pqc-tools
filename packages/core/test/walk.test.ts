@@ -18,7 +18,7 @@ async function collect(iter: AsyncIterable<string>): Promise<string[]> {
 }
 
 async function makeTree(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-walk-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-walk-"));
   await writeFile(path.join(dir, "a.ts"), "export const a = 1;\n");
   await mkdir(path.join(dir, "src"), { recursive: true });
   await writeFile(path.join(dir, "src", "b.js"), "const b = 2;\n");

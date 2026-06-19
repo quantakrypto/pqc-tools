@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 This directory records the **load-bearing** architectural decisions for
-`qproof-tools` — the ones a future contributor would otherwise have to
+`quantakrypto-tools` — the ones a future contributor would otherwise have to
 reverse-engineer or, worse, accidentally violate. Each ADR captures one decision,
 its context, and its consequences. ADRs are **immutable once accepted**: to
 change a decision, write a new ADR that supersedes the old one (and mark the old
@@ -14,14 +14,14 @@ Format: a lightweight [MADR](https://adr.github.io/madr/)-style record.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-zero-runtime-dependencies.md) | Zero runtime dependencies (Node built-ins only) | Accepted |
-| [0002](0002-shared-core-contract.md) | `@qproof/core` is the single shared contract | Accepted |
+| [0002](0002-shared-core-contract.md) | `@quantakrypto/core` is the single shared contract | Accepted |
 | [0003](0003-monorepo-and-build.md) | npm-workspaces monorepo + `tsc -b` project references | Accepted |
 | [0004](0004-sieve-no-fabricated-vectors.md) | Sieve ships no KAT vectors and never fabricates expected values | Accepted |
 
 ## Related governance
 
 - [VERSIONING.md](../VERSIONING.md) — SemVer + deprecation policy (operationalises ADR-0002).
-- [CONFIG.md](../CONFIG.md) — the optional `qproof.config.json` spec.
+- [CONFIG.md](../CONFIG.md) — the optional `quantakrypto.config.json` spec.
 - [ROADMAP.md](../ROADMAP.md) — open work, several items of which test these decisions.
 
 ---

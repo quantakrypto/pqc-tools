@@ -29,7 +29,7 @@ if (hndl.length > 0) {
 // 3) SARIF for CI tooling (e.g. GitHub code scanning).
 //    Uncomment to emit SARIF to a file:
 // import { writeFile } from "node:fs/promises";
-// await writeFile("qproof.sarif", JSON.stringify(toSarif(result), null, 2));
+// await writeFile("quantakrypto.sarif", JSON.stringify(toSarif(result), null, 2));
 void toSarif;
 
 process.exitCode = result.inventory.readinessScore < 100 ? 1 : 0;

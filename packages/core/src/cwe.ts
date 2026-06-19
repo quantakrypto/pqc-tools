@@ -1,7 +1,7 @@
 /**
  * CWE (Common Weakness Enumeration) identifiers used to tag findings. These
  * feed SARIF rule taxa / properties and the CBOM export, and let downstream
- * compliance tooling map qProof findings to a standard weakness taxonomy.
+ * compliance tooling map quantaKrypto findings to a standard weakness taxonomy.
  */
 
 /** CWE-327: Use of a Broken or Risky Cryptographic Algorithm. */

@@ -20,7 +20,7 @@ import {
   createHttpMcpServer,
   createHttpServer,
 } from "../src/http.js";
-import { qproofTools, FS_TOOL_NAMES } from "../src/tools.js";
+import { quantakryptoTools, FS_TOOL_NAMES } from "../src/tools.js";
 import type { ToolDefinition } from "../src/protocol.js";
 
 /* ----------------------------- pure: config ------------------------------- */
@@ -38,9 +38,9 @@ test("resolveHttpConfig defaults to a safe loopback bind with no auth", () => {
 
 test("resolveHttpConfig reads env: host, token, allow-fs, port", () => {
   const cfg = resolveHttpConfig({
-    QPROOF_MCP_HOST: "0.0.0.0",
-    QPROOF_MCP_TOKEN: "  secret  ",
-    QPROOF_MCP_ALLOW_FS: "1",
+    QUANTAKRYPTO_MCP_HOST: "0.0.0.0",
+    QUANTAKRYPTO_MCP_TOKEN: "  secret  ",
+    QUANTAKRYPTO_MCP_ALLOW_FS: "1",
     PORT: "8080",
   });
   assert.equal(cfg.host, "0.0.0.0");
@@ -52,7 +52,7 @@ test("resolveHttpConfig reads env: host, token, allow-fs, port", () => {
 
 test("explicit options win over env", () => {
   const cfg = resolveHttpConfig(
-    { QPROOF_MCP_HOST: "0.0.0.0", QPROOF_MCP_ALLOW_FS: "1" },
+    { QUANTAKRYPTO_MCP_HOST: "0.0.0.0", QUANTAKRYPTO_MCP_ALLOW_FS: "1" },
     { host: "127.0.0.1", allowFs: false },
   );
   assert.equal(cfg.host, "127.0.0.1");
@@ -73,14 +73,14 @@ test("isLoopbackHost recognizes the loopback interfaces", () => {
 /* --------------------------- pure: startup -------------------------------- */
 
 test("startupDecision refuses a non-loopback bind without a token", () => {
-  const cfg = resolveHttpConfig({ QPROOF_MCP_HOST: "0.0.0.0" });
+  const cfg = resolveHttpConfig({ QUANTAKRYPTO_MCP_HOST: "0.0.0.0" });
   const decision = startupDecision(cfg);
   assert.equal(decision.ok, false);
   assert.match(decision.reason ?? "", /token|loopback/i);
 });
 
 test("startupDecision allows a non-loopback bind with a token", () => {
-  const cfg = resolveHttpConfig({ QPROOF_MCP_HOST: "0.0.0.0", QPROOF_MCP_TOKEN: "t" });
+  const cfg = resolveHttpConfig({ QUANTAKRYPTO_MCP_HOST: "0.0.0.0", QUANTAKRYPTO_MCP_TOKEN: "t" });
   assert.equal(startupDecision(cfg).ok, true);
 });
 
@@ -110,7 +110,7 @@ test("authorizeRequest requires a matching bearer token when one is set", () => 
 /* --------------------------- pure: gating --------------------------------- */
 
 test("gateHttpTools hides the FS tools by default, keeps knowledge tools", () => {
-  const gated = gateHttpTools(qproofTools, false).map((t: ToolDefinition) => t.name);
+  const gated = gateHttpTools(quantakryptoTools, false).map((t: ToolDefinition) => t.name);
   for (const fs of FS_TOOL_NAMES) {
     assert.equal(gated.includes(fs), false, `${fs} must be gated off`);
   }
@@ -120,7 +120,7 @@ test("gateHttpTools hides the FS tools by default, keeps knowledge tools", () =>
 });
 
 test("gateHttpTools exposes the FS tools when allowFs is true", () => {
-  const gated = gateHttpTools(qproofTools, true).map((t: ToolDefinition) => t.name);
+  const gated = gateHttpTools(quantakryptoTools, true).map((t: ToolDefinition) => t.name);
   for (const fs of FS_TOOL_NAMES) {
     assert.equal(gated.includes(fs), true, `${fs} must be exposed`);
   }
@@ -177,8 +177,8 @@ test("end-to-end: FS tools off by default in tools/list and tools/call", async (
   }
 });
 
-test("end-to-end: FS tools appear when QPROOF_MCP_ALLOW_FS=1", async () => {
-  const { base, close } = await boot({ QPROOF_MCP_ALLOW_FS: "1" });
+test("end-to-end: FS tools appear when QUANTAKRYPTO_MCP_ALLOW_FS=1", async () => {
+  const { base, close } = await boot({ QUANTAKRYPTO_MCP_ALLOW_FS: "1" });
   try {
     const res = await rpc(base, { jsonrpc: "2.0", id: 1, method: "tools/list" });
     const list = (await res.json()) as { result: { tools: Array<{ name: string }> } };
@@ -192,7 +192,7 @@ test("end-to-end: FS tools appear when QPROOF_MCP_ALLOW_FS=1", async () => {
 });
 
 test("end-to-end: bearer auth is enforced when a token is set", async () => {
-  const { base, close } = await boot({ QPROOF_MCP_TOKEN: "letmein" });
+  const { base, close } = await boot({ QUANTAKRYPTO_MCP_TOKEN: "letmein" });
   try {
     const unauth = await rpc(base, { jsonrpc: "2.0", id: 1, method: "tools/list" });
     assert.equal(unauth.status, 401);
@@ -210,7 +210,7 @@ test("end-to-end: bearer auth is enforced when a token is set", async () => {
 });
 
 test("end-to-end: /health needs no auth", async () => {
-  const { base, close } = await boot({ QPROOF_MCP_TOKEN: "letmein" });
+  const { base, close } = await boot({ QUANTAKRYPTO_MCP_TOKEN: "letmein" });
   try {
     const res = await fetch(`${base}/health`);
     assert.equal(res.status, 200);

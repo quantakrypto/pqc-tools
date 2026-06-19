@@ -1,5 +1,5 @@
 {
-  "name": "@qproof/qscan",
+  "name": "@quantakrypto/qscan",
   "version": "0.1.0",
   "description": "qScan — find quantum-vulnerable cryptography in any codebase (CLI). Zero runtime dependencies.",
   "license": "Apache-2.0",
@@ -36,7 +36,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@qproof/core": "0.1.0"
+    "@quantakrypto/core": "0.1.0"
   },
   "scripts": {
     "build": "tsc -b",

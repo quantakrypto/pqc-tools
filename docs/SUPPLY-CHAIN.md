@@ -1,6 +1,6 @@
 # Supply-Chain Assurance
 
-How `qproof-tools` targets the three pillars of OSS supply-chain assurance —
+How `quantakrypto-tools` targets the three pillars of OSS supply-chain assurance —
 **OpenSSF Scorecard**, **SLSA / npm provenance**, and **SPDX/REUSE licensing** —
 and where the project stands against each today. This operationalises
 [ROADMAP P2-7](ROADMAP.md) and the supply-chain section of [COMPLIANCE.md](COMPLIANCE.md §5).
@@ -15,7 +15,7 @@ buys several assurance checks for free; the gaps are process, not dependencies.
 |---|---|---|---|
 | **OpenSSF Scorecard** | A published score with a badge; act on findings each run. | **Deferred until the repo is public** — Scorecard's result publishing and code-scanning SARIF upload both require a public repository, so no workflow runs while private (it only produced failing runs). | When public, add the pinned `ossf/scorecard-action@v2.4.3` workflow, turn on **branch protection** + required reviews, then track the score. Zero deps already wins `Pinned-Dependencies`/`Vulnerabilities`. |
 | **SLSA provenance** | SLSA build-provenance on every released artifact (L2+: hosted, hardened CI builder). | Not generated yet. | Publish from the gated [release workflow](../.github/workflows/release.yml) so npm provenance (Sigstore) is produced; that attestation is the provenance record. |
-| **npm provenance** | Each `@qproof/*` package page shows a signed provenance attestation. | Configured but **deferred** — release workflow is gated behind `workflow_dispatch` + `NPM_TOKEN` (ROADMAP §5). | Add `NPM_TOKEN`, commit the Action `dist/`, run the release workflow with `confirm: publish`. |
+| **npm provenance** | Each `@quantakrypto/*` package page shows a signed provenance attestation. | Configured but **deferred** — release workflow is gated behind `workflow_dispatch` + `NPM_TOKEN` (ROADMAP §5). | Add `NPM_TOKEN`, commit the Action `dist/`, run the release workflow with `confirm: publish`. |
 | **SPDX / REUSE** | `reuse lint` passes; licensing is machine-verifiable. | [`REUSE.toml`](../REUSE.toml) bulk declaration + [`LICENSES/Apache-2.0.txt`](../LICENSES/Apache-2.0.txt) added. | Run `reuse lint` in CI to keep it clean as files are added. |
 
 ## 2. OpenSSF Scorecard
@@ -60,7 +60,7 @@ finalized. Two preconditions gate it, both encoded in the workflow:
 
 ## 4. SPDX / REUSE licensing
 
-The project is uniformly **Apache-2.0**, copyright **"qproof / Dandelion Labs JSC"**.
+The project is uniformly **Apache-2.0**, copyright **"quantakrypto / Dandelion Labs JSC"**.
 Rather than stamp a per-file `SPDX-License-Identifier` header into every source
 file, we use a **bulk declaration**:
 

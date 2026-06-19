@@ -1,21 +1,28 @@
 /**
- * qproof MCP tools, backed by {@link @qproof/core}.
+ * quantakrypto MCP tools, backed by {@link @quantakrypto/core}.
  *
  * Every tool returns an MCP {@link ToolResult} ({ content, isError? }). Because
- * `@qproof/core` is still partly stubbed (several functions throw "not
+ * `@quantakrypto/core` is still partly stubbed (several functions throw "not
  * implemented"), each handler runs core calls through {@link safe} so a missing
  * implementation surfaces as a readable `isError` tool result instead of a
  * protocol-level crash. When core lands, the tools work unchanged.
  */
 
-import { VERSION, buildInventory, detectors, remediationFor, scan, toCbom } from "@qproof/core";
+import {
+  VERSION,
+  buildInventory,
+  detectors,
+  remediationFor,
+  scan,
+  toCbom,
+} from "@quantakrypto/core";
 import type {
   AlgorithmFamily,
   CryptoInventory,
   Remediation,
   ScanResult,
   Severity,
-} from "@qproof/core";
+} from "@quantakrypto/core";
 
 import { errorResult, textResult } from "./protocol.js";
 import type { JsonSchema, ToolDefinition, ToolResult } from "./protocol.js";
@@ -78,7 +85,7 @@ function normalizeAlgorithm(input: string): AlgorithmFamily {
 function summarizeScan(result: ScanResult): string {
   const inv = result.inventory;
   const lines: string[] = [];
-  lines.push(`qproof scan of ${result.root}`);
+  lines.push(`quantakrypto scan of ${result.root}`);
   lines.push(`Files scanned: ${result.filesScanned}`);
   lines.push(`Findings: ${result.findings.length}`);
   lines.push(`Readiness score: ${inv.readinessScore}/100`);
@@ -120,7 +127,7 @@ const scanPathTool: ToolDefinition = {
   name: "scan_path",
   description:
     "Scan a file or directory for classical (quantum-vulnerable) asymmetric " +
-    "cryptography using qproof. Returns a readiness summary and findings.",
+    "cryptography using quantakrypto. Returns a readiness summary and findings.",
   inputSchema: {
     type: "object",
     properties: {
@@ -215,7 +222,7 @@ const inventoryCryptoTool: ToolDefinition = {
 const explainFindingTool: ToolDefinition = {
   name: "explain_finding",
   description:
-    "Explain a qproof finding and its post-quantum remediation. Provide a " +
+    "Explain a quantakrypto finding and its post-quantum remediation. Provide a " +
     "ruleId (e.g. 'forge-rsa-keygen', 'elliptic-ec', 'node-rsa', 'pem-ec-private-key') " +
     "and/or an algorithm (e.g. 'RSA', 'ECDSA'). The ruleId is resolved against the " +
     "core detector set, so library and config rules explain correctly.",
@@ -376,7 +383,7 @@ function staticHybridAdvice(algorithm: AlgorithmFamily): string[] {
 
 const listRulesTool: ToolDefinition = {
   name: "list_rules",
-  description: "List the qproof detector catalog: every detector id and what it looks for.",
+  description: "List the quantakrypto detector catalog: every detector id and what it looks for.",
   inputSchema: {
     type: "object",
     properties: {},
@@ -387,12 +394,17 @@ const listRulesTool: ToolDefinition = {
     if (!detectorList.ok) return detectorList.result;
     const catalog = detectorList.value.map((d) => ({ id: d.id, description: d.description }));
     if (catalog.length === 0) {
-      return textResult("No detectors are registered in @qproof/core yet (the catalog is empty).");
+      return textResult(
+        "No detectors are registered in @quantakrypto/core yet (the catalog is empty).",
+      );
     }
     const human = catalog.map((d) => `- ${d.id}: ${d.description}`).join("\n");
     return {
       content: [
-        { type: "text", text: `qproof detector catalog (${catalog.length} rules):\n${human}` },
+        {
+          type: "text",
+          text: `quantakrypto detector catalog (${catalog.length} rules):\n${human}`,
+        },
         { type: "text", text: JSON.stringify(catalog, null, 2) },
       ],
     };
@@ -437,8 +449,8 @@ const generateCbomTool: ToolDefinition = {
  */
 export const FS_TOOL_NAMES: readonly string[] = ["scan_path", "inventory_crypto", "generate_cbom"];
 
-/** All qproof MCP tools, in a stable order. */
-export const qproofTools: ToolDefinition[] = [
+/** All quantakrypto MCP tools, in a stable order. */
+export const quantakryptoTools: ToolDefinition[] = [
   scanPathTool,
   inventoryCryptoTool,
   explainFindingTool,

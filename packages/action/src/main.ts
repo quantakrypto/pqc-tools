@@ -1,13 +1,13 @@
 /**
- * qproof Action entrypoint.
+ * quantakrypto Action entrypoint.
  *
  * Runs qScan over the repository, writes a SARIF (or JSON) report for GitHub
  * code scanning, annotates each finding inline, sets action outputs, optionally
  * comments a summary on the pull request, and fails the build when new
  * quantum-vulnerable cryptography lands.
  *
- * The scan, report rendering, and baseline live in `@qproof/qscan` /
- * `@qproof/core` so the Action and the CLI share one code path and one baseline
+ * The scan, report rendering, and baseline live in `@quantakrypto/qscan` /
+ * `@quantakrypto/core` so the Action and the CLI share one code path and one baseline
  * format — this module only adds the GitHub-runner glue (inputs, outputs,
  * annotations, PR comment, exit policy). The decision logic is factored into
  * small, pure functions so it can be tested without a real Actions environment.
@@ -16,9 +16,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { applyBaseline, fingerprintFinding, loadBaseline } from "@qproof/core";
-import type { Baseline, Finding, ScanResult, Severity } from "@qproof/core";
-import { renderReport, runQscan } from "@qproof/qscan";
+import { applyBaseline, fingerprintFinding, loadBaseline } from "@quantakrypto/core";
+import type { Baseline, Finding, ScanResult, Severity } from "@quantakrypto/core";
+import { renderReport, runQscan } from "@quantakrypto/qscan";
 
 import {
   error as annotateError,
@@ -35,7 +35,7 @@ import { mdCell } from "./escape.js";
 const SEVERITY_ORDER: readonly Severity[] = ["critical", "high", "medium", "low", "info"];
 
 /** Default report file when the `output` input is omitted. */
-const DEFAULT_OUTPUT = "qproof.sarif.json";
+const DEFAULT_OUTPUT = "quantakrypto.sarif.json";
 
 /** Normalised, validated inputs for a run. */
 export interface ActionInputs {
@@ -83,7 +83,7 @@ export function meetsThreshold(severity: Severity, threshold: Severity): boolean
 /**
  * A stable identity for a finding, used to match it against a baseline.
  *
- * Re-exported from `@qproof/core` so the Action and the CLI share one
+ * Re-exported from `@quantakrypto/core` so the Action and the CLI share one
  * fingerprint (line-insensitive sha256 of `ruleId | file | normalizedSnippet`)
  * and therefore one baseline format. Kept under this name for the Action's
  * public surface.
@@ -117,7 +117,7 @@ export function annotateFindings(findings: Finding[], threshold: Severity): void
     const level = meetsThreshold(f.severity, threshold) ? "error" : annotationLevel(f.severity);
     const message = f.remediation ? `${f.message} → ${f.remediation}` : f.message;
     const props = {
-      title: `qproof: ${f.title}`,
+      title: `quantakrypto: ${f.title}`,
       file: f.location.file,
       line: f.location.line,
       col: f.location.column,
@@ -137,7 +137,7 @@ export function buildSummary(
   const score = result.inventory.readinessScore;
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, threshold));
   const lines: string[] = [];
-  lines.push("## qproof — Quantum Readiness Scan");
+  lines.push("## quantakrypto — Quantum Readiness Scan");
   lines.push("");
   lines.push(`**Readiness score:** ${score}/100`);
   lines.push(
@@ -160,7 +160,7 @@ export function buildSummary(
   }
   if (blocking.length > 50) lines.push(`| … | | | _${blocking.length - 50} more_ |`);
   lines.push("");
-  lines.push("<sub>Reported by [qproof](https://qproof.com/tools).</sub>");
+  lines.push("<sub>Reported by [quantakrypto](https://quantakrypto.com/tools).</sub>");
   return lines.join("\n");
 }
 
@@ -216,7 +216,7 @@ export async function commentOnPullRequest(
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",
-        "User-Agent": "qproof-action",
+        "User-Agent": "quantakrypto-action",
       },
       body: JSON.stringify({ body }),
     });
@@ -239,7 +239,7 @@ function resolveInWorkspace(p: string, env: NodeJS.ProcessEnv): string {
 }
 
 /**
- * Load the shared `@qproof/core` baseline (the `{ version, fingerprints }`
+ * Load the shared `@quantakrypto/core` baseline (the `{ version, fingerprints }`
  * format written by `qscan --write-baseline`) into the set of accepted
  * fingerprints. `loadBaseline` is tolerant of a missing/unparseable file, so
  * an absent baseline degrades to "suppress nothing".
@@ -254,7 +254,7 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const inputs = readInputs(env);
 
   const scanRoot = resolveInWorkspace(inputs.path, env);
-  info(`qproof: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
+  info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
 
   // One code path with the CLI: qScan runs the scan and renders the report.
   // We deliberately do NOT hand the baseline to runQscan — the report (SARIF
@@ -276,7 +276,7 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, renderReport(result, inputs.format), "utf8");
-  info(`qproof: wrote ${inputs.format} report to ${inputs.output}`);
+  info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);
 
   // Annotate findings inline in the diff.
   annotateFindings(newFindings, inputs.severityThreshold);
@@ -296,17 +296,17 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
       const body = buildSummary(result, newFindings, inputs.severityThreshold);
       await commentOnPullRequest(ctx, inputs.githubToken, body);
     } else {
-      info("qproof: comment-pr enabled but no pull-request context found; skipping comment.");
+      info("quantakrypto: comment-pr enabled but no pull-request context found; skipping comment.");
     }
   }
 
   info(
-    `qproof: ${newFindings.length} new finding(s), ${blocking.length} at/above "${inputs.severityThreshold}"; readiness ${result.inventory.readinessScore}/100.`,
+    `quantakrypto: ${newFindings.length} new finding(s), ${blocking.length} at/above "${inputs.severityThreshold}"; readiness ${result.inventory.readinessScore}/100.`,
   );
 
   if (shouldFail(blocking.length, inputs.failOnFindings)) {
     setFailed(
-      `qproof: ${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}".`,
+      `quantakrypto: ${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}".`,
     );
     process.exit(1);
   }
@@ -317,7 +317,7 @@ const invokedDirectly =
   process.argv[1] !== undefined && resolve(process.argv[1]).endsWith("main.js");
 if (invokedDirectly) {
   run().catch((err: unknown) => {
-    setFailed(`qproof: ${(err as Error).message}`);
+    setFailed(`quantakrypto: ${(err as Error).message}`);
     process.exit(1);
   });
 }

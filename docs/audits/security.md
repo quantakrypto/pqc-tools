@@ -1,4 +1,4 @@
-# qproof-tools — Security Audit (Application Security Lens)
+# quantakrypto-tools — Security Audit (Application Security Lens)
 
 **Scope:** all five packages (`core`, `qscan`, `mcp`, `action`, `sieve`) of the
 zero-dependency TypeScript monorepo at commit time of writing.
@@ -23,7 +23,7 @@ untrusted PRs; CLI over an attacker's repo).
 
 ## 1. Executive risk summary
 
-qproof-tools is, from a supply-chain standpoint, **exemplary**: genuinely zero
+quantakrypto-tools is, from a supply-chain standpoint, **exemplary**: genuinely zero
 runtime dependencies, no `postinstall`/`prepare`/`preinstall` scripts in any
 package, Node built-ins only, and a tiny dev-tooling surface (`typescript`,
 `tsx`, `@types/node`). That posture removes the single largest class of
@@ -399,7 +399,7 @@ deadline) so an adversarial SUT cannot also burn unbounded CI time.
 The **zero-runtime-dependency posture is genuine and well-honored**, and it is
 the project's strongest security property:
 
-- Every package declares only internal `@qproof/*` workspace links as runtime
+- Every package declares only internal `@quantakrypto/*` workspace links as runtime
   deps; the root has *no* runtime deps. Confirmed across all `package.json`
   files.
 - **No `postinstall` / `preinstall` / `prepare` / `install` scripts** exist in

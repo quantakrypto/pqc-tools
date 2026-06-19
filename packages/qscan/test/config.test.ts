@@ -1,6 +1,6 @@
 /**
- * Precedence tests for `qproof.config.json` resolution in qScan (P2-9):
- *   flags  >  qproof.config.json  >  built-in defaults
+ * Precedence tests for `quantakrypto.config.json` resolution in qScan (P2-9):
+ *   flags  >  quantakrypto.config.json  >  built-in defaults
  *
  * Covers per-key scalar precedence (flag wins, config fills, default falls
  * through), list-valued append semantics, detector-family mapping, the
@@ -35,7 +35,7 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 }
 
 async function writeConfig(dir: string, obj: unknown): Promise<void> {
-  await writeFile(join(dir, "qproof.config.json"), JSON.stringify(obj), "utf8");
+  await writeFile(join(dir, "quantakrypto.config.json"), JSON.stringify(obj), "utf8");
 }
 
 /* ----------------------------- applyConfig (pure) -------------------------- */

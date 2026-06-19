@@ -1,7 +1,7 @@
 {
-  "name": "@qproof/action",
+  "name": "@quantakrypto/action",
   "version": "0.1.0",
-  "description": "qproof Action — fail CI when new quantum-vulnerable cryptography lands. GitHub Action wrapping qScan.",
+  "description": "quantakrypto Action — fail CI when new quantum-vulnerable cryptography lands. GitHub Action wrapping qScan.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
   "homepage": "https://github.com/dandelionlabs-io/qproof-tools/tree/main/packages/action#readme",
@@ -25,8 +25,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@qproof/core": "0.1.0",
-    "@qproof/qscan": "0.1.0"
+    "@quantakrypto/core": "0.1.0",
+    "@quantakrypto/qscan": "0.1.0"
   },
   "scripts": {
     "build": "tsc -b",

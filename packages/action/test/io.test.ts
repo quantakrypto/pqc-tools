@@ -98,7 +98,7 @@ test("formatCommand: backticks/']' in text are inert in a workflow command", () 
 });
 
 test("setOutput appends a heredoc entry to $GITHUB_OUTPUT", () => {
-  const dir = mkdtempSync(join(tmpdir(), "qproof-out-"));
+  const dir = mkdtempSync(join(tmpdir(), "quantakrypto-out-"));
   const file = join(dir, "out.txt");
   const env = { GITHUB_OUTPUT: file };
   setOutput("findings-count", "3", env);

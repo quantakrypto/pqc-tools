@@ -1,8 +1,8 @@
 /**
- * @qproof/core — public API (LOCKED CONTRACT).
+ * @quantakrypto/core — public API (LOCKED CONTRACT).
  *
  * The exported NAMES and SIGNATURES below are the stable contract that
- * @qproof/qscan, @qproof/mcp and the GitHub Action depend on — do not change
+ * @quantakrypto/qscan, @quantakrypto/mcp and the GitHub Action depend on — do not change
  * them without updating all consumers. The implementations live in focused
  * modules under src/ and are re-exported here; the public surface is identical
  * to the original stub file.
@@ -39,9 +39,9 @@ export type { Baseline } from "./baseline.js";
 // Incremental scanning: changed-files helper (git-aware, tolerant).
 export { changedFiles } from "./changed.js";
 
-// Optional `qproof.config.json` loader (P2-9; see docs/CONFIG.md).
+// Optional `quantakrypto.config.json` loader (P2-9; see docs/CONFIG.md).
 export { loadConfig, ConfigError, CONFIG_FILENAME } from "./config.js";
-export type { QproofFileConfig, LoadConfigResult } from "./config.js";
+export type { QuantakryptoFileConfig, LoadConfigResult } from "./config.js";
 
 // Filesystem walker (relative POSIX paths, default ignores, size/binary filters).
 export { walkFiles, isBinaryPath, isGeneratedPath, looksMinified } from "./walk.js";

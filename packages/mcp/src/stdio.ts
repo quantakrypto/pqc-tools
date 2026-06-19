@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * qproof-mcp — stdio transport.
+ * quantakrypto-mcp — stdio transport.
  *
  * MCP's stdio transport is newline-delimited JSON: exactly one JSON-RPC 2.0
  * message per line on stdin, one per line on stdout. (This is NOT HTTP-style
@@ -9,7 +9,7 @@
  * and writes any response back as a single line on stdout. Diagnostics go to
  * stderr so they never corrupt the protocol stream.
  *
- * Run as the `qproof-mcp` bin, or `node dist/stdio.js`.
+ * Run as the `quantakrypto-mcp` bin, or `node dist/stdio.js`.
  */
 
 import { createInterface } from "node:readline";
@@ -17,7 +17,7 @@ import process from "node:process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { createQproofServer } from "./index.js";
+import { createQuantakryptoServer } from "./index.js";
 import { ErrorCode, makeFailure } from "./protocol.js";
 import type { McpServer } from "./server.js";
 
@@ -61,7 +61,7 @@ export function runStdioServer(
       .catch((err: unknown) => {
         // Defensive: handle() already catches, but never let a rejection escape.
         const messageText = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`qproof-mcp internal error: ${messageText}\n`);
+        process.stderr.write(`quantakrypto-mcp internal error: ${messageText}\n`);
       });
   });
 
@@ -72,14 +72,14 @@ export function runStdioServer(
 
 /** Entry point when executed directly (the bin / `node dist/stdio.js`). */
 function main(): void {
-  const server = createQproofServer();
-  process.stderr.write(`qproof MCP server (stdio) ready\n`);
+  const server = createQuantakryptoServer();
+  process.stderr.write(`quantakrypto MCP server (stdio) ready\n`);
   runStdioServer(server);
 }
 
 /**
  * True when this module is the program's entry point. Resolves symlinks so the
- * check also holds when launched via the `qproof-mcp` bin shim in node_modules/.bin.
+ * check also holds when launched via the `quantakrypto-mcp` bin shim in node_modules/.bin.
  */
 function isMainModule(): boolean {
   const argv1 = process.argv[1];

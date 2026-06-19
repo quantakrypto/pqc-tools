@@ -1,7 +1,7 @@
-# qproof-tools — Compliance & Standards Mapping
+# quantakrypto-tools — Compliance & Standards Mapping
 
-A standards-and-compliance reference for the `qproof-tools` monorepo (v0.1.0):
-`@qproof/core`, `@qproof/qscan`, `@qproof/mcp`, `@qproof/action`, `@qproof/sieve`.
+A standards-and-compliance reference for the `quantakrypto-tools` monorepo (v0.1.0):
+`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/action`, `@quantakrypto/sieve`.
 
 This document maps the toolset against post-quantum cryptography standards,
 interchange/output formats, information-security and evaluation standards,
@@ -24,7 +24,7 @@ verbs. Read them precisely:
 
 **Hard limits — what this toolset does NOT do (stated up front):**
 
-- It does **not** implement ML-KEM/ML-DSA/SLH-DSA. `@qproof/sieve` *tests other
+- It does **not** implement ML-KEM/ML-DSA/SLH-DSA. `@quantakrypto/sieve` *tests other
   people's* implementations and ships **no** Known-Answer-Test (KAT) vectors.
 - It does **not** validate, certify, or accredit a FIPS 140-3 / ISO 19790
   cryptographic module. Module validation is a CMVP/lab process; Sieve is a
@@ -46,9 +46,9 @@ These define the algorithms and the migration the toolset is built around. qscan
 / core **target** them as remediation destinations; Sieve **conformance-tests**
 the two that have finalized FIPS standards (ML-KEM, ML-DSA).
 
-| Standard | What it is (one line) | How qproof-tools relates / supports / what'd be needed to claim alignment |
+| Standard | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
-| **NIST FIPS 203 (ML-KEM)** | Finalized standard for Module-Lattice KEM (key encapsulation), derived from CRYSTALS-Kyber. | **Touches** as a remediation target: core's `remediationFor()` points key-exchange/KEM findings at ML-KEM-768 / hybrid `X25519MLKEM768`. **Helps align** via `@qproof/sieve`, which conformance-tests an ML-KEM SUT (correctness, determinism, implicit-rejection, sizes, robustness, ACVP-KAT when vectors supplied). Sieve hard-codes only the **public** FIPS 203 parameter sizes (e.g. ML-KEM-768 pk = 1184 B). To **claim ML-KEM conformance** for an implementation you must run Sieve with official NIST ACVP vectors (`--vectors`); without them the `kat` category is SKIPPED. |
+| **NIST FIPS 203 (ML-KEM)** | Finalized standard for Module-Lattice KEM (key encapsulation), derived from CRYSTALS-Kyber. | **Touches** as a remediation target: core's `remediationFor()` points key-exchange/KEM findings at ML-KEM-768 / hybrid `X25519MLKEM768`. **Helps align** via `@quantakrypto/sieve`, which conformance-tests an ML-KEM SUT (correctness, determinism, implicit-rejection, sizes, robustness, ACVP-KAT when vectors supplied). Sieve hard-codes only the **public** FIPS 203 parameter sizes (e.g. ML-KEM-768 pk = 1184 B). To **claim ML-KEM conformance** for an implementation you must run Sieve with official NIST ACVP vectors (`--vectors`); without them the `kat` category is SKIPPED. |
 | **NIST FIPS 204 (ML-DSA)** | Finalized standard for Module-Lattice digital signatures, derived from CRYSTALS-Dilithium. | **Touches** as remediation target for signature findings. **Helps align** via Sieve's `dsa` category (sign→verify, tamper-rejection, size/format) and `sigVer` ACVP-KAT. Note Sieve deliberately uses **sigVer** vectors (verification verdicts), not sigGen, because ML-DSA signing is randomized/hedged. Exact-value conformance again **requires official ACVP vectors**. |
 | **NIST FIPS 205 (SLH-DSA)** | Finalized stateless hash-based signature standard (SPHINCS+). | **Touches** only: listed by core as a recommended PQC signature replacement in remediation text. **No Sieve category** exists for SLH-DSA today. To support SLH-DSA conformance, Sieve **would require** a new category + ACVP sigVer/keyGen loader for FIPS 205 (sizes, sign/verify self-consistency). |
 | **NIST SP 800-208 (stateful hash-based sigs)** | Guidance for stateful hash signatures (LMS/HSS, XMSS/XMSSMT) and their state-management hazards. | **Does not touch.** No detector flags LMS/XMSS, no Sieve category tests them. **Would require** (a) core detectors for LMS/HSS/XMSS library usage and (b) a Sieve stateful-signature battery (state-reuse/exhaustion checks are the core risk) to relate at all. Out of current scope. |
@@ -70,7 +70,7 @@ SP 800-208 stateful sigs, and CNSA-2.0 parameter-level policy are **gaps**.
 
 ## 2. Output / interchange standards the tools emit (or could)
 
-| Standard | What it is (one line) | How qproof-tools relates / supports / what'd be needed to claim alignment |
+| Standard | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
 | **SARIF 2.1.0 (OASIS)** | Static Analysis Results Interchange Format — the OASIS standard JSON schema for static-analysis findings, consumed by GitHub code scanning and others. | **Emits today.** core's `toSarif()` produces SARIF 2.1.0 (`$schema`, `version`, `runs[0].tool.driver{name,informationUri,version,rules[]}`, `results[]` with `ruleId`/`level`/`message.text`/`physicalLocation`). qscan (`--format sarif`) and the Action both emit it; the Action uploads via `github/codeql-action/upload-sarif`. **Caveats to harden the claim:** (a) `docs/AUDIT.md` notes three different `informationUri`/repo URLs across core/qscan — reconcile to one; (b) CRLF files can be off-by-one in `startColumn` (precise SARIF column consumers affected). Validate output against the official OASIS SARIF JSON schema in CI to *claim* conformance. |
 | **CWE (Common Weakness Enumeration)** | MITRE's catalog of software/hardware weakness types; SARIF results commonly carry CWE taxonomy references. | **Does not touch yet.** Findings are **not** tagged with CWE ids. Natural mappings exist (e.g. CWE-327 *Use of a Broken or Risky Cryptographic Algorithm*, CWE-326 *Inadequate Encryption Strength*, CWE-1240 *Use of a Risky Cryptographic Primitive*). **Recommended:** add a `cwe` field per rule and emit SARIF `taxonomies`/`relationships` referencing CWE. This is the single highest-leverage interchange improvement — it makes findings consumable by CWE-aware dashboards and audit frameworks. |
@@ -88,11 +88,11 @@ Sieve, not produced.
 
 ## 3. Information-security management & evaluation
 
-| Standard | What it is (one line) | How qproof-tools relates / supports / what'd be needed to claim alignment |
+| Standard | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
 | **ISO/IEC 27001 + 27002, esp. control 8.24 "Use of cryptography"** | ISMS requirements (27001) and the control catalog (27002); A.8.24 requires a defined, enforced policy on cryptographic use, algorithms, and key management. | **Helps you produce evidence** for A.8.24. qscan's crypto inventory, readiness score, SARIF report, and CI gate are concrete artifacts an auditor accepts as evidence that the org *identifies* and *governs* cryptographic usage and is *managing the PQC transition*. **Important boundary:** the *tool is not the control.* The organization still owns the cryptography policy, key management, and risk treatment. To say "qscan supports our A.8.24 evidence" defensibly you need: a written crypto policy, qscan wired into CI with retained reports (audit trail), and a triage/remediation process. The tool **does not** by itself satisfy A.8.24. |
 | **ISO/IEC 15408 (Common Criteria) + ISO/IEC 18045 (CEM)** | The IT-security evaluation framework (Protection Profiles, Security Targets, EALs) and its evaluation methodology. | **Relates only by analogy.** Sieve-style conformance testing resembles the *functional/assurance testing* an evaluator performs, and Sieve output could be **supporting evidence** within a developer's test documentation. It is **not** a CC evaluation, confers **no EAL**, and is not run by a licensed evaluation lab. To contribute to a real CC evaluation **would require** a Security Target, a recognized lab (ITSEF), and evaluator-driven testing; Sieve would be at most one developer-supplied test artifact. |
-| **FIPS 140-3 / ISO/IEC 19790 (module validation)** | Security requirements for cryptographic modules; validated via CMVP using CAVP algorithm testing. | **Relate — do NOT claim.** Sieve is a *pre-screen / conformance battery*, useful to catch obvious ML-KEM/ML-DSA defects **before** a CAVP/CMVP submission, but it is **not** a CAVP test tool and a passing Sieve run is **not** a FIPS 140-3 result. No `qproof-tools` component is a "FIPS-validated module," and running qscan does not make a system FIPS-compliant. Any FIPS 140-3 claim **requires** CMVP validation of the actual module by an accredited lab — wholly outside this toolset. |
+| **FIPS 140-3 / ISO/IEC 19790 (module validation)** | Security requirements for cryptographic modules; validated via CMVP using CAVP algorithm testing. | **Relate — do NOT claim.** Sieve is a *pre-screen / conformance battery*, useful to catch obvious ML-KEM/ML-DSA defects **before** a CAVP/CMVP submission, but it is **not** a CAVP test tool and a passing Sieve run is **not** a FIPS 140-3 result. No `quantakrypto-tools` component is a "FIPS-validated module," and running qscan does not make a system FIPS-compliant. Any FIPS 140-3 claim **requires** CMVP validation of the actual module by an accredited lab — wholly outside this toolset. |
 | **ISO/IEC 29147 (vuln disclosure) + ISO/IEC 30111 (vuln handling)** | How to *receive* (29147) and *process* (30111) security vulnerability reports — for the **project itself**, not the code it scans. | **Does not satisfy today.** The repo has a single `LICENSE` and no `SECURITY.md`, no disclosure policy, no advertised contact, and no `.github/` process files. **Would require** publishing a `SECURITY.md` with a reporting channel (security contact / private advisories), a triage SLA, and a coordinated-disclosure process to align. Given the MCP server's documented `scan_path` arbitrary-file-read risk in a hosted context (`docs/AUDIT.md` §2.3), a disclosure policy is especially warranted. |
 
 **Net for Section 3:** qscan **helps generate A.8.24 evidence** inside an ISMS the
@@ -104,11 +104,11 @@ vulnerability-disclosure posture (a concrete, low-effort gap).
 
 ## 4. Regulation / mandates driving PQC migration
 
-These create the *demand* for the toolset. qproof-tools **helps with the
+These create the *demand* for the toolset. quantakrypto-tools **helps with the
 technical discovery/migration steps** these mandates require; it does not by
 itself make any entity "compliant."
 
-| Mandate | What it is (one line) | How qproof-tools relates / supports / what'd be needed to claim alignment |
+| Mandate | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
 | **US OMB M-23-02 & NSM-10** | US federal direction (memo + National Security Memorandum) requiring agencies to inventory quantum-vulnerable crypto and plan PQC migration. | **Helps with the inventory mandate directly.** qscan/core produce exactly the *cryptographic inventory* M-23-02 requires for in-scope systems, plus a readiness score to prioritize. **Boundary:** federal inventories follow specific agency templates/reporting; qscan output **would require** mapping into the agency's required inventory format (and a CBOM export, Section 6) to be a turnkey submission. It informs, it does not file. |
 | **EU DORA** | Digital Operational Resilience Act — ICT risk management for EU financial entities, incl. cryptographic and supply-chain resilience. | **Helps align** the cryptographic-risk-identification portion: qscan evidence supports DORA's ICT-risk-management and resilience-testing expectations for crypto. The broader DORA obligations (incident reporting, third-party oversight, resilience testing program) are organizational and out of scope. |
@@ -128,11 +128,11 @@ into mandate-specific report/inventory formats.
 
 ## 5. Software supply-chain / OSS assurance — for the project itself
 
-This section assesses `qproof-tools` *as a published open-source project*. Current
+This section assesses `quantakrypto-tools` *as a published open-source project*. Current
 state below is drawn from the repo (`package.json` × 6 = Apache-2.0 @ v0.1.0,
 a single root `LICENSE`, **no `.github/` workflows**, no `SECURITY.md`).
 
-| Framework | What it is (one line) | Current state in qproof-tools / what'd be needed to claim alignment |
+| Framework | What it is (one line) | Current state in quantakrypto-tools / what'd be needed to claim alignment |
 |---|---|---|
 | **SLSA** | Supply-chain Levels for Software Artifacts — graduated provenance/build-integrity levels for released artifacts. | **Not yet aligned.** No build provenance is generated. To reach **SLSA L1+** the project **would require** a scripted, version-controlled build with generated provenance; **L2/L3** need a hosted, hardened CI builder (e.g. GitHub Actions reusable workflow + signed provenance). Today: no CI present. |
 | **OpenSSF Scorecard** | Automated checks scoring an OSS repo on security practices (branch protection, CI tests, pinned deps, code review, etc.). | **Not run.** **Would require** adding the Scorecard GitHub Action and acting on results. The project's **zero-runtime-dependency** posture helps several checks (`Pinned-Dependencies`, `Vulnerabilities` — minimal attack surface) for free; missing items are branch protection, CI, fuzzing, signed releases, and a security policy. |
@@ -185,7 +185,7 @@ Blank cells indicate no meaningful relationship.
 | FIPS 140-3 / ISO 19790 | — | — | — | — | R (pre-screen only) |
 | ISO 29147/30111 (project vuln disclosure) | — | — | — | — | — (gap, repo-wide) |
 
-> **MCP note:** `@qproof/mcp` does **not** emit SARIF; its tools (`scan_path`,
+> **MCP note:** `@quantakrypto/mcp` does **not** emit SARIF; its tools (`scan_path`,
 > `inventory_crypto`, `explain_finding`, `suggest_hybrid`, `list_rules`) return
 > MCP text/JSON content. It relates to standards as an **advisory surface** over
 > core's knowledge (remediation table + detector catalog), not as a report emitter.
@@ -226,4 +226,4 @@ properties):**
 
 ---
 
-*This document (`docs/COMPLIANCE.md`) was written as a READ-ONLY standards-and-compliance mapping; no source files in `qproof-tools` were modified.*
+*This document (`docs/COMPLIANCE.md`) was written as a READ-ONLY standards-and-compliance mapping; no source files in `quantakrypto-tools` were modified.*

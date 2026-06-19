@@ -8,7 +8,7 @@
  *
  * The scanner is injected (`fakeScan`) so the test exercises the real file
  * traversal + runQscan/baseline/report pipeline against the locked
- * `@qproof/core` contract even while core's own `scan` remains a stub.
+ * `@quantakrypto/core` contract even while core's own `scan` remains a stub.
  */
 
 import assert from "node:assert/strict";

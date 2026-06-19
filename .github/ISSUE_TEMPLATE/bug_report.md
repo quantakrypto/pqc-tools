@@ -1,12 +1,12 @@
 ---
 name: Bug report
-about: Something in qproof-tools isn't working as expected
+about: Something in quantakrypto-tools isn't working as expected
 title: "[bug] "
 labels: bug
 ---
 
 **Package**
-<!-- @qproof/core | qscan | mcp | action | sieve -->
+<!-- @quantakrypto/core | qscan | mcp | action | sieve -->
 
 **Version / commit**
 

@@ -1,11 +1,11 @@
-# qproof-tools — Testing, DevEx & OSS-Quality Audit
+# quantakrypto-tools — Testing, DevEx & OSS-Quality Audit
 
 Read-only audit of **testing, developer experience, and OSS/repo quality**. It
 does **not** re-cover the architecture/security/perf/hosting analysis in
 [`../AUDIT.md`](../AUDIT.md); where points overlap it cites that audit and adds
 only the testing/DevEx/governance angle.
 
-Scope: `qproof-tools` v0.1.0 (`core`, `qscan`, `mcp`, `action`, `sieve`). 183
+Scope: `quantakrypto-tools` v0.1.0 (`core`, `qscan`, `mcp`, `action`, `sieve`). 183
 `test()` cases across 22 files (matches "182 passing"; one is aggregate).
 Toolchain is TypeScript + `tsx` only; tests are `node:test`. No source or config
 was modified.
@@ -119,7 +119,7 @@ low initial bar (e.g. 70% lines) and ratchet up.
     (`http.ts:52-57`, `144-148`) — this is the only abuse guard and it is
     unverified;
   - session-id echo vs. mint (`http.ts:136-139`).
-  A `createHttpServer(createQproofServer())` listening on port 0 with `fetch`
+  A `createHttpServer(createQuantakryptoServer())` listening on port 0 with `fetch`
   against it would cover all of the above with no new dependency.
 - **`packages/action/src/main.ts` — the PR-comment & orchestration path.**
   `main.test.ts` covers the pure helpers thoroughly (`readInputs`, `fingerprint`,
@@ -152,7 +152,7 @@ low initial bar (e.g. 70% lines) and ratchet up.
 - **The E2E gap (most important).** `packages/qscan/test/e2e.test.ts` builds a
   realistic vulnerable fixture (RSA keygen, ECDH, `node-forge` dependency) but
   runs it through **`fakeScan`** (`e2e.test.ts:21,78` → `test/helpers.ts`), not
-  the real `@qproof/core` `scan()`. So **no test in the repo runs the real
+  the real `@quantakrypto/core` `scan()`. So **no test in the repo runs the real
   detectors over a real file tree and asserts the finding set.** This is the
   single biggest coverage hole: a regression in `source.ts`/`pem.ts`/`scan.ts`
   detection logic against real files would pass CI. `../AUDIT.md` §1 (line 42)
@@ -354,7 +354,7 @@ After §2.1, add a coverage job that runs `--experimental-test-coverage` (or
 `c8 --reporter=lcov`) and uploads to Codecov/Coveralls, or simply prints the
 table and fails under a threshold. Keep it advisory at first.
 
-### 4.3 CodeQL + qproof self-scan (dogfooding)
+### 4.3 CodeQL + quantakrypto self-scan (dogfooding)
 
 Two cheap, high-signal additions for a security tool:
 
@@ -368,7 +368,7 @@ real regression guard:
 
 ```yaml
 # .github/workflows/self-scan.yml
-name: qproof self-scan
+name: quantakrypto self-scan
 on: [pull_request]
 permissions: { contents: read, security-events: write }
 jobs:
@@ -379,10 +379,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci && npm run build
-      - run: node packages/qscan/dist/cli.js . --format sarif --output qproof.sarif.json --fail-on-findings false
+      - run: node packages/qscan/dist/cli.js . --format sarif --output quantakrypto.sarif.json --fail-on-findings false
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
-        with: { sarif_file: qproof.sarif.json }
+        with: { sarif_file: quantakrypto.sarif.json }
 ```
 
 This proves the SARIF output is GitHub-ingestible and that qscan runs clean on
@@ -399,7 +399,7 @@ nearly empty. Each item below is a missing *file*, not a code change.
 
 - **`SECURITY.md`** — *most important for a crypto/security tool.* Define a
   private disclosure channel (GitHub private vulnerability reporting and/or a
-  `security@qproof.com` mailbox), supported versions, and response-time
+  `security@quantakrypto.com` mailbox), supported versions, and response-time
   expectations. A scanner that finds crypto problems must itself have a vuln
   intake path.
 - **`CONTRIBUTING.md`** — dev setup (`npm ci`, `npm run build`, `npm test`), the
@@ -422,13 +422,13 @@ nearly empty. Each item below is a missing *file*, not a code change.
 ### 5.3 Release process & semver policy
 
 There is no documented release flow, no tags, no version-bump strategy. For a
-5-package workspace with internal `0.1.0` pins (e.g. `@qproof/qscan` →
-`"@qproof/core": "0.1.0"`), define:
+5-package workspace with internal `0.1.0` pins (e.g. `@quantakrypto/qscan` →
+`"@quantakrypto/core": "0.1.0"`), define:
 
 - **Versioning:** either lockstep (all packages move together — simplest given
   the tight `0.1.0` pins) or independent with a tool. Given the size, **lockstep
   + a single git tag `vX.Y.Z`** is the pragmatic choice; document it.
-- **Semver policy:** what counts as breaking — notably the **`@qproof/core`
+- **Semver policy:** what counts as breaking — notably the **`@quantakrypto/core`
   `ScanResult`/`Finding` contract** (the README calls it "the contract"), the
   **MCP tool I/O schemas**, the **sieve NDJSON protocol** (`PROTOCOL_VERSION`,
   currently 1), and the **action inputs/outputs** (`action.yml`). State that
@@ -474,14 +474,14 @@ Reviewed all five `package.json`:
   `exports["."]` with `types` then `default` ordering. ✅ `action` is `private`
   and has no `exports` (correct — it is not a library).
 - **`files`** — mostly correct, with two notes:
-  - `@qproof/core` ships **`"src"`** in `files` (`packages/core/package.json`),
+  - `@quantakrypto/core` ships **`"src"`** in `files` (`packages/core/package.json`),
     so the published tarball includes source. Intentional? It enlarges the
     package; if it is for source-maps/debugging, fine — otherwise drop it. The
     other libs ship only `dist` + docs.
-  - `@qproof/sieve` lists **`"vectors"`** in `files`, but `packages/sieve/vectors/`
+  - `@quantakrypto/sieve` lists **`"vectors"`** in `files`, but `packages/sieve/vectors/`
     contains only a `README.md` (no vectors ship, by design per `../AUDIT.md`
     §2.5). Harmless, but the entry exists for content that is deliberately absent.
-- **`bin`** — `qscan`, `qproof-mcp`, `sieve` declare `bin`; all point at `dist/`
+- **`bin`** — `qscan`, `quantakrypto-mcp`, `sieve` declare `bin`; all point at `dist/`
   files that exist post-build. ✅
 - **`repository`** is set at the **root** (`package.json`) but **not on the
   individual packages** — npm will warn and the per-package npm page won't link
@@ -506,7 +506,7 @@ Options (pick one, document it in the release process):
    `dist/` is stale vs. `src/` (the `@vercel/ncc` + "dist is up to date"
    pattern). This usually means bundling to a single `dist/main.js` so the
    action has no `node_modules` at runtime — which fits the zero-runtime-dep
-   ethos perfectly (the action's only deps are the internal `@qproof/*`
+   ethos perfectly (the action's only deps are the internal `@quantakrypto/*`
    packages, which must be bundled in).
 2. **Use a Docker or composite action** that builds on the runner (slower, more
    moving parts).
@@ -611,7 +611,7 @@ Concrete, additive, **no source edits**. Ordered by leverage.
 - [ ] **Per-package `repository`/`bugs`/`homepage`** fields (§6.3).
 - [ ] **README badges** (CI, license, Node) once CI exists (§5.4).
 - [ ] **Populate or remove `examples/`** to match the README (§7.2).
-- [ ] **qproof self-scan + CodeQL** workflows (dogfooding + SAST) (§4.3).
+- [ ] **quantakrypto self-scan + CodeQL** workflows (dogfooding + SAST) (§4.3).
 - [ ] **OpenSSF Scorecard** workflow + badge (§6.1).
 - [ ] *(optional)* property/fuzz tests for protocol/manifest/SARIF/args (§2.3).
 - [ ] *(optional)* commit hooks via lefthook/husky (§3.5).
@@ -636,7 +636,7 @@ Concrete, additive, **no source edits**. Ordered by leverage.
 6. **Add coverage measurement + a (low, ratcheting) gate.** (§2.1)
 7. **Define and document semver + release process; add per-package npm metadata
    and badges.** (§5.3, §6.3, §5.4)
-8. **Dogfood:** qproof self-scan + CodeQL + Scorecard. (§4.3, §6.1)
+8. **Dogfood:** quantakrypto self-scan + CodeQL + Scorecard. (§4.3, §6.1)
 
 ## 10. What's missing (inventory)
 

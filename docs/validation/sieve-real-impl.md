@@ -11,7 +11,7 @@ genuine conformance observation.
 
 `validation/sieve-real-sut/` is a **standalone** package — it lives **outside the
 npm workspaces**, so adding `@noble/post-quantum` here keeps every published
-`@qproof/*` package zero-dependency. `sut.mjs` adapts the library to Sieve's
+`@quantakrypto/*` package zero-dependency. `sut.mjs` adapts the library to Sieve's
 newline-delimited JSON protocol (`packages/sieve/PROTOCOL.md`).
 
 ```bash

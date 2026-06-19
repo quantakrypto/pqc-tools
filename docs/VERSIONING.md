@@ -1,8 +1,8 @@
 # Versioning & Deprecation Policy
 
-How the `@qproof/*` packages are versioned and how breaking changes are
+How the `@quantakrypto/*` packages are versioned and how breaking changes are
 introduced. This policy operationalises [ADR-0002](adr/0002-shared-core-contract.md)
-(`@qproof/core` is the shared contract) and [ADR-0003](adr/0003-monorepo-and-build.md)
+(`@quantakrypto/core` is the shared contract) and [ADR-0003](adr/0003-monorepo-and-build.md)
 (independent publish from one monorepo).
 
 ## 1. SemVer
@@ -27,13 +27,13 @@ a generated API reference, and a maintained [CHANGELOG](../CHANGELOG.md).
 ### Independent versions, coordinated bumps
 
 Each package versions independently (it has its own `package.json` and publishes
-on its own line). But because three tools consume `@qproof/core`
+on its own line). But because three tools consume `@quantakrypto/core`
 ([ADR-0002](adr/0002-shared-core-contract.md)):
 
-- A **MAJOR** bump of `@qproof/core` that changes the contract forces, at minimum,
+- A **MAJOR** bump of `@quantakrypto/core` that changes the contract forces, at minimum,
   a **MINOR** bump of every consumer that adopts the new core (a new compatible
   feature) or a **MAJOR** bump where the consumer's own surface changes as a result.
-- Consumers declare their `@qproof/core` dependency with a range that **does not
+- Consumers declare their `@quantakrypto/core` dependency with a range that **does not
   cross a core MAJOR** (e.g. `^1`). Crossing a core MAJOR is itself a breaking
   change for the consumer.
 
@@ -45,11 +45,11 @@ path, `dist` layout) are **not** part of the contract and may change in a PATCH.
 
 | Package | Public surface (SemVer-covered) |
 |---|---|
-| `@qproof/core` | The exports of `src/index.ts` + the types in `src/types.ts` (see §3). |
-| `@qproof/qscan` | The **CLI** (flags, exit codes, output-format *shape*) **and** the programmatic API: `runQscan`, `EXIT`, `parseArgs`, `defaultOptions`, severity + baseline helpers. |
-| `@qproof/mcp` | The **MCP tool contract**: tool names, their `inputSchema`, and result shape; the supported JSON-RPC methods. The bin name `qproof-mcp`. |
-| `@qproof/action` | The **action interface**: `action.yml` inputs, outputs, and documented exit behavior; the `uses:` ref. |
-| `@qproof/sieve` | The **SUT protocol** (`PROTOCOL.md`, `PROTOCOL_VERSION`), the CLI flags/exit codes, and `runSieve`/`formatHuman`. |
+| `@quantakrypto/core` | The exports of `src/index.ts` + the types in `src/types.ts` (see §3). |
+| `@quantakrypto/qscan` | The **CLI** (flags, exit codes, output-format *shape*) **and** the programmatic API: `runQscan`, `EXIT`, `parseArgs`, `defaultOptions`, severity + baseline helpers. |
+| `@quantakrypto/mcp` | The **MCP tool contract**: tool names, their `inputSchema`, and result shape; the supported JSON-RPC methods. The bin name `quantakrypto-mcp`. |
+| `@quantakrypto/action` | The **action interface**: `action.yml` inputs, outputs, and documented exit behavior; the `uses:` ref. |
+| `@quantakrypto/sieve` | The **SUT protocol** (`PROTOCOL.md`, `PROTOCOL_VERSION`), the CLI flags/exit codes, and `runSieve`/`formatHuman`. |
 
 Non-API-but-still-contract surfaces — the **qScan exit codes** (0/1/2), the
 **SARIF 2.1.0** output schema, the **Sieve wire protocol**, the **baseline file
@@ -59,7 +59,7 @@ wire change independently of the package version.
 
 ## 3. What counts as breaking on the core contract
 
-A change to `@qproof/core` is **MAJOR (breaking)** if it alters the meaning or
+A change to `@quantakrypto/core` is **MAJOR (breaking)** if it alters the meaning or
 shape that a consumer relies on. Concretely, breaking:
 
 - **Removing or renaming** any `src/index.ts` export (`scan`, `walkFiles`,
@@ -102,7 +102,7 @@ We deprecate before we remove. The window scales with the change's blast radius.
 
 | Surface | Minimum deprecation window before removal |
 |---|---|
-| `@qproof/core` public export / type field | **one MAJOR cycle**, ≥ 6 months, whichever is longer. |
+| `@quantakrypto/core` public export / type field | **one MAJOR cycle**, ≥ 6 months, whichever is longer. |
 | qScan / Sieve **CLI flag** | one MINOR with a deprecation warning, removed no earlier than the next MAJOR. |
 | MCP **tool** or tool input field | one MINOR announcing it; removal in the next MAJOR. Hosted clients get the longer of one MAJOR or 6 months. |
 | Action input/output | one MINOR with a warning in the job log; removal in the next MAJOR of the action. |
@@ -118,7 +118,7 @@ documented clearly in the CHANGELOG as a security-driven break.
 
 - Every release updates the [CHANGELOG](../CHANGELOG.md) ("Keep a Changelog"
   style) with an explicit **Breaking** section when MAJOR.
-- Breaking changes to `@qproof/core` reference (or add) an
+- Breaking changes to `@quantakrypto/core` reference (or add) an
   [ADR](adr/README.md) when they reflect a decision, not just a fix.
 - Releases are cut through the gated [release workflow](../../.github/workflows/release.yml)
   with npm provenance (see [SUPPLY-CHAIN.md](SUPPLY-CHAIN.md)).

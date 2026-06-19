@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { applyBaseline, fingerprintFinding } from "@qproof/core";
-import type { Baseline, Finding, ScanResult } from "@qproof/core";
+import { applyBaseline, fingerprintFinding } from "@quantakrypto/core";
+import type { Baseline, Finding, ScanResult } from "@quantakrypto/core";
 
 import { buildSummary, fingerprint, meetsThreshold, readInputs, shouldFail } from "../src/main.js";
 
@@ -54,7 +54,7 @@ test("readInputs applies defaults when env is empty", () => {
   assert.equal(i.severityThreshold, "high");
   assert.equal(i.failOnFindings, true);
   assert.equal(i.format, "sarif");
-  assert.equal(i.output, "qproof.sarif.json");
+  assert.equal(i.output, "quantakrypto.sarif.json");
   assert.equal(i.baseline, undefined);
   assert.equal(i.commentPr, false);
   assert.equal(i.githubToken, undefined);
@@ -103,7 +103,7 @@ test("shouldFail gates on blocking count and fail-on-findings", () => {
   assert.equal(shouldFail(5, false), false);
 });
 
-test("fingerprint is the shared @qproof/core fingerprint", () => {
+test("fingerprint is the shared @quantakrypto/core fingerprint", () => {
   // The Action re-exports core's fingerprint so it and the CLI share one
   // baseline format.
   assert.equal(fingerprint, fingerprintFinding);

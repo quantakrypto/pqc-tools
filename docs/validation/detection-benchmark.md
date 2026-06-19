@@ -1,4 +1,4 @@
-# Detection benchmark — accuracy of the `@qproof/core` crypto detectors
+# Detection benchmark — accuracy of the `@quantakrypto/core` crypto detectors
 
 This document records how we **measure** the accuracy of qScan's crypto
 detectors against a known ground truth, the **current measured numbers**
@@ -10,7 +10,7 @@ regression guard.
 
 The benchmark is executed by
 [`packages/core/test/benchmark.test.ts`](../../packages/core/test/benchmark.test.ts)
-as part of the normal `@qproof/core` test suite (`node:test`, zero runtime
+as part of the normal `@quantakrypto/core` test suite (`node:test`, zero runtime
 dependencies). The numbers below are reproduced on every run, so this page and
 the test cannot silently drift apart.
 
@@ -83,7 +83,7 @@ Files span `.ts`, `.js`, `.mjs`, `.pem`, `package.json`, and an
 
 ## Current measured results
 
-Measured by `packages/core/test/benchmark.test.ts` (Node 20, `@qproof/core`
+Measured by `packages/core/test/benchmark.test.ts` (Node 20, `@quantakrypto/core`
 v0.1.0). The test prints this exact scorecard on each run.
 
 **Overall: precision 0.969 · recall 1.000 · F1 0.984** (TP = 31, FP = 1, FN = 0).
@@ -192,7 +192,7 @@ documented lexical contract.
 
 ```bash
 # from the repo root
-npm test --workspace @qproof/core            # runs the full suite incl. the benchmark
+npm test --workspace @quantakrypto/core            # runs the full suite incl. the benchmark
 # or just the benchmark file:
 node --import tsx --test packages/core/test/benchmark.test.ts
 ```

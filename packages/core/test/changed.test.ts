@@ -24,7 +24,7 @@ async function gitAvailable(): Promise<boolean> {
 }
 
 test("changedFiles returns [] outside a git repo (tolerant)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-nogit-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-nogit-"));
   try {
     await writeFile(path.join(dir, "a.ts"), "x");
     assert.deepEqual(await changedFiles(dir), []);
@@ -38,7 +38,7 @@ test("changedFiles lists untracked + modified files in a git repo", async (t) =>
     t.skip("git not available");
     return;
   }
-  const dir = await mkdtemp(path.join(tmpdir(), "qproof-git-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-git-"));
   try {
     const run = (args: string[]) => execFileAsync("git", args, { cwd: dir, windowsHide: true });
     await run(["init"]);

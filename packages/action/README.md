@@ -1,4 +1,4 @@
-# qproof Action
+# quantakrypto Action
 
 **Fail CI when new quantum-vulnerable cryptography lands.**
 
@@ -24,21 +24,21 @@ permissions:
   pull-requests: write     # only if you enable comment-pr
 
 jobs:
-  qproof:
+  quantakrypto:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: qproof — Quantum Readiness Scan
-        id: qproof
+      - name: quantakrypto — Quantum Readiness Scan
+        id: quantakrypto
         uses: dandelionlabs-io/qproof-tools/packages/action@v1
         with:
           path: "."
           severity-threshold: "high"
           fail-on-findings: "true"
           format: "sarif"
-          output: "qproof.sarif.json"
-          # baseline: ".qproof/baseline.sarif.json"   # optional
+          output: "quantakrypto.sarif.json"
+          # baseline: ".quantakrypto/baseline.sarif.json"   # optional
           comment-pr: "true"
           github-token: ${{ github.token }}
 
@@ -47,7 +47,7 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.qproof.outputs.sarif-file }}
+          sarif_file: ${{ steps.quantakrypto.outputs.sarif-file }}
 ```
 
 A ready-to-copy workflow lives at
@@ -61,7 +61,7 @@ A ready-to-copy workflow lives at
 | `severity-threshold` | `high` | Minimum severity that fails the build: `critical`, `high`, `medium`, `low`, `info`. Findings below this never fail. |
 | `fail-on-findings` | `true` | When `true`, exit non-zero if any finding at/above the threshold remains. Set `false` to report only. |
 | `format` | `sarif` | Report format written to `output`: `sarif` or `json`. |
-| `output` | `qproof.sarif.json` | Path of the report file to write (relative to the workspace). |
+| `output` | `quantakrypto.sarif.json` | Path of the report file to write (relative to the workspace). |
 | `baseline` | _(none)_ | Path to a qScan baseline file (`{ version, fingerprints }`, as written by `qscan --write-baseline`). Findings whose fingerprint it lists are suppressed, so only **new** crypto fails. |
 | `comment-pr` | `false` | When `true` (and a token + PR context exist), post a summary comment on the PR. Never fails the build. |
 | `github-token` | _(none)_ | Token used to comment on the PR. Usually `${{ github.token }}`. |
@@ -93,7 +93,7 @@ anchored to the finding's file and line so they appear in the PR diff.
 ## How baselines work
 
 The Action and the [`qscan`](../qscan) CLI share **one** baseline format and
-**one** fingerprint, defined in [`@qproof/core`](../core). A baseline is a small
+**one** fingerprint, defined in [`@quantakrypto/core`](../core). A baseline is a small
 versioned file — `{ "version": 1, "fingerprints": [ … ] }` — written by
 `qscan --write-baseline`. The fingerprint is a stable SHA-256 of the finding's
 rule id, file, and (whitespace-normalized) code snippet, *excluding line/column*
@@ -106,7 +106,7 @@ honoured byte-for-byte by the Action in CI, and vice versa.
 
 Typical adoption flow:
 
-1. Run `qscan --write-baseline .qproof/baseline.json` once on `main` and commit
+1. Run `qscan --write-baseline .quantakrypto/baseline.json` once on `main` and commit
    the baseline file.
 2. Point `baseline:` at that file. From then on, pull requests fail only when
    they introduce **new** findings at/above the threshold.
@@ -117,9 +117,9 @@ Typical adoption flow:
 
 - **One code path with the CLI** — the scan, report rendering, and baseline are
   not re-implemented here. The Action calls `runQscan` / `renderReport` from
-  [`@qproof/qscan`](../qscan) and the shared baseline
+  [`@quantakrypto/qscan`](../qscan) and the shared baseline
   (`fingerprintFinding` / `applyBaseline` / `loadBaseline`) from
-  [`@qproof/core`](../core), so the Action and the `qscan` CLI produce identical
+  [`@quantakrypto/core`](../core), so the Action and the `qscan` CLI produce identical
   findings, reports, and baseline semantics. This module is just the
   GitHub-runner glue (inputs, outputs, annotations, PR comment, exit policy).
 - **Output-injection hardened** — a finding's `file`/`message`/`ruleId` come from
@@ -133,7 +133,7 @@ Typical adoption flow:
     are `escapeProperty`-encoded (additionally `,` → `%2C`, `:` → `%3A`) in
     [`src/io.ts`](src/io.ts), so an attacker-named file cannot break out of the
     command.
-- **Zero runtime dependencies** — only `@qproof/core` + `@qproof/qscan` (and Node
+- **Zero runtime dependencies** — only `@quantakrypto/core` + `@quantakrypto/qscan` (and Node
   built-ins). The small slice of the GitHub Actions toolkit this action needs
   (input parsing, outputs, annotations, PR comments) is implemented directly in
   [`src/io.ts`](src/io.ts) and [`src/main.ts`](src/main.ts); no `@actions/core`

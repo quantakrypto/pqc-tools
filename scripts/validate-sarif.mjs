@@ -17,7 +17,7 @@
 //   node scripts/validate-sarif.mjs                         # scan ./packages,
 //                                                           # produce + validate
 //
-// Zero runtime deps: Node built-ins + @qproof/core (a workspace package, only
+// Zero runtime deps: Node built-ins + @quantakrypto/core (a workspace package, only
 // used in the "produce a SARIF" mode). Requires `npm run build` first for that
 // mode.
 
@@ -164,9 +164,9 @@ async function validateFile(file) {
   return validateSarif(doc);
 }
 
-/** Produce a SARIF doc by scanning ./packages with the BUILT @qproof/core. */
+/** Produce a SARIF doc by scanning ./packages with the BUILT @quantakrypto/core. */
 async function produceSarif() {
-  const { scan, toSarif } = await import("@qproof/core");
+  const { scan, toSarif } = await import("@quantakrypto/core");
   const result = await scan({ root: "packages" });
   return toSarif(result);
 }

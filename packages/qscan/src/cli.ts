@@ -13,7 +13,7 @@ import { writeFile } from "node:fs/promises";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { ConfigError } from "@qproof/core";
+import { ConfigError } from "@quantakrypto/core";
 
 import { ArgError, parseArgs } from "./args.js";
 import type { ParsedArgs, QscanOptions } from "./args.js";
@@ -45,7 +45,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT.OK;
   }
 
-  // Resolve `qproof.config.json` (flags > config > defaults) before scanning.
+  // Resolve `quantakrypto.config.json` (flags > config > defaults) before scanning.
   let options: QscanOptions;
   try {
     const resolved = await resolveConfig(parsed.options, parsed.explicit);

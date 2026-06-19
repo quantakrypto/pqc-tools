@@ -1,4 +1,4 @@
-# Release — build, test, and publish @qproof/* to npm with provenance.
+# Release — build, test, and publish @quantakrypto/* to npm with provenance.
 #
 # DEFERRED: publishing is intentionally not enabled yet. Per docs/ROADMAP.md §5
 # the project finalizes the technology before its first npm release. This file is
@@ -77,32 +77,32 @@ jobs:
       # leaf packages. --provenance produces a signed Sigstore attestation via
       # the id-token OIDC token, visible on each package's npm page.
       #
-      # NOTE on @qproof/action: its dist/ MUST be committed/bundled before it can
+      # NOTE on @quantakrypto/action: its dist/ MUST be committed/bundled before it can
       # be consumed as a `uses:` action (ROADMAP §5). Publishing it to npm does not
       # remove that requirement; keep its publish line commented until dist is
       # committed and a "dist is fresh" CI gate exists.
-      - name: Publish @qproof/core
+      - name: Publish @quantakrypto/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace @qproof/core --provenance --access public
+        run: npm publish --workspace @quantakrypto/core --provenance --access public
 
-      - name: Publish @qproof/qscan
+      - name: Publish @quantakrypto/qscan
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace @qproof/qscan --provenance --access public
+        run: npm publish --workspace @quantakrypto/qscan --provenance --access public
 
-      - name: Publish @qproof/mcp
+      - name: Publish @quantakrypto/mcp
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace @qproof/mcp --provenance --access public
+        run: npm publish --workspace @quantakrypto/mcp --provenance --access public
 
-      - name: Publish @qproof/sieve
+      - name: Publish @quantakrypto/sieve
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace @qproof/sieve --provenance --access public
+        run: npm publish --workspace @quantakrypto/sieve --provenance --access public
 
-      # - name: Publish @qproof/action
+      # - name: Publish @quantakrypto/action
       #   # BLOCKED until packages/action/dist is committed/bundled (ROADMAP §5).
       #   env:
       #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      #   run: npm publish --workspace @qproof/action --provenance --access public
+      #   run: npm publish --workspace @quantakrypto/action --provenance --access public

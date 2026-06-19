@@ -3,11 +3,11 @@
 //
 // Generates a synthetic source tree of N JS/TS files seeded with sample
 // (quantum-vulnerable) crypto, then times the serial `scan()` against the
-// worker-pool `scanParallel()` from the BUILT @qproof/core and prints a small
+// worker-pool `scanParallel()` from the BUILT @quantakrypto/core and prints a small
 // table: files, ms, files/s, speedup.
 //
 // Requires a build first: `npm run build` (it imports from dist via the
-// @qproof/core workspace package). Run via `npm run bench`.
+// @quantakrypto/core workspace package). Run via `npm run bench`.
 //
 // Flags (all optional):
 //   --files=<N>        number of synthetic files to generate (default 1000)
@@ -15,14 +15,14 @@
 //   --concurrency=<N>  worker count for scanParallel (default: os parallelism)
 //   --keep             do not delete the generated tree (for inspection)
 //
-// Zero runtime deps: only Node built-ins + @qproof/core (a workspace package).
+// Zero runtime deps: only Node built-ins + @quantakrypto/core (a workspace package).
 
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir, availableParallelism } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
-import { scan, scanParallel } from "@qproof/core";
+import { scan, scanParallel } from "@quantakrypto/core";
 
 function parseArgs(argv) {
   const opts = { files: 1000, runs: 3, concurrency: undefined, keep: false };
@@ -136,10 +136,10 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const concurrency = opts.concurrency ?? availableParallelism();
 
-  const root = await mkdtemp(join(tmpdir(), "qproof-bench-"));
+  const root = await mkdtemp(join(tmpdir(), "quantakrypto-bench-"));
   let exitCode = 0;
   try {
-    process.stdout.write(`qproof bench — generating ${opts.files} files in ${root} ...\n`);
+    process.stdout.write(`quantakrypto bench — generating ${opts.files} files in ${root} ...\n`);
     const totalBytes = await generateTree(root, opts.files);
     process.stdout.write(
       `generated ${(totalBytes / 1024 / 1024).toFixed(2)} MiB across the tree; ` +

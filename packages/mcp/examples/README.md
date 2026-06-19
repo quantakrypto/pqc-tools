@@ -2,7 +2,7 @@
 
 ## `transcript.jsonl`
 
-A sample MCP session against the qproof server, one JSON object per line. Each
+A sample MCP session against the quantakrypto server, one JSON object per line. Each
 line has a `direction` (`client→server` / `server→client`), an optional `note`,
 and the JSON-RPC `message` actually exchanged.
 
@@ -19,7 +19,7 @@ The `direction`/`note` wrappers are illustrative metadata; on the wire only the
 `message` payloads are sent (newline-delimited over stdio, or as the `POST /mcp`
 body over HTTP).
 
-The `explain_finding` / detector text shown reflects a populated `@qproof/core`;
+The `explain_finding` / detector text shown reflects a populated `@quantakrypto/core`;
 with the current stub the catalog may be empty, but the protocol shapes are
 identical.
 

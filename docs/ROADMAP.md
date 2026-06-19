@@ -1,4 +1,4 @@
-# qproof-tools — Roadmap & Gap Analysis
+# quantakrypto-tools — Roadmap & Gap Analysis
 
 This is the consolidated, prioritised plan, distilled from the multi-discipline
 audits in [`docs/audits/`](audits/) and [`COMPLIANCE.md`](COMPLIANCE.md).
@@ -31,7 +31,7 @@ Sources: [security](audits/security.md) · [cryptography](audits/cryptography.md
 > Sieve protocol/base64, and qScan-args parsers); ✅ pre-commit hooks (P2-5 —
 > `.githooks/pre-commit`); ✅ SARIF structural-validation CI step (P2-6 —
 > `scripts/validate-sarif.mjs` + a `sarif` CI job); ✅ an advisory `bench` CI
-> job (P2-4); and ✅ `qproof.config.json` *implementation* (P2-9 — `loadConfig`
+> job (P2-4); and ✅ `quantakrypto.config.json` *implementation* (P2-9 — `loadConfig`
 > in core + flags-over-config-over-defaults precedence in qScan). Publishing
 > remains deferred (§5).
 >
@@ -61,7 +61,7 @@ below are improvements and gaps — not regressions.
 | Security | Threat-model doc | ✅ **done** (+ deterministic fuzz targets, P1-10) |
 | Compliance | CBOM (CycloneDX) output, CWE tagging | ✅ **done** (+ SARIF structural CI check, P2-6) |
 | Supply chain | OpenSSF Scorecard, SLSA provenance, REUSE | ✅ **done** (workflows + `REUSE.toml`) |
-| Release | Commit/bundle the Action `dist/`; npm publish under `@qproof` | ⏸ deferred (see §5) |
+| Release | Commit/bundle the Action `dist/`; npm publish under `@quantakrypto` | ⏸ deferred (see §5) |
 
 ---
 
@@ -84,9 +84,9 @@ These are confirmed bugs or real risks, each cited to source.
 
 | # | Item | Package | Audit | Effort |
 |---|---|---|---|---|
-| P1-1 | **Unify the baseline.** qScan (`baseline.ts:40`, sha256 of `ruleId\|file\|snippet\|line`) and the Action (`main.ts:84`, raw `ruleId file message`) use incompatible fingerprints, semantics, and on-disk formats. Extract one shared baseline module in `@qproof/core`. | core/qscan/action | architecture | M |
+| P1-1 | **Unify the baseline.** qScan (`baseline.ts:40`, sha256 of `ruleId\|file\|snippet\|line`) and the Action (`main.ts:84`, raw `ruleId file message`) use incompatible fingerprints, semantics, and on-disk formats. Extract one shared baseline module in `@quantakrypto/core`. | core/qscan/action | architecture | M |
 | P1-2 | **Repair `ScanOptions`.** `include` is declared but **unwireable** (`WalkOptions` has no field; `types.ts:107`); `runQscan` drops `maxFileSize`/`noDefaultIgnores` (`qscan/src/index.ts:110`) and there are no CLI flags. Wire them through. | core/qscan | architecture | S |
-| P1-3 | **Action should reuse qScan.** It declares `@qproof/qscan` + a project reference but never imports it, re-implementing `fingerprint`/`applyBaseline`/`renderReport`. Use `runQscan` (or drop the unused reference). | action | architecture | S |
+| P1-3 | **Action should reuse qScan.** It declares `@quantakrypto/qscan` + a project reference but never imports it, re-implementing `fingerprint`/`applyBaseline`/`renderReport`. Use `runQscan` (or drop the unused reference). | action | architecture | S |
 | P1-4 | **Make detectors a real plugin point.** `scan()` closes over a hardcoded array and classifies scope by ruleId prefix (`scan.ts:23,26`). Add a `DetectorRegistry`, declare `language`/`scope` on `Detector`, and write an "add a language" guide (Python/Go/Java). | core | architecture | M |
 | P1-5 | **New detectors** (false-negative closure): DH MODP groups (`getDiffieHellman`), SSH keys, TLS certificate signature algorithms, JOSE `ECDH-ES*` / COSE / WebAuthn, one-shot `crypto.sign`/`verify`, `secp256k1`. | core | cryptography | M |
 | P1-6 | **Remediation nuance.** Surface the CNSA 2.0 Category-5 tier (ML-KEM-1024 / ML-DSA-87) and SP 800-208 (LMS/XMSS) where relevant, not only Category-3 defaults. | core | cryptography | S |
@@ -109,7 +109,7 @@ These are confirmed bugs or real risks, each cited to source.
 | P2-6 | **CBOM** (CycloneDX cryptographic bill of materials) output from the inventory; CWE tagging on findings; SARIF schema validation in CI. ✅ `scripts/validate-sarif.mjs` (structural) + a `sarif` CI job. | core/compliance | compliance |
 | P2-7 | OpenSSF Scorecard workflow, SLSA build provenance, SPDX/REUSE license headers, npm publish provenance. | repo | compliance/testing |
 | P2-8 | ISO/IEC 27001 **A.8.24 evidence-chain** export (a signed, timestamped readiness report); ACVP vector-provenance pipeline; SLH-DSA (FIPS 205) conformance category. | core/sieve | compliance/crypto |
-| P2-9 | Semver + deprecation policy, a generated public API reference, and ADRs; an optional `qproof.config.json`. ✅ `qproof.config.json` implemented: `loadConfig` in core, flags > config > defaults in qScan (see [CONFIG.md](CONFIG.md)). | all | architecture |
+| P2-9 | Semver + deprecation policy, a generated public API reference, and ADRs; an optional `quantakrypto.config.json`. ✅ `quantakrypto.config.json` implemented: `loadConfig` in core, flags > config > defaults in qScan (see [CONFIG.md](CONFIG.md)). | all | architecture |
 
 ---
 
@@ -121,7 +121,7 @@ Out of scope for now (per the plan to finalize tech first), captured so it's rea
   `dist/main.js` directly, so `uses: …/packages/action@v1` will not work until the
   built JS is committed or bundled (recommend a single-file `esbuild`-free bundle
   step + a CI "dist is fresh" gate). See [testing/devex audit §6.4](audits/testing-devex.md).
-- Publish under the real `@qproof` npm scope with **npm provenance**; tag `v0.1.0`.
+- Publish under the real `@quantakrypto` npm scope with **npm provenance**; tag `v0.1.0`.
 - Add `repository` / `bugs` / `homepage` to each package `package.json`; unify the
   three divergent `informationUri` / repo URLs noted across the codebase.
 

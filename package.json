@@ -1,11 +1,11 @@
 {
-  "name": "qproof-tools",
+  "name": "quantakrypto-tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Open-source post-quantum readiness tooling by qproof — scanner, MCP server, conformance battery, and CI action.",
+  "description": "Open-source post-quantum readiness tooling by quantakrypto — scanner, MCP server, conformance battery, and CI action.",
   "license": "Apache-2.0",
-  "homepage": "https://qproof.com/tools",
+  "homepage": "https://quantakrypto.com/tools",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
   "repository": {
     "type": "git",

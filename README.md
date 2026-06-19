@@ -1,4 +1,4 @@
-# qproof-tools
+# quantakrypto-tools
 
 [![CI](https://github.com/dandelionlabs-io/qproof-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/dandelionlabs-io/qproof-tools/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -8,7 +8,7 @@
 ![Tests: 307 passing](https://img.shields.io/badge/tests-307%20passing-brightgreen)
 [![NIST FIPS 203/204/205](https://img.shields.io/badge/NIST-FIPS%20203%2F204%2F205-7c3aed)](docs/COMPLIANCE.md)
 
-Open-source post-quantum readiness tooling by [qproof](https://qproof.com/tools).
+Open-source post-quantum readiness tooling by [quantakrypto](https://quantakrypto.com/tools).
 Free to use, instrumented for nothing — find quantum-vulnerable cryptography,
 wire post-quantum readiness into your editor and your CI, and conformance-test
 post-quantum implementations.
@@ -20,25 +20,25 @@ post-quantum implementations.
 
 | Package | What it is | Install |
 |---|---|---|
-| [`@qproof/core`](packages/core) | Shared library — crypto detectors, vulnerable-dependency DB, inventory + SARIF reporting | `npm i @qproof/core` |
-| [`@qproof/qscan`](packages/qscan) | **qScan** — CLI that finds quantum-vulnerable crypto in any codebase | `npx @qproof/qscan ./` |
-| [`@qproof/mcp`](packages/mcp) | **qproof MCP** — post-quantum readiness for AI coding agents (local + hostable) | `claude mcp add qproof npx @qproof/mcp` |
-| [`@qproof/action`](packages/action) | **qproof Action** — fail CI when new quantum-vulnerable crypto lands | `uses: dandelionlabs-io/qproof-tools/packages/action@v1` |
-| [`@qproof/sieve`](packages/sieve) | **Sieve** — conformance battery for ML-KEM / ML-DSA implementations | `npx @qproof/sieve` |
+| [`@quantakrypto/core`](packages/core) | Shared library — crypto detectors, vulnerable-dependency DB, inventory + SARIF reporting | `npm i @quantakrypto/core` |
+| [`@quantakrypto/qscan`](packages/qscan) | **qScan** — CLI that finds quantum-vulnerable crypto in any codebase | `npx @quantakrypto/qscan ./` |
+| [`@quantakrypto/mcp`](packages/mcp) | **quantakrypto MCP** — post-quantum readiness for AI coding agents (local + hostable) | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
+| [`@quantakrypto/action`](packages/action) | **quantakrypto Action** — fail CI when new quantum-vulnerable crypto lands | `uses: dandelionlabs-io/qproof-tools/packages/action@v1` |
+| [`@quantakrypto/sieve`](packages/sieve) | **Sieve** — conformance battery for ML-KEM / ML-DSA implementations | `npx @quantakrypto/sieve` |
 
-`qScan`, `qproof MCP`, and `qproof Action` all share `@qproof/core`. `Sieve` is
+`qScan`, `quantakrypto MCP`, and `quantakrypto Action` all share `@quantakrypto/core`. `Sieve` is
 standalone (it tests *other* implementations, it doesn't implement crypto).
 
 ## Workspace layout
 
 ```
-qproof-tools/
+quantakrypto-tools/
 ├── packages/
-│   ├── core/     @qproof/core    — shared engine (the contract lives in src/types.ts + src/index.ts)
-│   ├── qscan/    @qproof/qscan   — CLI
-│   ├── mcp/      @qproof/mcp     — MCP server (stdio now, HTTP scaffold for hosting)
-│   ├── action/   @qproof/action — GitHub Action
-│   └── sieve/    @qproof/sieve  — conformance battery + JSON protocol
+│   ├── core/     @quantakrypto/core    — shared engine (the contract lives in src/types.ts + src/index.ts)
+│   ├── qscan/    @quantakrypto/qscan   — CLI
+│   ├── mcp/      @quantakrypto/mcp     — MCP server (stdio now, HTTP scaffold for hosting)
+│   ├── action/   @quantakrypto/action — GitHub Action
+│   └── sieve/    @quantakrypto/sieve  — conformance battery + JSON protocol
 ├── docs/         architecture, hosted-MCP design, improvement roadmap
 └── examples/     end-to-end examples
 ```
@@ -76,4 +76,4 @@ Full documentation lives in **[`docs/`](docs/README.md)**:
 ## License
 
 [Apache-2.0](LICENSE). The methodology is open; the audits, certificates, and
-deliverables are where the [qproof](https://qproof.com) practice lives.
+deliverables are where the [quantakrypto](https://quantakrypto.com) practice lives.

@@ -1,6 +1,6 @@
-# qproof-tools — Performance & Scalability Audit
+# quantakrypto-tools — Performance & Scalability Audit
 
-Read-only deep dive into the runtime cost of `qproof-tools` (zero-dep TS
+Read-only deep dive into the runtime cost of `quantakrypto-tools` (zero-dep TS
 monorepo: `core`, `qscan`, `mcp`, `action`, `sieve`). No source was modified.
 This goes one level deeper than `docs/AUDIT.md §3-4` (which is correct but
 high-level): every claim below is tied to a `file:line`, given a complexity
@@ -365,7 +365,7 @@ changed-files scan today requires N processes or a temp tree.
 
 - **Cache key:** `sha256(content)` (or `mtime+size+ruleset-version` for speed)
   → cached `Finding[]` for that file. Persist as a small JSON sidecar
-  (`.qproof-cache.json`) or under the CI cache.
+  (`.quantakrypto-cache.json`) or under the CI cache.
 - **Invalidation:** include the **tool/ruleset version** (`version.ts` `VERSION`)
   in the key so a detector change busts the cache. Node's `crypto` is already a
   built-in (zero-dep posture preserved).
@@ -383,7 +383,7 @@ changed-files scan today requires N processes or a temp tree.
 ### 6.1 qScan startup
 
 `qscan/src/cli.ts` is a thin shell; cost is dominated by **ESM module-graph
-resolution**. `@qproof/core`'s barrel (`core/src/index.ts:10-34`) eagerly pulls
+resolution**. `@quantakrypto/core`'s barrel (`core/src/index.ts:10-34`) eagerly pulls
 **all** detectors, both reporters (SARIF + JSON, `report.ts`), the remediation
 table, and the full vulnerable-deps DB (`dependencies.ts`, 20 entries) at import
 time — whether or not the run needs them.

@@ -1,7 +1,7 @@
-# qproof-tools — Threat Model
+# quantakrypto-tools — Threat Model
 
-Scope: the five-package zero-dependency TypeScript monorepo (`@qproof/core`,
-`@qproof/qscan`, `@qproof/mcp`, `@qproof/action`, `@qproof/sieve`). This document
+Scope: the five-package zero-dependency TypeScript monorepo (`@quantakrypto/core`,
+`@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/action`, `@quantakrypto/sieve`). This document
 states the trust boundaries the code already implies, the data flows that cross
 them, and a STRIDE analysis per tool. It is the written companion to the
 [security audit](audits/security.md), which carries the concrete `file:line`
@@ -76,7 +76,7 @@ Sieve. Severity language matches the audit (critical/high/medium/low).
 
 Each row links the threat to a concrete audit finding where one exists.
 
-### 4.1 `@qproof/core` (the engine — runs inside every tool)
+### 4.1 `@quantakrypto/core` (the engine — runs inside every tool)
 
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|
@@ -86,7 +86,7 @@ Each row links the threat to a concrete audit finding where one exists.
 | **I**nfo | Snippets are verbatim attacker lines (A2); no redaction option before they enter reporters. | Q-19 (sink) | medium |
 | **E**oP | Symlink no-follow is correct, but `scan()` doesn't re-validate resolved files stay under `root` (TOCTOU dir→symlink swap is theoretically possible). | Q-11 | low |
 
-### 4.2 `@qproof/qscan` (CLI — trusted local operator over an untrusted repo)
+### 4.2 `@quantakrypto/qscan` (CLI — trusted local operator over an untrusted repo)
 
 | STRIDE | Threat | Notes | Severity |
 |---|---|---|---|
@@ -97,7 +97,7 @@ Each row links the threat to a concrete audit finding where one exists.
 The CLI is the **lowest-risk** deployment: trusted operator, local filesystem,
 no network, no write token.
 
-### 4.3 `@qproof/mcp` (HOSTED HTTP transport is the dominant risk surface)
+### 4.3 `@quantakrypto/mcp` (HOSTED HTTP transport is the dominant risk surface)
 
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|
@@ -111,7 +111,7 @@ no network, no write token.
 Over **stdio** these collapse to the trusted-local-user case (the tool's intended
 mode) and are acceptable. See §5 for the hosted boundary in detail.
 
-### 4.4 `@qproof/action` (CI, frequently on untrusted fork PRs, holds A3)
+### 4.4 `@quantakrypto/action` (CI, frequently on untrusted fork PRs, holds A3)
 
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|
@@ -121,7 +121,7 @@ mode) and are acceptable. See §5 for the hosted boundary in detail.
 | **I**nfo (SSRF) | PR-comment POST URL built from `GITHUB_API_URL` env; a poisoned self-hosted-runner env could redirect the token-bearing request to an attacker host (A3 leak). | Q-12 | low |
 | **R**epudiation | Token is never logged; failures log only status/`err.message`. Good — residual is an unrelated env-dumping step. | Q-15 | low (handled) |
 
-### 4.5 `@qproof/sieve` (drives an UNTRUSTED SUT with full harness privileges)
+### 4.5 `@quantakrypto/sieve` (drives an UNTRUSTED SUT with full harness privileges)
 
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|

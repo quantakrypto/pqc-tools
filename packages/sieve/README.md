@@ -1,4 +1,4 @@
-# @qproof/sieve
+# @quantakrypto/sieve
 
 **Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA
 (FIPS 205) implementations.** Sieve drives *any* implementation through a small
@@ -25,7 +25,7 @@ secrets and not KAT values.
 
 ## Install
 
-Within the `qproof-tools` monorepo it builds with the workspace:
+Within the `quantakrypto-tools` monorepo it builds with the workspace:
 
 ```bash
 npm install
@@ -126,7 +126,7 @@ exit: 0 = PASS, 1 = FAIL, 2 = usage error
 ## Programmatic API
 
 ```ts
-import { runSieve, formatHuman } from "@qproof/sieve";
+import { runSieve, formatHuman } from "@quantakrypto/sieve";
 
 const report = await runSieve({
   command: ["node", "./my-impl.js"],

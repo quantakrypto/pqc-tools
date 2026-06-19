@@ -14,7 +14,7 @@ import type { Sizes } from "../sizes.js";
 export type Status = "pass" | "fail" | "skip";
 
 /**
- * A bug-class tag linking a category/check to qproof's antiform taxonomy.
+ * A bug-class tag linking a category/check to quantakrypto's antiform taxonomy.
  *
  *   - AF-02: implicit-rejection / Fujisaki-Okamoto reject-path mistakes.
  *   - AF-05: size/format confusion (wrong-length artifacts accepted/emitted).
