@@ -1,23 +1,24 @@
 # Release — build, test, and publish @quantakrypto/* to npm with provenance.
 #
-# DEFERRED: publishing is intentionally not enabled yet. Per docs/ROADMAP.md §5
-# the project finalizes the technology before its first npm release. This file is
-# a working scaffold, GATED so it cannot publish by accident:
-#   * it only runs on a manual workflow_dispatch (never on push/tag), and
-#   * publish steps require the NPM_TOKEN secret to be present.
-# Until NPM_TOKEN is configured and `confirm: publish` is entered, the workflow
-# builds + tests and stops at a dry run.
+# Publishing is wired up but still gated so it can't fire by accident:
+#   * it runs on a published GitHub Release, or a manual workflow_dispatch with
+#     confirm = "publish" (any other dispatch value is a dry run), and
+#   * every publish step requires the NPM_TOKEN secret — without it the job
+#     fails loudly instead of half-publishing.
 #
-# When you are ready to publish (see docs/SUPPLY-CHAIN.md for the provenance plan):
+# To enable publishing:
 #   1. Add the NPM_TOKEN repository secret (an npm automation token).
-#   2. Ensure the Action's dist/ is committed/bundled FIRST — a node20 action runs
-#      packages/action/dist/main.js directly, so `uses: …/packages/action@v1` will
-#      not work until the built JS is committed (ROADMAP §5). The publish job for
-#      the action is therefore guarded separately below.
-#   3. Run this workflow with confirm = "publish".
+#   2. Bump the package versions, then either publish a GitHub Release or run
+#      this workflow manually with confirm = "publish".
+# The @quantakrypto/action package is distributed as a GitHub Action via
+# `uses: quantakrypto/tools/packages/action@v1` (its dist/ is committed and
+# kept fresh by the `action dist is fresh` CI gate), so it is NOT published to
+# npm — see the commented step at the end of the publish job.
 name: Release
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       confirm:
@@ -50,8 +51,8 @@ jobs:
     name: Publish to npm (provenance)
     needs: build-test
     runs-on: ubuntu-latest
-    # Only attempt publishing on an explicit confirmation.
-    if: ${{ github.event.inputs.confirm == 'publish' }}
+    # Publish on a published GitHub Release, or a manual run confirmed with "publish".
+    if: ${{ github.event_name == 'release' || github.event.inputs.confirm == 'publish' }}
     steps:
       - uses: actions/checkout@v4
         with:
