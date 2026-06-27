@@ -2265,7 +2265,7 @@ function renderReport(result, format, color = false) {
 import { appendFileSync } from "node:fs";
 import { EOL } from "node:os";
 function inputEnvName(name) {
-  return `INPUT_${name.replace(/ /g, "_").replace(/-/g, "_").toUpperCase()}`;
+  return `INPUT_${name.replace(/ /g, "_").toUpperCase()}`;
 }
 function getInput(name, env = process.env) {
   const raw = env[inputEnvName(name)];

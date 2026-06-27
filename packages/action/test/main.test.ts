@@ -63,13 +63,13 @@ test("readInputs applies defaults when env is empty", () => {
 test("readInputs reads provided values", () => {
   const i = readInputs({
     INPUT_PATH: "packages/app",
-    INPUT_SEVERITY_THRESHOLD: "medium",
-    INPUT_FAIL_ON_FINDINGS: "false",
+    "INPUT_SEVERITY-THRESHOLD": "medium",
+    "INPUT_FAIL-ON-FINDINGS": "false",
     INPUT_FORMAT: "json",
     INPUT_OUTPUT: "report.json",
     INPUT_BASELINE: "base.sarif.json",
-    INPUT_COMMENT_PR: "true",
-    INPUT_GITHUB_TOKEN: "ghs_x",
+    "INPUT_COMMENT-PR": "true",
+    "INPUT_GITHUB-TOKEN": "ghs_x",
   });
   assert.equal(i.path, "packages/app");
   assert.equal(i.severityThreshold, "medium");
@@ -82,7 +82,7 @@ test("readInputs reads provided values", () => {
 });
 
 test("readInputs rejects an invalid severity-threshold", () => {
-  assert.throws(() => readInputs({ INPUT_SEVERITY_THRESHOLD: "nope" }), TypeError);
+  assert.throws(() => readInputs({ "INPUT_SEVERITY-THRESHOLD": "nope" }), TypeError);
 });
 
 test("readInputs rejects an invalid format", () => {

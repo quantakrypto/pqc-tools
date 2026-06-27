@@ -6,8 +6,8 @@ import { test } from "node:test";
 
 import { formatCommand, getBooleanInput, getInput, setOutput } from "../src/io.js";
 
-test("getInput reads INPUT_<UPPER_WITH_UNDERSCORES> and trims", () => {
-  const env = { INPUT_SEVERITY_THRESHOLD: "  high  " };
+test("getInput reads INPUT_<UPPERCASED> and trims", () => {
+  const env = { "INPUT_SEVERITY-THRESHOLD": "  high  " };
   assert.equal(getInput("severity-threshold", env), "high");
 });
 
@@ -15,9 +15,10 @@ test("getInput returns empty string when unset", () => {
   assert.equal(getInput("missing", {}), "");
 });
 
-test("getInput maps spaces and dashes to underscores", () => {
-  const env = { INPUT_FAIL_ON_FINDINGS: "true" };
-  assert.equal(getInput("fail-on-findings", env), "true");
+test("getInput preserves dashes and maps spaces to underscores (matching the runner)", () => {
+  // The runner uppercases and replaces spaces with "_", but keeps hyphens.
+  assert.equal(getInput("fail-on-findings", { "INPUT_FAIL-ON-FINDINGS": "true" }), "true");
+  assert.equal(getInput("two words", { INPUT_TWO_WORDS: "x" }), "x");
 });
 
 test("getBooleanInput parses YAML 1.2 core booleans", () => {

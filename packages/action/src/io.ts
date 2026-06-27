@@ -12,9 +12,16 @@
 import { appendFileSync } from "node:fs";
 import { EOL } from "node:os";
 
-/** Convert an input name to its runner env var, e.g. "severity-threshold" → "INPUT_SEVERITY_THRESHOLD". */
+/**
+ * Convert an input name to its runner env var, e.g. "severity-threshold" →
+ * "INPUT_SEVERITY-THRESHOLD". The runner only replaces spaces with underscores
+ * and uppercases — hyphens are preserved (matching @actions/core). Replacing
+ * hyphens here makes every hyphenated input (severity-threshold, fail-on-findings,
+ * comment-pr, github-token) read from a non-existent env var and silently fall
+ * back to its default.
+ */
 function inputEnvName(name: string): string {
-  return `INPUT_${name.replace(/ /g, "_").replace(/-/g, "_").toUpperCase()}`;
+  return `INPUT_${name.replace(/ /g, "_").toUpperCase()}`;
 }
 
 /**
