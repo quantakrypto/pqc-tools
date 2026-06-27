@@ -48,7 +48,7 @@ inputs:
   github-token:
     description: >-
       Token used to comment on the pull request (only needed when
-      comment-pr is "true"). Typically ${{ github.token }}.
+      comment-pr is "true"). Typically the workflow's built-in GITHUB_TOKEN.
     required: false
 
 outputs:
