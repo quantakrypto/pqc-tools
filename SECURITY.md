@@ -29,12 +29,16 @@ external implementation. The most security-relevant surfaces — documented in
 [`docs/audits/security.md`](docs/audits/security.md) — are:
 
 - **`@quantakrypto/mcp` HTTP transport (`packages/mcp/src/http.ts`).** The hosted
-  transport is a **scaffold**. Do **not** expose it publicly without adding
-  authentication, per-tool timeouts, and a sandbox: the `scan_path` /
-  `inventory_crypto` tools read the filesystem and would otherwise be an
-  unauthenticated arbitrary-read service. The local **stdio** transport
-  (`npx @quantakrypto/mcp`) runs on the developer's own machine and is the supported
-  path today.
+  transport now **enforces** several controls in code: constant-time Bearer
+  auth, per-request timeouts that **abort** the in-flight scan, a file/byte work
+  budget (`QUANTAKRYPTO_MCP_MAX_FILES` / `QUANTAKRYPTO_MCP_MAX_BYTES`, each
+  clamped to a hard cap), filesystem **path confinement** to a root allow-list
+  (`QUANTAKRYPTO_MCP_ROOT`, rejecting `..` traversal and out-of-root absolute
+  paths), and `Origin`/`Host` validation to block DNS-rebinding. The `scan_path`
+  / `inventory_crypto` tools still read the filesystem, so keep the transport
+  loopback-bound and behind a token rather than exposing it publicly. The local
+  **stdio** transport (`npx @quantakrypto/mcp`) runs on the developer's own machine
+  and remains the recommended path.
 - **`@quantakrypto/sieve` runner (`packages/sieve/src/runner.ts`).** It spawns a
   user-provided implementation. Only point it at code you trust; treat the SUT
   as you would any executable.

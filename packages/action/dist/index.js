@@ -1472,6 +1472,7 @@ function matchesAny2(rel, patterns) {
 
 // ../core/dist/parallel.js
 import { stat as stat3 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path3 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1548,9 +1549,16 @@ async function enumerateFiles(options, baseDir) {
   }
   return sized;
 }
-function workerEntryPath() {
+function workerEntry() {
   const here = fileURLToPath(import.meta.url);
-  return path3.join(path3.dirname(here), "scan-worker.js");
+  const dir = path3.dirname(here);
+  const js = path3.join(dir, "scan-worker.js");
+  if (existsSync(js))
+    return { entry: js };
+  const ts = path3.join(dir, "scan-worker.ts");
+  if (existsSync(ts))
+    return { entry: ts, execArgv: ["--import", "tsx"] };
+  return { entry: js };
 }
 async function scanParallel(options) {
   const startedAt = /* @__PURE__ */ new Date();
@@ -1571,7 +1579,7 @@ async function scanParallel(options) {
   }
   const chunks = chunkByBytes(files, options.chunkBytes ?? DEFAULT_CHUNK_BYTES);
   const concurrency = Math.min(resolveConcurrency(options), chunks.length);
-  const entry = workerEntryPath();
+  const { entry, execArgv } = workerEntry();
   const toggles = {
     source: options.source !== false,
     config: options.config !== false,
@@ -1580,7 +1588,7 @@ async function scanParallel(options) {
   };
   let results;
   try {
-    results = await runPool(WorkerCtor, entry, baseDir, toggles, chunks, concurrency, options.onFile);
+    results = await runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, options.onFile);
   } catch {
     return scan({ ...options, files: files.map((f) => f.rel) });
   }
@@ -1597,7 +1605,7 @@ async function scanParallel(options) {
     toolVersion: VERSION
   };
 }
-function runPool(WorkerCtor, entry, baseDir, toggles, chunks, concurrency, onFile) {
+function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, onFile) {
   return new Promise((resolve2, reject) => {
     const results = new Array(chunks.length);
     let next = 0;
@@ -1619,7 +1627,10 @@ function runPool(WorkerCtor, entry, baseDir, toggles, chunks, concurrency, onFil
       w.postMessage({ index: idx, files: chunks[idx].files });
     };
     const spawn = () => {
-      const w = new WorkerCtor(entry, { workerData: { baseDir, toggles } });
+      const w = new WorkerCtor(entry, {
+        workerData: { baseDir, toggles },
+        ...execArgv ? { execArgv } : {}
+      });
       w.on("message", (msg) => {
         if (msg.error) {
           if (!failed) {

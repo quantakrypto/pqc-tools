@@ -9,6 +9,7 @@
  * (small file counts / small total bytes) and whenever workers are unavailable.
  */
 import { stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -133,11 +134,21 @@ async function enumerateFiles(options: ParallelScanOptions, baseDir: string): Pr
   return sized;
 }
 
-/** Resolve the built worker entry (dist/scan-worker.js) next to this module. */
-function workerEntryPath(): string {
-  // After build this file is dist/parallel.js and the worker is dist/scan-worker.js.
+/**
+ * Resolve the worker entry next to this module. In a normal build it's
+ * `dist/scan-worker.js`. When running from source under a TypeScript loader
+ * (tsx) the built JS doesn't exist, so fall back to `scan-worker.ts` and tell
+ * the worker to load tsx as well — so the parallel scanner works in dev/source
+ * mode (and is exercisable by tests), not only after a build.
+ */
+function workerEntry(): { entry: string; execArgv?: string[] } {
   const here = fileURLToPath(import.meta.url);
-  return path.join(path.dirname(here), "scan-worker.js");
+  const dir = path.dirname(here);
+  const js = path.join(dir, "scan-worker.js");
+  if (existsSync(js)) return { entry: js };
+  const ts = path.join(dir, "scan-worker.ts");
+  if (existsSync(ts)) return { entry: ts, execArgv: ["--import", "tsx"] };
+  return { entry: js }; // neither present: let Worker surface a clear ENOENT
 }
 
 /**
@@ -173,7 +184,7 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
 
   const chunks = chunkByBytes(files, options.chunkBytes ?? DEFAULT_CHUNK_BYTES);
   const concurrency = Math.min(resolveConcurrency(options), chunks.length);
-  const entry = workerEntryPath();
+  const { entry, execArgv } = workerEntry();
 
   const toggles = {
     source: options.source !== false,
@@ -187,6 +198,7 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
     results = await runPool(
       WorkerCtor,
       entry,
+      execArgv,
       baseDir,
       toggles,
       chunks,
@@ -217,6 +229,7 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
 function runPool(
   WorkerCtor: typeof import("node:worker_threads").Worker,
   entry: string,
+  execArgv: string[] | undefined,
   baseDir: string,
   toggles: { source: boolean; config: boolean; deps: boolean; scanMinified: boolean },
   chunks: ScanChunk[],
@@ -245,7 +258,10 @@ function runPool(
     };
 
     const spawn = (): NodeWorker => {
-      const w = new WorkerCtor(entry, { workerData: { baseDir, toggles } });
+      const w = new WorkerCtor(entry, {
+        workerData: { baseDir, toggles },
+        ...(execArgv ? { execArgv } : {}),
+      });
       w.on(
         "message",
         (msg: { index: number; result?: ChunkResult; files?: string[]; error?: string }) => {
