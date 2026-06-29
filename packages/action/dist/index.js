@@ -6,7 +6,7 @@ import { dirname as dirname3, isAbsolute, resolve, sep as sep2 } from "node:path
 import { pathToFileURL } from "node:url";
 
 // ../core/dist/version.js
-var VERSION = "0.1.0";
+var VERSION = "0.2.0";
 
 // ../core/dist/scan.js
 import { readFile, stat as stat2 } from "node:fs/promises";

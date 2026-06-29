@@ -3,4 +3,4 @@
  * the scan orchestrator can import it without creating a cycle through index.ts.
  * Keep in sync with packages/core/package.json.
  */
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
