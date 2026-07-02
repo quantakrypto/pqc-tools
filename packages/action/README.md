@@ -74,6 +74,43 @@ A ready-to-copy workflow lives at
 | `sarif-file` | Path of the report file that was written. |
 | `readiness-score` | Post-quantum readiness score, 0 (worst) – 100 (no classical asymmetric crypto found). |
 
+## Readiness badge
+
+Show your post-quantum posture in your README. The badge is served from
+`quantakrypto.com`, so embedding it is also a backlink.
+
+**Static call-to-action** (zero setup):
+
+```markdown
+[![Post-quantum readiness](https://quantakrypto.com/badge)](https://quantakrypto.com/tools)
+```
+
+**With your score** — the number comes from the action's `readiness-score`
+output; the badge colours itself (green ≥ 80, amber 50–79, red < 50):
+
+```markdown
+[![Post-quantum readiness](https://quantakrypto.com/badge?score=82)](https://quantakrypto.com/tools)
+```
+
+**Keep the score current from CI** — add this step after the scan (requires
+`permissions: contents: write`). It rewrites the `?score=` in your README on
+`main` whenever the score changes:
+
+```yaml
+      - name: Update readiness badge
+        if: github.ref == 'refs/heads/main'
+        env:
+          SCORE: ${{ steps.quantakrypto.outputs.readiness-score }}
+        run: |
+          sed -i -E "s#(quantakrypto\.com/badge\?score=)[0-9]+#\1${SCORE}#g" README.md
+          if ! git diff --quiet README.md; then
+            git config user.name  "quantakrypto-bot"
+            git config user.email "bot@users.noreply.github.com"
+            git commit -am "chore: post-quantum readiness ${SCORE}/100"
+            git push
+          fi
+```
+
 ## Exit behavior
 
 The action **exits 1** (failing the job) when **both** are true:
