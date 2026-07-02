@@ -9,9 +9,10 @@
  * this file only deals with argv, stdout/stderr, files, and exit codes.
  */
 
+import { realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { ConfigError } from "@quantakrypto/core";
 
@@ -137,9 +138,25 @@ function writeStdout(chunk: string): Promise<void> {
   return new Promise((resolve) => process.stdout.once("drain", resolve));
 }
 
+/**
+ * True when this module is the program's entry point. Resolves symlinks so the
+ * check also holds when launched via the `qscan` bin shim in node_modules/.bin
+ * (npm symlinks it) or through /tmp -> /private/tmp on macOS — otherwise
+ * `npx @quantakrypto/qscan` (and `npm i -g`) would be a silent no-op.
+ */
+function isMainModule(): boolean {
+  const argv1 = process.argv[1];
+  if (argv1 === undefined) return false;
+  const thisPath = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(argv1) === realpathSync(thisPath);
+  } catch {
+    return argv1 === thisPath;
+  }
+}
+
 // Only auto-run when invoked as a script (not when imported by a test).
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedDirectly = isMainModule();
 
 if (invokedDirectly) {
   main(process.argv.slice(2))

@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Shared post-quantum readiness library: crypto detectors, vulnerable-dependency database, inventory + SARIF reporting. Zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",

@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/sieve",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Sieve — conformance battery for ML-KEM / ML-DSA implementations. Drives any implementation over a simple stdin/stdout JSON protocol. Zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
