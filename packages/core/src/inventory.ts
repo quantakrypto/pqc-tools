@@ -33,10 +33,16 @@ function penaltyFor(weight: number, occurrence: number): number {
   return weight / Math.sqrt(occurrence);
 }
 
+/** Decay constant for the readiness score (larger = more forgiving). */
+const SCORE_SCALE = 100;
+
 /**
- * Compute a 0–100 readiness score. Starts at 100 and subtracts severity-weighted
- * penalties with diminishing returns per severity bucket. 100 means no classical
- * asymmetric crypto was found; the score is clamped to [0, 100].
+ * Compute a 0–100 readiness score. 100 means no classical asymmetric crypto was
+ * found. Findings accrue a severity-weighted penalty (with per-bucket diminishing
+ * returns), then the score is `100 * e^(-penalty/scale)`. Exponential decay keeps
+ * the score responsive across the whole range — fixing findings always raises it,
+ * and a large legacy repo lands low without pinning flat at 0 (which made progress
+ * invisible under the old linear model). Tuned so one low ~97, one critical ~74.
  */
 export function readinessScore(findings: Finding[]): number {
   if (findings.length === 0) return 100;
@@ -49,13 +55,13 @@ export function readinessScore(findings: Finding[]): number {
     info: 0,
   };
 
-  let score = 100;
+  let penalty = 0;
   for (const f of findings) {
     seen[f.severity] += 1;
-    score -= penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
+    penalty += penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
   }
 
-  return Math.max(0, Math.min(100, Math.round(score)));
+  return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));
 }
 
 /** Build the full inventory (counts + HNDL + score) from a set of findings. */

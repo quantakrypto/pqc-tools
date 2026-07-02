@@ -229,27 +229,50 @@ export async function readPullRequestContext(
   }
 }
 
+/** Hidden marker so we can find and update our own comment instead of stacking. */
+const COMMENT_MARKER = "<!-- quantakrypto-action -->";
+
+/** Find the id of our previous comment on the PR (by marker), if any. */
+async function findExistingComment(
+  ctx: PullRequestContext,
+  headers: Record<string, string>,
+): Promise<number | null> {
+  const url = `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments?per_page=100`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) return null;
+  const comments = (await res.json()) as Array<{ id: number; body?: string }>;
+  const mine = comments.find((c) => typeof c.body === "string" && c.body.includes(COMMENT_MARKER));
+  return mine ? mine.id : null;
+}
+
 /**
- * POST a summary comment to a pull request via the REST API. Best-effort: any
- * failure is logged as a warning and swallowed so commenting never breaks CI.
+ * Upsert a summary comment on a pull request: update our previous comment (found
+ * by a hidden marker) if it exists, otherwise create one — so re-running on every
+ * push edits a single comment instead of stacking a new one each time. Best-effort:
+ * any failure is logged as a warning and swallowed so commenting never breaks CI.
  */
 export async function commentOnPullRequest(
   ctx: PullRequestContext,
   token: string,
   body: string,
 ): Promise<boolean> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "Content-Type": "application/json",
+    "User-Agent": "quantakrypto-action",
+  };
+  const markedBody = `${COMMENT_MARKER}\n${body}`;
   try {
-    const url = `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments`;
+    const existingId = await findExistingComment(ctx, headers);
+    const url = existingId
+      ? `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/comments/${existingId}`
+      : `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments`;
     const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-        "User-Agent": "quantakrypto-action",
-      },
-      body: JSON.stringify({ body }),
+      method: existingId ? "PATCH" : "POST",
+      headers,
+      body: JSON.stringify({ body: markedBody }),
     });
     if (!res.ok) {
       warning(`Could not comment on PR #${ctx.prNumber}: ${res.status} ${res.statusText}`);

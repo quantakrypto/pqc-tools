@@ -6,7 +6,7 @@ import { dirname as dirname3, isAbsolute, resolve, sep as sep2 } from "node:path
 import { pathToFileURL } from "node:url";
 
 // ../core/dist/version.js
-var VERSION = "0.2.1";
+var VERSION = "0.2.2";
 
 // ../core/dist/scan.js
 import { readFile, stat as stat2 } from "node:fs/promises";
@@ -1171,6 +1171,111 @@ var vulnerableDependencies = [
     reason: "Pure-JS RSA key pair generation.",
     algorithms: ["RSA"],
     severity: "high"
+  },
+  {
+    name: "ethers",
+    ecosystem: "npm",
+    reason: "Ethereum library built on secp256k1 ECDSA signing and key derivation.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "web3",
+    ecosystem: "npm",
+    reason: "Ethereum library using secp256k1 ECDSA for accounts and signing.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "bitcoinjs-lib",
+    ecosystem: "npm",
+    reason: "Bitcoin library built on secp256k1 ECDSA/Schnorr keys and signatures.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "ethereumjs-util",
+    ecosystem: "npm",
+    reason: "secp256k1 ECDSA utilities for Ethereum keys and signatures.",
+    algorithms: ["ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "openpgp",
+    ecosystem: "npm",
+    reason: "OpenPGP.js: RSA, ECDSA, ECDH, and EdDSA public-key crypto.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "node-jose",
+    ecosystem: "npm",
+    reason: "JOSE (JWS/JWE/JWK) with classical RSA and EC algorithms.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "jwa",
+    ecosystem: "npm",
+    reason: "JSON Web Algorithms: RSA (RS/PS) and EC (ES) signatures.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "jwk-to-pem",
+    ecosystem: "npm",
+    reason: "Converts RSA/EC JWKs to PEM \u2014 classical public keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "fast-jwt",
+    ecosystem: "npm",
+    reason: "JWT signing/verification with classical RS/PS/ES algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "ssh2",
+    ecosystem: "npm",
+    reason: "SSH client/server using classical RSA/ECDSA/Ed25519 host and user keys.",
+    algorithms: ["RSA", "ECDSA", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "@peculiar/x509",
+    ecosystem: "npm",
+    reason: "X.509 certificate library over classical RSA/EC keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "pkijs",
+    ecosystem: "npm",
+    reason: "PKI (X.509/CMS) built on classical RSA and EC public-key crypto.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium"
+  },
+  {
+    name: "http-signature",
+    ecosystem: "npm",
+    reason: "HTTP request signing with classical RSA/ECDSA keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "libsodium-wrappers",
+    ecosystem: "npm",
+    reason: "libsodium: Ed25519 signatures and X25519 key exchange (classical).",
+    algorithms: ["EdDSA", "X25519"],
+    severity: "medium"
+  },
+  {
+    name: "ecdsa-sig-formatter",
+    ecosystem: "npm",
+    reason: "Formats ECDSA signatures \u2014 a marker of classical EC signing.",
+    algorithms: ["ECDSA"],
+    severity: "low"
   }
 ];
 var BY_NAME = new Map(vulnerableDependencies.map((d) => [d.name, d]));
@@ -1280,6 +1385,7 @@ var SEVERITY_WEIGHT = {
 function penaltyFor(weight, occurrence) {
   return weight / Math.sqrt(occurrence);
 }
+var SCORE_SCALE = 100;
 function readinessScore(findings) {
   if (findings.length === 0)
     return 100;
@@ -1290,12 +1396,12 @@ function readinessScore(findings) {
     low: 0,
     info: 0
   };
-  let score = 100;
+  let penalty = 0;
   for (const f of findings) {
     seen[f.severity] += 1;
-    score -= penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
+    penalty += penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
   }
-  return Math.max(0, Math.min(100, Math.round(score)));
+  return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));
 }
 function buildInventory(findings) {
   const byAlgorithm = {};
@@ -2486,19 +2592,32 @@ async function readPullRequestContext(env = process.env) {
     return void 0;
   }
 }
+var COMMENT_MARKER = "<!-- quantakrypto-action -->";
+async function findExistingComment(ctx, headers) {
+  const url = `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments?per_page=100`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) return null;
+  const comments = await res.json();
+  const mine = comments.find((c) => typeof c.body === "string" && c.body.includes(COMMENT_MARKER));
+  return mine ? mine.id : null;
+}
 async function commentOnPullRequest(ctx, token, body) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "Content-Type": "application/json",
+    "User-Agent": "quantakrypto-action"
+  };
+  const markedBody = `${COMMENT_MARKER}
+${body}`;
   try {
-    const url = `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments`;
+    const existingId = await findExistingComment(ctx, headers);
+    const url = existingId ? `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/comments/${existingId}` : `${ctx.apiUrl}/repos/${ctx.owner}/${ctx.repo}/issues/${ctx.prNumber}/comments`;
     const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-        "User-Agent": "quantakrypto-action"
-      },
-      body: JSON.stringify({ body })
+      method: existingId ? "PATCH" : "POST",
+      headers,
+      body: JSON.stringify({ body: markedBody })
     });
     if (!res.ok) {
       warning(`Could not comment on PR #${ctx.prNumber}: ${res.status} ${res.statusText}`);
