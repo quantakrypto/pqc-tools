@@ -19,6 +19,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   applyBaseline,
+  defaultRegistry,
   fingerprintFinding,
   loadBaseline,
   meetsThreshold,
@@ -97,7 +98,10 @@ function renderReportWithOptions(
   format: "sarif" | "json",
   opts: ReportOptions,
 ): string {
-  const doc = format === "sarif" ? toSarif(result, opts) : toJson(result, opts);
+  const doc =
+    format === "sarif"
+      ? toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts })
+      : toJson(result, opts);
   return JSON.stringify(doc, null, 2);
 }
 

@@ -52,6 +52,7 @@ export function detectFile(
   content: string,
   dets: readonly Detector[],
   toggles: { source: boolean; config: boolean; deps: boolean },
+  disabledRules?: readonly string[],
 ): Finding[] {
   const out: Finding[] = [];
 
@@ -64,6 +65,13 @@ export function detectFile(
 
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));
+  }
+
+  // Per-rule suppression: drop findings whose ruleId was disabled. Applied here
+  // so both the serial scan and the worker path honour it identically.
+  if (disabledRules && disabledRules.length > 0) {
+    const disabled = new Set(disabledRules);
+    return out.filter((f) => !disabled.has(f.ruleId));
   }
 
   return out;
@@ -144,11 +152,17 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     filesScanned += 1;
     findings.push(
-      ...detectFile(reportedPath, content, dets, {
-        source: doSource,
-        config: doConfig,
-        deps: doDeps,
-      }),
+      ...detectFile(
+        reportedPath,
+        content,
+        dets,
+        {
+          source: doSource,
+          config: doConfig,
+          deps: doDeps,
+        },
+        options.disabledRules,
+      ),
     );
   }
 

@@ -23,6 +23,7 @@ interface WorkerToggles {
   config: boolean;
   deps: boolean;
   scanMinified: boolean;
+  disabledRules?: string[];
 }
 
 interface ChunkRequest {
@@ -57,11 +58,17 @@ if (parentPort) {
         filesScanned += 1;
         scannedNames.push(rel);
         findings.push(
-          ...detectFile(rel, content, dets, {
-            source: toggles.source,
-            config: toggles.config,
-            deps: toggles.deps,
-          }),
+          ...detectFile(
+            rel,
+            content,
+            dets,
+            {
+              source: toggles.source,
+              config: toggles.config,
+              deps: toggles.deps,
+            },
+            toggles.disabledRules,
+          ),
         );
       }
 

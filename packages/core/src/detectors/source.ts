@@ -1,8 +1,15 @@
 /**
  * Source-code detectors for classical, non-quantum-safe asymmetric cryptography
  * in JavaScript / TypeScript. Each detector is pure and stateless: it declares
- * which files it applies to and returns zero or more Findings for a file's
- * contents.
+ * which files it applies to, the catalog of rules it can emit (`rules`), and
+ * returns zero or more Findings for a file's contents.
+ *
+ * Rule metadata (title / severity / category / remediation / …) lives ONCE in
+ * the per-detector `RuleMeta` declarations below, not inline in `detect()`.
+ * `detect()` builds findings from those declarations via `findingFromRule`,
+ * overriding only the fields that genuinely vary per match (e.g. the concrete
+ * algorithm family of a `generateKeyPair('ec')` call). The declarations are the
+ * catalog surfaced by the registry, SARIF `rules[]`, and the MCP resolver.
  *
  * The detection strategy is deliberately lexical (regex over source text). This
  * is robust to bundling and partial files and keeps the package dependency-free.
@@ -19,12 +26,12 @@
  *   - EC keygen is ambiguous (an 'ec' key feeds BOTH ECDSA and ECDH); it is
  *     classified conservatively as key-exchange-capable (hndl:true).
  */
-import type { Detector, Finding } from "../types.js";
+import type { Detector, Finding, RuleMeta } from "../types.js";
 import {
   JS_TS_EXTENSIONS,
   eachMatch,
+  findingFromRule,
   hasExtension,
-  makeFinding,
   nearSortedCall,
 } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cwe.js";
@@ -84,22 +91,135 @@ const RE_TLS_WEAK_CIPHER =
 /* Node.js `crypto` module                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Rule catalog for the Node `crypto` detector. `node-crypto-keygen` and
+ * `node-crypto-dh-modp` refine some fields per match; the rest emit findings
+ * straight from these declarations.
+ */
+const RULE_NODE_KEYGEN: RuleMeta = {
+  id: "node-crypto-keygen",
+  title: "Classical key generation",
+  description: "crypto.generateKeyPair(Sync)('rsa'|'ec'|'dsa'|'dh'|…)",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical asymmetric key pair, which is not quantum-safe.",
+};
+const RULE_NODE_SIGN: RuleMeta = {
+  id: "node-crypto-sign",
+  title: "Classical signature (createSign/createVerify)",
+  description: "crypto.createSign / crypto.createVerify",
+  category: "signature",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Uses createSign/createVerify, typically RSA, ECDSA or DSA — all forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_NODE_SIGN_ONESHOT: RuleMeta = {
+  id: "node-crypto-sign-oneshot",
+  title: "Classical one-shot signature (crypto.sign/verify)",
+  description: "one-shot crypto.sign / crypto.verify (Node ≥ 12)",
+  category: "signature",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Uses the one-shot crypto.sign/crypto.verify API, typically RSA/ECDSA/EdDSA — forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_NODE_DH: RuleMeta = {
+  id: "node-crypto-dh",
+  title: "Diffie-Hellman key exchange",
+  description: "crypto.createDiffieHellman(Group)",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Finite-field Diffie-Hellman is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_NODE_DH_MODP: RuleMeta = {
+  id: "node-crypto-dh-modp",
+  title: "Diffie-Hellman MODP group",
+  description: "crypto.getDiffieHellman('modpN')",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Named finite-field DH MODP group is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_NODE_ECDH: RuleMeta = {
+  id: "node-crypto-ecdh",
+  title: "ECDH key exchange",
+  description: "crypto.createECDH",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Elliptic-curve Diffie-Hellman is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_NODE_RSA_ENCRYPT: RuleMeta = {
+  id: "node-crypto-rsa-encrypt",
+  title: "RSA public-key encryption",
+  description: "crypto.publicEncrypt / crypto.privateDecrypt",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "RSA public-key encryption is broken by Shor's algorithm and exposed to harvest-now-decrypt-later.",
+};
+const RULE_NODE_DH_KEYOBJECT: RuleMeta = {
+  id: "node-crypto-dh-keyobject",
+  title: "Diffie-Hellman (KeyObject) key exchange",
+  description: "crypto.diffieHellman({ privateKey, publicKey })",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "crypto.diffieHellman() performs a classical (EC)DH agreement (harvest-now-decrypt-later).",
+};
+
 /** Detects classical asymmetric usage from Node's built-in `crypto` module. */
 const nodeCryptoDetector: Detector = {
   id: "node-crypto",
   description: "Classical asymmetric crypto via the Node.js `crypto` module",
   scope: "source",
   language: "js",
+  rules: [
+    RULE_NODE_KEYGEN,
+    RULE_NODE_SIGN,
+    RULE_NODE_SIGN_ONESHOT,
+    RULE_NODE_DH,
+    RULE_NODE_DH_MODP,
+    RULE_NODE_ECDH,
+    RULE_NODE_RSA_ENCRYPT,
+    RULE_NODE_DH_KEYOBJECT,
+  ],
   appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
-    const push = (
-      spec: Omit<Parameters<typeof makeFinding>[0], "file" | "content" | "index" | "matchLength">,
-      m: RegExpExecArray,
-    ) =>
-      findings.push(
-        makeFinding({ ...spec, file, content, index: m.index, matchLength: m[0].length }),
-      );
 
     // generateKeyPair(Sync)('rsa' | 'ec' | 'dsa' | 'dh' | 'x25519' | 'ed25519', ...)
     eachMatch(RE_GENERATE_KEYPAIR, content, (m) => {
@@ -140,156 +260,103 @@ const nodeCryptoDetector: Detector = {
         ed448: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed448" },
       };
       const info = map[type];
-      push(
-        {
-          ruleId: "node-crypto-keygen",
-          title: `${info.label} key generation`,
-          category: info.cat,
-          severity: info.sev,
-          confidence: "high",
-          algorithm: info.algo,
-          hndl: info.hndl,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            info.message ??
-            `Generates a classical ${info.label} key pair, which is not quantum-safe.`,
-          ...(info.remediation ? { remediation: info.remediation } : {}),
-        },
-        m,
+      findings.push(
+        findingFromRule(
+          RULE_NODE_KEYGEN,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `${info.label} key generation`,
+            category: info.cat,
+            severity: info.sev,
+            algorithm: info.algo,
+            hndl: info.hndl,
+            message:
+              info.message ??
+              `Generates a classical ${info.label} key pair, which is not quantum-safe.`,
+            ...(info.remediation ? { remediation: info.remediation } : {}),
+          },
+        ),
       );
     });
 
     // createSign / createVerify — RSA / ECDSA / DSA signatures.
     eachMatch(RE_CREATE_SIGN_VERIFY, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-sign",
-          title: "Classical signature (createSign/createVerify)",
-          category: "signature",
-          severity: "high",
-          confidence: "medium",
-          algorithm: "unknown",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "Uses createSign/createVerify, typically RSA, ECDSA or DSA — all forgeable by a quantum attacker.",
-          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_SIGN, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 
     // One-shot crypto.sign(algorithm, data, key) / crypto.verify(...) (Node ≥ 12).
     eachMatch(RE_ONESHOT_SIGN_VERIFY, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-sign-oneshot",
-          title: "Classical one-shot signature (crypto.sign/verify)",
-          category: "signature",
-          severity: "high",
-          confidence: "medium",
-          algorithm: "unknown",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "Uses the one-shot crypto.sign/crypto.verify API, typically RSA/ECDSA/EdDSA — forgeable by a quantum attacker.",
-          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_SIGN_ONESHOT, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 
     // createDiffieHellman / createDiffieHellmanGroup — finite-field DH key exchange.
     eachMatch(RE_CREATE_DH, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-dh",
-          title: "Diffie-Hellman key exchange",
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "DH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "Finite-field Diffie-Hellman is broken by Shor's algorithm (harvest-now-decrypt-later).",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_DH, { file, content, index: m.index, matchLength: m[0].length }),
       );
     });
 
     // getDiffieHellman('modpN') — named built-in finite-field MODP groups.
     eachMatch(RE_GET_DH, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-dh-modp",
-          title: `Diffie-Hellman MODP group (${m[1]})`,
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "DH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: `Named finite-field DH MODP group "${m[1]}" is broken by Shor's algorithm (harvest-now-decrypt-later).`,
-        },
-        m,
+      findings.push(
+        findingFromRule(
+          RULE_NODE_DH_MODP,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `Diffie-Hellman MODP group (${m[1]})`,
+            message: `Named finite-field DH MODP group "${m[1]}" is broken by Shor's algorithm (harvest-now-decrypt-later).`,
+          },
+        ),
       );
     });
 
     // createECDH — elliptic-curve Diffie-Hellman key exchange.
     eachMatch(RE_CREATE_ECDH, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-ecdh",
-          title: "ECDH key exchange",
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "Elliptic-curve Diffie-Hellman is broken by Shor's algorithm (harvest-now-decrypt-later).",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_ECDH, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 
     // publicEncrypt / privateDecrypt — RSA encryption (KEM-like confidentiality).
     eachMatch(RE_RSA_ENCRYPT, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-rsa-encrypt",
-          title: "RSA public-key encryption",
-          category: "kem",
-          severity: "high",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "RSA public-key encryption is broken by Shor's algorithm and exposed to harvest-now-decrypt-later.",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_RSA_ENCRYPT, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 
     // diffieHellman({ privateKey, publicKey }) — KeyObject-based DH/ECDH.
     eachMatch(RE_DH_KEYOBJECT, content, (m) => {
-      push(
-        {
-          ruleId: "node-crypto-dh-keyobject",
-          title: "Diffie-Hellman (KeyObject) key exchange",
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message:
-            "crypto.diffieHellman() performs a classical (EC)DH agreement (harvest-now-decrypt-later).",
-        },
-        m,
+      findings.push(
+        findingFromRule(RULE_NODE_DH_KEYOBJECT, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 
@@ -301,6 +368,19 @@ const nodeCryptoDetector: Detector = {
 /* WebCrypto (SubtleCrypto)                                                    */
 /* -------------------------------------------------------------------------- */
 
+const RULE_WEBCRYPTO: RuleMeta = {
+  id: "webcrypto-classical",
+  title: "WebCrypto classical algorithm",
+  description: "classical asymmetric algorithm passed to SubtleCrypto",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "A classical asymmetric WebCrypto algorithm is used, which is not quantum-safe.",
+};
+
 /**
  * Detects classical algorithms passed to WebCrypto's SubtleCrypto methods. The
  * algorithm name can appear as a bare string ("RSA-OAEP") or as
@@ -311,6 +391,7 @@ const webCryptoDetector: Detector = {
   description: "Classical asymmetric algorithms via WebCrypto SubtleCrypto",
   scope: "source",
   language: "js",
+  rules: [RULE_WEBCRYPTO],
   appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -335,21 +416,17 @@ const webCryptoDetector: Detector = {
       const category: Finding["category"] = isEcdh ? "key-exchange" : isKem ? "kem" : "signature";
       const hndl = isKem || isEcdh;
       findings.push(
-        makeFinding({
-          ruleId: "webcrypto-classical",
-          title: `WebCrypto ${m[1]}`,
-          category,
-          severity: "high",
-          confidence: "high",
-          algorithm,
-          hndl,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: `WebCrypto algorithm "${m[1]}" is classical asymmetric crypto and not quantum-safe.`,
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_WEBCRYPTO,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `WebCrypto ${m[1]}`,
+            category,
+            algorithm,
+            hndl,
+            message: `WebCrypto algorithm "${m[1]}" is classical asymmetric crypto and not quantum-safe.`,
+          },
+        ),
       );
     });
 
@@ -361,119 +438,129 @@ const webCryptoDetector: Detector = {
 /* Popular crypto libraries                                                    */
 /* -------------------------------------------------------------------------- */
 
+const RULE_FORGE_RSA: RuleMeta = {
+  id: "forge-rsa-keygen",
+  title: "node-forge RSA key generation",
+  description: "node-forge pki.rsa.generateKeyPair",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "node-forge generates a classical RSA key pair, which is not quantum-safe.",
+};
+const RULE_FORGE_ED25519: RuleMeta = {
+  id: "forge-ed25519",
+  title: "node-forge Ed25519 usage",
+  description: "node-forge forge.ed25519.*",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "node-forge Ed25519 is a modern but still classical signature scheme.",
+};
+const RULE_ELLIPTIC_EC: RuleMeta = {
+  id: "elliptic-ec",
+  title: "elliptic curve instantiation",
+  description: "the `elliptic` library — new EC(...)",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "The `elliptic` library implements classical ECDSA/ECDH, both broken by Shor's algorithm.",
+};
+const RULE_SECP256K1: RuleMeta = {
+  id: "secp256k1-usage",
+  title: "secp256k1 ECDSA/ECDH usage",
+  description: "direct @noble/secp256k1-style API usage",
+  category: "signature",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Direct secp256k1 usage (ECDSA signatures / ECDH agreement) is classical and broken by Shor's algorithm.",
+  remediation: "ML-DSA-65 (FIPS 204) for signatures; hybrid X25519MLKEM768 for key agreement.",
+};
+const RULE_JSRSASIGN_KEYGEN: RuleMeta = {
+  id: "jsrsasign-keygen",
+  title: "jsrsasign key generation",
+  description: "jsrsasign KEYUTIL.generateKeypair",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "jsrsasign generates classical RSA/EC key pairs, which are not quantum-safe.",
+  remediation: "ML-KEM-768 (FIPS 203) / ML-DSA-65 (FIPS 204)",
+};
+const RULE_JSRSASIGN_SIGN: RuleMeta = {
+  id: "jsrsasign-sign",
+  title: "jsrsasign signature",
+  description: "jsrsasign KJUR.crypto.Signature / ECDSA",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "jsrsasign signing uses classical RSA/ECDSA signatures, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204)",
+};
+const RULE_NODE_RSA_LIB: RuleMeta = {
+  id: "node-rsa",
+  title: "node-rsa key/usage",
+  description: "the `node-rsa` library — new NodeRSA(...)",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "node-rsa wraps classical RSA encryption/signing, which is not quantum-safe.",
+};
+
 /** Detects classical crypto from popular npm libraries used in source. */
 const libraryDetector: Detector = {
   id: "crypto-libs",
   description: "Classical asymmetric crypto via node-forge, elliptic, jsrsasign, node-rsa",
   scope: "source",
   language: "js",
+  rules: [
+    RULE_FORGE_RSA,
+    RULE_FORGE_ED25519,
+    RULE_ELLIPTIC_EC,
+    RULE_SECP256K1,
+    RULE_JSRSASIGN_KEYGEN,
+    RULE_JSRSASIGN_SIGN,
+    RULE_NODE_RSA_LIB,
+  ],
   appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
-    const add = (
-      re: RegExp,
-      spec: Omit<Parameters<typeof makeFinding>[0], "file" | "content" | "index" | "matchLength">,
-    ) =>
+    const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, content, (m) =>
         findings.push(
-          makeFinding({ ...spec, file, content, index: m.index, matchLength: m[0].length }),
+          findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),
       );
 
-    // node-forge: pki.rsa.generateKeyPair(...)
-    add(RE_FORGE_RSA, {
-      ruleId: "forge-rsa-keygen",
-      title: "node-forge RSA key generation",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "node-forge generates a classical RSA key pair, which is not quantum-safe.",
-    });
-
-    // node-forge: forge.ed25519.* (classical EdDSA)
-    add(RE_FORGE_ED25519, {
-      ruleId: "forge-ed25519",
-      title: "node-forge Ed25519 usage",
-      category: "signature",
-      severity: "low",
-      confidence: "high",
-      algorithm: "EdDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "node-forge Ed25519 is a modern but still classical signature scheme.",
-    });
-
-    // elliptic: new EC('secp256k1') / new ec(...)
-    add(RE_ELLIPTIC_EC, {
-      ruleId: "elliptic-ec",
-      title: "elliptic curve instantiation",
-      category: "signature",
-      severity: "high",
-      confidence: "high",
-      algorithm: "ECDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message:
-        "The `elliptic` library implements classical ECDSA/ECDH, both broken by Shor's algorithm.",
-    });
-
-    // Direct secp256k1 API usage: secp.sign / getPublicKey / getSharedSecret.
-    add(RE_SECP256K1, {
-      ruleId: "secp256k1-usage",
-      title: "secp256k1 ECDSA/ECDH usage",
-      category: "signature",
-      severity: "high",
-      confidence: "medium",
-      algorithm: "ECDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message:
-        "Direct secp256k1 usage (ECDSA signatures / ECDH agreement) is classical and broken by Shor's algorithm.",
-      remediation: "ML-DSA-65 (FIPS 204) for signatures; hybrid X25519MLKEM768 for key agreement.",
-    });
-
-    // jsrsasign: KEYUTIL.generateKeypair('RSA'|'EC', ...) or KJUR.crypto.*
-    add(RE_JSRSASIGN_KEYGEN, {
-      ruleId: "jsrsasign-keygen",
-      title: "jsrsasign key generation",
-      category: "signature",
-      severity: "high",
-      confidence: "high",
-      algorithm: "unknown",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "jsrsasign generates classical RSA/EC key pairs, which are not quantum-safe.",
-      remediation: "ML-KEM-768 (FIPS 203) / ML-DSA-65 (FIPS 204)",
-    });
-    add(RE_JSRSASIGN_SIGN, {
-      ruleId: "jsrsasign-sign",
-      title: "jsrsasign signature",
-      category: "signature",
-      severity: "high",
-      confidence: "high",
-      algorithm: "unknown",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message:
-        "jsrsasign signing uses classical RSA/ECDSA signatures, forgeable by a quantum attacker.",
-      remediation: "ML-DSA-65 (FIPS 204)",
-    });
-
-    // node-rsa: new NodeRSA(...)
-    add(RE_NODE_RSA, {
-      ruleId: "node-rsa",
-      title: "node-rsa key/usage",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "node-rsa wraps classical RSA encryption/signing, which is not quantum-safe.",
-    });
+    add(RE_FORGE_RSA, RULE_FORGE_RSA); // node-forge: pki.rsa.generateKeyPair(...)
+    add(RE_FORGE_ED25519, RULE_FORGE_ED25519); // node-forge: forge.ed25519.*
+    add(RE_ELLIPTIC_EC, RULE_ELLIPTIC_EC); // elliptic: new EC('secp256k1')
+    add(RE_SECP256K1, RULE_SECP256K1); // secp.sign / getPublicKey / getSharedSecret
+    add(RE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_KEYGEN); // jsrsasign: KEYUTIL.generateKeypair(...)
+    add(RE_JSRSASIGN_SIGN, RULE_JSRSASIGN_SIGN); // jsrsasign: KJUR.crypto.*
+    add(RE_NODE_RSA, RULE_NODE_RSA_LIB); // node-rsa: new NodeRSA(...)
 
     return findings;
   },
@@ -482,6 +569,34 @@ const libraryDetector: Detector = {
 /* -------------------------------------------------------------------------- */
 /* JWT / JOSE / COSE algorithm strings                                         */
 /* -------------------------------------------------------------------------- */
+
+const RULE_JWT_ALG: RuleMeta = {
+  id: "jwt-classical-alg",
+  title: "Classical JWT/JOSE algorithm",
+  description: "JWS alg tokens (RS/PS/ES/EdDSA)",
+  category: "signature",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "A classical JWT/JOSE signature algorithm is used, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
+};
+const RULE_JOSE_ECDH: RuleMeta = {
+  id: "jose-ecdh-es",
+  title: "JOSE ECDH-ES key agreement",
+  description: "JOSE ECDH-ES / ECDH-ES+A*KW key agreement",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "JOSE ECDH-ES performs classical ECDH key agreement — harvest-now-decrypt-later exposed.",
+  remediation: "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption.",
+};
 
 /**
  * Detects classical signature algorithm identifiers used by JWT/JOSE, plus
@@ -493,6 +608,7 @@ const jwtDetector: Detector = {
   description: "Classical JWT/JOSE algorithms (RS/PS/ES/EdDSA) and ECDH-ES key agreement",
   scope: "source",
   language: "js",
+  rules: [RULE_JWT_ALG, RULE_JOSE_ECDH],
   appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -505,45 +621,29 @@ const jwtDetector: Detector = {
       else if (alg === "EdDSA") algorithm = "EdDSA";
       else algorithm = "ECDSA"; // ES*
       findings.push(
-        makeFinding({
-          ruleId: "jwt-classical-alg",
-          title: `JWT/JOSE algorithm ${alg}`,
-          category: "signature",
-          severity: "high",
-          confidence: "medium",
-          algorithm,
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: `JWT/JOSE algorithm "${alg}" is a classical signature, forgeable by a quantum attacker.`,
-          remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_JWT_ALG,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `JWT/JOSE algorithm ${alg}`,
+            algorithm,
+            message: `JWT/JOSE algorithm "${alg}" is a classical signature, forgeable by a quantum attacker.`,
+          },
+        ),
       );
     });
 
     // JOSE ECDH-ES key agreement (and ECDH-ES+A*KW) — confidentiality, HNDL.
     eachMatch(RE_JOSE_ECDH, content, (m) => {
       findings.push(
-        makeFinding({
-          ruleId: "jose-ecdh-es",
-          title: `JOSE key agreement ${m[1]}`,
-          category: "key-exchange",
-          severity: "high",
-          confidence: "medium",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: `JOSE "${m[1]}" performs classical ECDH key agreement — harvest-now-decrypt-later exposed.`,
-          remediation:
-            "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption.",
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_JOSE_ECDH,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `JOSE key agreement ${m[1]}`,
+            message: `JOSE "${m[1]}" performs classical ECDH key agreement — harvest-now-decrypt-later exposed.`,
+          },
+        ),
       );
     });
 
@@ -554,6 +654,43 @@ const jwtDetector: Detector = {
 /* -------------------------------------------------------------------------- */
 /* TLS legacy configuration                                                    */
 /* -------------------------------------------------------------------------- */
+
+const RULE_TLS_LEGACY: RuleMeta = {
+  id: "tls-legacy-version",
+  title: "Legacy TLS version pinned",
+  description: "minVersion/maxVersion/secureProtocol pinned to TLS 1.0/1.1",
+  category: "tls",
+  severity: "medium",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message: "TLS 1.0/1.1 are deprecated and insecure; require TLS 1.3.",
+  remediation: "Set minVersion: 'TLSv1.3' and prefer PQC-hybrid key exchange.",
+};
+const RULE_TLS_REJECT: RuleMeta = {
+  id: "tls-reject-unauthorized",
+  title: "TLS certificate verification disabled",
+  description: "rejectUnauthorized: false",
+  category: "tls",
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_CERT_VALIDATION,
+  message: "rejectUnauthorized:false disables TLS certificate verification (MITM risk).",
+  remediation: "Remove rejectUnauthorized:false; verify certificates properly.",
+};
+const RULE_TLS_WEAK_CIPHER: RuleMeta = {
+  id: "tls-weak-cipher",
+  title: "Weak TLS cipher configured",
+  description: "weak/export cipher in a `ciphers` string",
+  category: "tls",
+  severity: "medium",
+  confidence: "medium",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message: "A weak cipher is configured in the TLS ciphers list.",
+  remediation: "Use a modern AEAD cipher suite (TLS 1.3 defaults).",
+};
 
 /**
  * Detects legacy / insecure TLS configuration expressed as JS object literals:
@@ -566,6 +703,7 @@ const tlsDetector: Detector = {
   description: "Legacy / insecure TLS configuration in JS objects",
   scope: "config",
   language: "js",
+  rules: [RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER],
   appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -573,16 +711,7 @@ const tlsDetector: Detector = {
     // minVersion / maxVersion / secureProtocol pinned to TLS 1.0 or 1.1.
     eachMatch(RE_TLS_LEGACY_VERSION, content, (m) => {
       findings.push(
-        makeFinding({
-          ruleId: "tls-legacy-version",
-          title: "Legacy TLS version pinned",
-          category: "tls",
-          severity: "medium",
-          confidence: "high",
-          hndl: false,
-          cwe: CWE_WEAK_STRENGTH,
-          message: "TLS 1.0/1.1 are deprecated and insecure; require TLS 1.3.",
-          remediation: "Set minVersion: 'TLSv1.3' and prefer PQC-hybrid key exchange.",
+        findingFromRule(RULE_TLS_LEGACY, {
           file,
           content,
           index: m.index,
@@ -594,16 +723,7 @@ const tlsDetector: Detector = {
     // rejectUnauthorized: false — disables certificate verification.
     eachMatch(RE_TLS_REJECT, content, (m) => {
       findings.push(
-        makeFinding({
-          ruleId: "tls-reject-unauthorized",
-          title: "TLS certificate verification disabled",
-          category: "tls",
-          severity: "high",
-          confidence: "high",
-          hndl: false,
-          cwe: CWE_CERT_VALIDATION,
-          message: "rejectUnauthorized:false disables TLS certificate verification (MITM risk).",
-          remediation: "Remove rejectUnauthorized:false; verify certificates properly.",
+        findingFromRule(RULE_TLS_REJECT, {
           file,
           content,
           index: m.index,
@@ -615,21 +735,11 @@ const tlsDetector: Detector = {
     // Weak / export ciphers referenced in a ciphers string (bounded regex).
     eachMatch(RE_TLS_WEAK_CIPHER, content, (m) => {
       findings.push(
-        makeFinding({
-          ruleId: "tls-weak-cipher",
-          title: "Weak TLS cipher configured",
-          category: "tls",
-          severity: "medium",
-          confidence: "medium",
-          hndl: false,
-          cwe: CWE_WEAK_STRENGTH,
-          message: `Weak cipher (${m[1]}) configured in the TLS ciphers list.`,
-          remediation: "Use a modern AEAD cipher suite (TLS 1.3 defaults).",
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_TLS_WEAK_CIPHER,
+          { file, content, index: m.index, matchLength: m[0].length },
+          { message: `Weak cipher (${m[1]}) configured in the TLS ciphers list.` },
+        ),
       );
     });
 
@@ -645,6 +755,35 @@ const RE_SSH_PUBKEY = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384
 const RE_CERT_SIG_ALG =
   /\b(sha(?:1|256|384|512)WithRSAEncryption|ecdsa-with-SHA(?:1|256|384|512)|rsassaPss|dsaWithSHA(?:1|256))\b/g;
 
+const RULE_SSH_PUBKEY: RuleMeta = {
+  id: "ssh-public-key",
+  title: "Classical SSH public key",
+  description: "ssh-rsa / ssh-ed25519 / ssh-dss / ecdsa-sha2-* public keys",
+  category: "certificate",
+  severity: "low",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  sensitive: true,
+  message: "A classical SSH public key is forgeable by a quantum attacker.",
+  remediation: "Plan migration to PQC-capable SSH (e.g. sntrup761x25519 KEX, PQC host keys).",
+};
+const RULE_CERT_SIG_ALG: RuleMeta = {
+  id: "cert-signature-algorithm",
+  title: "Classical certificate signature algorithm",
+  description: "X.509/TLS certificate signature-algorithm identifiers",
+  category: "certificate",
+  severity: "low",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A classical certificate signature algorithm (RSA/ECDSA/DSA) is a quantum forgery surface.",
+  remediation: "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature.",
+};
+
 /**
  * Detects classical SSH public keys (`authorized_keys` / `known_hosts` lines)
  * and X.509 certificate signature-algorithm identifiers in any text file. These
@@ -656,6 +795,7 @@ const sshCertDetector: Detector = {
   description: "SSH public keys and TLS/X.509 certificate signature algorithms in config",
   scope: "config",
   language: "any",
+  rules: [RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG],
   appliesTo: () => true,
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -671,24 +811,15 @@ const sshCertDetector: Detector = {
             ? "DSA"
             : "ECDSA";
       findings.push(
-        makeFinding({
-          ruleId: "ssh-public-key",
-          title: `Classical SSH public key (${tok})`,
-          category: "certificate",
-          severity: "low",
-          confidence: "medium",
-          algorithm,
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          sensitive: true,
-          message: `SSH public key type "${tok}" is a classical key forgeable by a quantum attacker.`,
-          remediation:
-            "Plan migration to PQC-capable SSH (e.g. sntrup761x25519 KEX, PQC host keys).",
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_SSH_PUBKEY,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `Classical SSH public key (${tok})`,
+            algorithm,
+            message: `SSH public key type "${tok}" is a classical key forgeable by a quantum attacker.`,
+          },
+        ),
       );
     });
 
@@ -701,23 +832,15 @@ const sshCertDetector: Detector = {
           ? "ECDSA"
           : "DSA";
       findings.push(
-        makeFinding({
-          ruleId: "cert-signature-algorithm",
-          title: `Classical certificate signature algorithm (${tok})`,
-          category: "certificate",
-          severity: "low",
-          confidence: "medium",
-          algorithm,
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: `Certificate signature algorithm "${tok}" is classical (RSA/ECDSA/DSA) — a quantum forgery surface.`,
-          remediation:
-            "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature.",
-          file,
-          content,
-          index: m.index,
-          matchLength: m[0].length,
-        }),
+        findingFromRule(
+          RULE_CERT_SIG_ALG,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `Classical certificate signature algorithm (${tok})`,
+            algorithm,
+            message: `Certificate signature algorithm "${tok}" is classical (RSA/ECDSA/DSA) — a quantum forgery surface.`,
+          },
+        ),
       );
     });
 

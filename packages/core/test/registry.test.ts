@@ -67,3 +67,64 @@ test("config-scope detectors are declared, not prefix-inferred", () => {
   assert.equal(detectorScope(byId.get("ssh-cert")!), "config");
   assert.equal(detectorScope(byId.get("node-crypto")!), "source");
 });
+
+test("ruleCatalog is complete, unique, and well-formed", () => {
+  const catalog = defaultRegistry.ruleCatalog();
+  assert.ok(catalog.length >= 20, "catalog covers every built-in rule");
+
+  // Ids are unique and whitespace-free; required fields are populated.
+  const ids = new Set<string>();
+  for (const r of catalog) {
+    assert.equal(r.id, r.id.trim(), `${r.id} has no surrounding whitespace`);
+    assert.ok(!ids.has(r.id), `${r.id} is unique`);
+    ids.add(r.id);
+    assert.ok(r.title.length > 0, `${r.id} has a title`);
+    assert.ok(r.message.length > 0, `${r.id} has a message`);
+    assert.ok(r.severity, `${r.id} has a severity`);
+    assert.ok(r.category, `${r.id} has a category`);
+  }
+
+  // A representative sample of ids the language-pack / MCP work depends on.
+  for (const id of [
+    "node-crypto-keygen",
+    "elliptic-ec",
+    "jwt-classical-alg",
+    "pem-rsa-private-key",
+  ]) {
+    assert.ok(ids.has(id), `catalog contains ${id}`);
+  }
+});
+
+test("forRule resolves a rule to its declaring detector", () => {
+  const forge = defaultRegistry.forRule("forge-rsa-keygen");
+  assert.equal(forge?.detector.id, "crypto-libs");
+  assert.equal(forge?.rule.algorithm, "RSA");
+
+  const ecdh = defaultRegistry.forRule("node-crypto-ecdh");
+  assert.equal(ecdh?.detector.id, "node-crypto");
+  assert.equal(ecdh?.rule.algorithm, "ECDH");
+
+  assert.equal(defaultRegistry.forRule("totally-made-up-rule"), undefined);
+});
+
+test("ruleCatalog throws on a duplicate rule id across detectors", () => {
+  const dup: Detector = {
+    id: "dup-detector",
+    description: "test",
+    rules: [
+      {
+        id: "node-crypto-keygen",
+        title: "x",
+        category: "kem",
+        severity: "low",
+        confidence: "low",
+        hndl: false,
+        message: "x",
+      },
+    ],
+    appliesTo: () => true,
+    detect: () => [],
+  };
+  const r = defaultRegistry.clone().register(dup);
+  assert.throws(() => r.ruleCatalog(), /duplicate rule id/);
+});

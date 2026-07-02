@@ -315,13 +315,23 @@ const explainFindingTool: ToolDefinition = {
     if (ruleId) {
       const resolved = resolveRule(ruleId);
       resolvedAlgorithm = resolved.algorithm;
-      lines.push(`Rule: ${ruleId}`);
+      const meta = resolved.meta;
+      lines.push(`Rule: ${meta ? `${ruleId} — ${meta.title}` : ruleId}`);
       if (resolved.detector) {
         lines.push(`Detector: ${resolved.detector.id} — ${resolved.detector.description}`);
       } else if (resolved.via === "unresolved") {
         lines.push(
           "No matching detector found in the catalog (rule may be unknown to this core version).",
         );
+      }
+      // Rule catalog metadata (severity / category / HNDL / remediation) so the
+      // explanation is actionable on its own, not just a detector pointer.
+      if (meta) {
+        lines.push(
+          `Severity: ${meta.severity} · Category: ${meta.category} · HNDL-exposed: ${meta.hndl ? "yes" : "no"}`,
+        );
+        lines.push(`What it detects: ${meta.description ?? meta.message}`);
+        if (meta.remediation) lines.push(`Rule remediation: ${meta.remediation}`);
       }
     }
 

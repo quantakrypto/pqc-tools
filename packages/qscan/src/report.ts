@@ -11,7 +11,14 @@
  * serialized shape stays consistent across every tool in the monorepo.
  */
 
-import { SEVERITY_ORDER, severityRank, toCbom, toJson, toSarif } from "@quantakrypto/core";
+import {
+  defaultRegistry,
+  SEVERITY_ORDER,
+  severityRank,
+  toCbom,
+  toJson,
+  toSarif,
+} from "@quantakrypto/core";
 import type { Finding, ReportOptions, ScanResult, Severity } from "@quantakrypto/core";
 
 /** Minimal ANSI palette. Empty strings when color is disabled. */
@@ -54,7 +61,13 @@ export function renderJson(result: ScanResult, opts?: ReportOptions): string {
  * (e.g. `{ redactSnippets: true }` for `--no-snippets`).
  */
 export function renderSarif(result: ScanResult, opts?: ReportOptions): string {
-  return JSON.stringify(toSarif(result, opts), null, 2);
+  // Advertise the full rule catalog (not just the rules that fired) so SARIF
+  // consumers see complete metadata for every rule qScan can emit.
+  return JSON.stringify(
+    toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts }),
+    null,
+    2,
+  );
 }
 
 /**

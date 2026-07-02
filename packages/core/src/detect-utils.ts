@@ -3,7 +3,14 @@
  * into a 1-based line/column, extracting a trimmed single-line snippet, and a
  * small factory for building Finding objects with consistent remediation text.
  */
-import type { AlgorithmFamily, Confidence, Finding, FindingCategory, Severity } from "./types.js";
+import type {
+  AlgorithmFamily,
+  Confidence,
+  Finding,
+  FindingCategory,
+  RuleMeta,
+  Severity,
+} from "./types.js";
 import { remediationText } from "./remediation.js";
 
 /** A 1-based line/column position derived from a character offset. */
@@ -102,6 +109,55 @@ export function makeFinding(spec: FindingSpec): Finding {
   if (spec.cwe) finding.cwe = spec.cwe;
   if (spec.sensitive) finding.sensitive = true;
   return finding;
+}
+
+/** Where a match occurred, plus optional per-finding field overrides. */
+export interface RuleMatch {
+  file: string;
+  content: string;
+  /** Match start offset within `content`. */
+  index: number;
+  /** Length of the match (used to compute endLine for multi-line matches). */
+  matchLength?: number;
+}
+
+/**
+ * Fields of a {@link RuleMeta} a detector may refine at match time. Multi-variant
+ * rules (e.g. key generation across algorithm families) override these; fixed
+ * rules pass none and inherit the catalog metadata verbatim.
+ */
+export type RuleOverrides = Partial<
+  Pick<
+    RuleMeta,
+    "title" | "category" | "severity" | "confidence" | "algorithm" | "hndl" | "message" | "cwe"
+  >
+> & { remediation?: string };
+
+/**
+ * Build a {@link Finding} from a rule's catalog metadata plus a match location,
+ * applying any per-finding overrides. This is the single construction path for
+ * detector findings: the invariant fields (title/severity/category/…) live once
+ * in the {@link RuleMeta} declaration, so they can't drift from what the SARIF
+ * catalog and the MCP resolver report.
+ */
+export function findingFromRule(rule: RuleMeta, at: RuleMatch, overrides?: RuleOverrides): Finding {
+  return makeFinding({
+    ruleId: rule.id,
+    title: overrides?.title ?? rule.title,
+    category: overrides?.category ?? rule.category,
+    severity: overrides?.severity ?? rule.severity,
+    confidence: overrides?.confidence ?? rule.confidence,
+    algorithm: overrides?.algorithm ?? rule.algorithm,
+    hndl: overrides?.hndl ?? rule.hndl,
+    cwe: overrides?.cwe ?? rule.cwe,
+    remediation: overrides?.remediation ?? rule.remediation,
+    sensitive: rule.sensitive,
+    message: overrides?.message ?? rule.message,
+    file: at.file,
+    content: at.content,
+    index: at.index,
+    matchLength: at.matchLength,
+  });
 }
 
 /** True if `filePath` has one of the given (lower-case, dotted) extensions. */

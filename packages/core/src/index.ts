@@ -25,8 +25,9 @@ export { AbortError, BudgetExceededError } from "./errors.js";
 export { scanParallel, mergeChunkResults, chunkByBytes } from "./parallel.js";
 export type { ScanChunk, ChunkResult, SizedFile } from "./parallel.js";
 
-// Detector registry (plugin point) + helpers.
+// Detector registry (plugin point) + helpers + the rule catalog.
 export { DetectorRegistry, defaultRegistry, detectorScope } from "./registry.js";
+export type { RuleCatalogEntry } from "./registry.js";
 
 // Canonical baseline (shared by qScan + the Action).
 export {

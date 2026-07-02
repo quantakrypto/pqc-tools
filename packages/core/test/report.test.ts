@@ -11,6 +11,7 @@ import {
   formatSummary,
   remediationFor,
   buildInventory,
+  defaultRegistry,
   VERSION,
 } from "../src/index.js";
 import type { AlgorithmFamily, Finding, ScanResult } from "../src/index.js";
@@ -79,6 +80,48 @@ test("toSarif produces a valid 2.1.0 log shape", () => {
   // low severity → note
   const cert = run.results.find((r: any) => r.ruleId === "pem-certificate");
   assert.equal(cert.level, "note");
+});
+
+test("toSarif with a catalog advertises rules that did not fire", () => {
+  const catalog = defaultRegistry.ruleCatalog();
+  const log = toSarif(sampleResult(), { catalog });
+  const run = log.runs[0] as Record<string, any>;
+  const rules = run.tool.driver.rules as Array<{ id: string; ruleIndex?: number }>;
+
+  // Every catalog rule is advertised, even ones with no finding in this run.
+  assert.equal(rules.length, catalog.length, "one SARIF rule per catalog rule");
+  const ruleIds = new Set(rules.map((r) => r.id));
+  assert.ok(ruleIds.has("node-crypto-keygen"), "a non-fired rule is present");
+  assert.ok(ruleIds.has("node-crypto-ecdh"), "a fired rule is present");
+
+  // Results still index into the correct rule.
+  const first = run.results[0];
+  assert.equal(rules[first.ruleIndex].id, first.ruleId);
+});
+
+test("toSarif appends non-catalog ruleIds (e.g. dep-vulnerable) after the catalog", () => {
+  const dep: Finding = {
+    ruleId: "dep-vulnerable",
+    title: "Vulnerable dependency",
+    category: "dependency",
+    severity: "high",
+    confidence: "high",
+    algorithm: "RSA",
+    hndl: true,
+    message: "openssl-style dep",
+    location: { file: "package.json", line: 3 },
+  };
+  const result: ScanResult = {
+    ...sampleResult(),
+    findings: [dep],
+    inventory: buildInventory([dep]),
+  };
+  const catalog = defaultRegistry.ruleCatalog();
+  const run = toSarif(result, { catalog }).runs[0] as Record<string, any>;
+  const rules = run.tool.driver.rules as Array<{ id: string }>;
+  assert.equal(rules.length, catalog.length + 1, "dep-vulnerable appended beyond the catalog");
+  const depResult = run.results[0];
+  assert.equal(rules[depResult.ruleIndex].id, "dep-vulnerable");
 });
 
 test("toSarif level mapping covers error/warning/note", () => {

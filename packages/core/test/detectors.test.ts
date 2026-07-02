@@ -5,8 +5,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 
-import { detectors } from "../src/index.js";
+import { detectors, defaultRegistry, scan } from "../src/index.js";
 import type { Finding } from "../src/index.js";
 
 /** Run every applicable detector over a fixture and flatten the findings. */
@@ -22,6 +24,23 @@ function run(file: string, content: string): Finding[] {
 function byRule(findings: Finding[], ruleId: string): Finding | undefined {
   return findings.find((f) => f.ruleId === ruleId);
 }
+
+test("every emitted detector ruleId is declared in the rule catalog", async () => {
+  // Drift guard: `findingFromRule` stamps the catalog rule's id onto findings,
+  // so a detector finding whose ruleId is NOT in the catalog means someone
+  // hand-built a Finding with an undeclared rule id. Scan the labeled corpus
+  // (broad detector coverage) and assert every emitted id is catalogued.
+  const catalogIds = new Set(defaultRegistry.ruleCatalog().map((r) => r.id));
+  const corpus = path.join(path.dirname(fileURLToPath(import.meta.url)), "benchmark", "corpus");
+  const result = await scan({ root: corpus });
+  assert.ok(result.findings.length > 0, "corpus produced findings");
+  for (const f of result.findings) {
+    // `dep-vulnerable` comes from the manifest scanner, not a Detector, so it is
+    // intentionally outside the detector catalog.
+    if (f.ruleId === "dep-vulnerable") continue;
+    assert.ok(catalogIds.has(f.ruleId), `emitted ruleId "${f.ruleId}" is in the catalog`);
+  }
+});
 
 test("Node crypto RSA key generation", () => {
   const src = [

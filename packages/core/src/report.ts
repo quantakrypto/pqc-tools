@@ -3,7 +3,7 @@
  * or a human-readable text summary. No third-party dependencies — ANSI colour
  * is emitted with raw escape codes and is off by default.
  */
-import type { Finding, ScanResult, Severity } from "./types.js";
+import type { Finding, RuleMeta, ScanResult, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 import { SEVERITY_ORDER, sarifLevel } from "./severity.js";
 
@@ -23,6 +23,14 @@ export interface ReportOptions {
    * snippet there IS the sensitive value.
    */
   redactSnippets?: boolean;
+  /**
+   * Full rule catalog to advertise in SARIF `tool.driver.rules[]`, even for
+   * rules that produced no finding in this run. Pass
+   * `defaultRegistry.ruleCatalog()`. When omitted, only the rules that actually
+   * fired are emitted (the historical behaviour). SARIF-only; ignored by
+   * {@link toJson}.
+   */
+  catalog?: RuleMeta[];
 }
 
 const SARIF_SCHEMA =
@@ -56,40 +64,88 @@ function sarifRank(severity: Severity): number {
   }
 }
 
+/** Build a SARIF `rules[]` entry from a rule's severity/title/message/etc. */
+function sarifRule(spec: {
+  id: string;
+  title: string;
+  message: string;
+  severity: Severity;
+  category: string;
+  algorithm?: string;
+  hndl: boolean;
+  cwe?: string;
+  remediation?: string;
+}): Record<string, unknown> {
+  return {
+    id: spec.id,
+    name: spec.id,
+    shortDescription: { text: spec.title },
+    fullDescription: { text: spec.message },
+    defaultConfiguration: { level: sarifLevel(spec.severity), rank: sarifRank(spec.severity) },
+    ...(spec.remediation ? { help: { text: `Remediation: ${spec.remediation}` } } : {}),
+    properties: {
+      category: spec.category,
+      ...(spec.algorithm ? { algorithm: spec.algorithm } : {}),
+      hndl: spec.hndl,
+      ...(spec.cwe ? { cwe: spec.cwe, "security-severity": securitySeverity(spec.severity) } : {}),
+      ...(spec.cwe ? { tags: ["security", spec.cwe] } : {}),
+    },
+    ...(spec.cwe
+      ? {
+          relationships: [
+            { target: { id: spec.cwe, toolComponent: { name: "CWE" } }, kinds: ["relevant"] },
+          ],
+        }
+      : {}),
+  };
+}
+
 /** Serialize a scan result as SARIF 2.1.0. */
 export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
   const redactSnippets = opts?.redactSnippets ?? false;
-  // Build the unique rule set (one rule per ruleId encountered) and collect the
-  // set of CWE taxa referenced by any rule.
+  // Build the rule set and collect the CWE taxa referenced by any rule. When a
+  // full catalog is supplied, advertise every rule (even ones that didn't fire);
+  // otherwise emit one rule per ruleId encountered (the historical behaviour).
   const ruleIndex = new Map<string, number>();
   const rules: Array<Record<string, unknown>> = [];
   const cweTaxa = new Set<string>();
+
+  for (const r of opts?.catalog ?? []) {
+    if (ruleIndex.has(r.id)) continue;
+    if (r.cwe) cweTaxa.add(r.cwe);
+    ruleIndex.set(r.id, rules.length);
+    rules.push(
+      sarifRule({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        severity: r.severity,
+        category: r.category,
+        algorithm: r.algorithm,
+        hndl: r.hndl,
+        cwe: r.cwe,
+        remediation: r.remediation,
+      }),
+    );
+  }
+
   for (const f of result.findings) {
     if (f.cwe) cweTaxa.add(f.cwe);
     if (ruleIndex.has(f.ruleId)) continue;
     ruleIndex.set(f.ruleId, rules.length);
-    rules.push({
-      id: f.ruleId,
-      name: f.ruleId,
-      shortDescription: { text: f.title },
-      fullDescription: { text: f.message },
-      defaultConfiguration: { level: sarifLevel(f.severity), rank: sarifRank(f.severity) },
-      ...(f.remediation ? { help: { text: `Remediation: ${f.remediation}` } } : {}),
-      properties: {
+    rules.push(
+      sarifRule({
+        id: f.ruleId,
+        title: f.title,
+        message: f.message,
+        severity: f.severity,
         category: f.category,
-        ...(f.algorithm ? { algorithm: f.algorithm } : {}),
+        algorithm: f.algorithm,
         hndl: f.hndl,
-        ...(f.cwe ? { cwe: f.cwe, "security-severity": securitySeverity(f.severity) } : {}),
-        ...(f.cwe ? { tags: ["security", f.cwe] } : {}),
-      },
-      ...(f.cwe
-        ? {
-            relationships: [
-              { target: { id: f.cwe, toolComponent: { name: "CWE" } }, kinds: ["relevant"] },
-            ],
-          }
-        : {}),
-    });
+        cwe: f.cwe,
+        remediation: f.remediation,
+      }),
+    );
   }
 
   const results = result.findings.map((f) => {

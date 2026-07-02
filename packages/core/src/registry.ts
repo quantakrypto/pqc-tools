@@ -10,13 +10,19 @@
  * To add a language or detector, see the "Adding a detector / language" section
  * of the package README.
  */
-import type { Detector, DetectorScope } from "./types.js";
+import type { Detector, DetectorScope, RuleMeta } from "./types.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pemDetector } from "./detectors/pem.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
 export function detectorScope(d: Detector): DetectorScope {
   return d.scope ?? "source";
+}
+
+/** A rule plus the detector that emits it — the result of {@link DetectorRegistry.forRule}. */
+export interface RuleCatalogEntry {
+  rule: RuleMeta;
+  detector: Detector;
 }
 
 /**
@@ -55,6 +61,38 @@ export class DetectorRegistry {
   /** All registered detectors, in registration order. */
   all(): Detector[] {
     return this.order.map((id) => this.byId.get(id)!);
+  }
+
+  /**
+   * The flattened rule catalog: every {@link RuleMeta} declared by every
+   * registered detector, in detector-registration then in-detector order. This
+   * is the single source of truth for rule metadata consumed by SARIF
+   * `rules[]`, the MCP `explain_finding` resolver, and per-rule enable/disable.
+   * Duplicate rule ids across detectors throw (ids are globally unique).
+   */
+  ruleCatalog(): RuleMeta[] {
+    const out: RuleMeta[] = [];
+    const seen = new Set<string>();
+    for (const det of this.all()) {
+      for (const rule of det.rules ?? []) {
+        if (seen.has(rule.id)) {
+          throw new Error(`duplicate rule id in catalog: ${rule.id}`);
+        }
+        seen.add(rule.id);
+        out.push(rule);
+      }
+    }
+    return out;
+  }
+
+  /** Resolve a rule id to its {@link RuleMeta} and the detector that emits it. */
+  forRule(ruleId: string): RuleCatalogEntry | undefined {
+    for (const det of this.all()) {
+      for (const rule of det.rules ?? []) {
+        if (rule.id === ruleId) return { rule, detector: det };
+      }
+    }
+    return undefined;
   }
 
   /** A shallow copy of this registry (useful to extend the defaults). */

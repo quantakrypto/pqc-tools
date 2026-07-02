@@ -191,6 +191,8 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
     config: options.config !== false,
     deps: options.dependencies !== false,
     scanMinified: options.scanMinified === true,
+    // Plain string array — structured-cloneable, so it crosses the worker boundary.
+    disabledRules: options.disabledRules,
   };
 
   let results: ChunkResult[];
@@ -231,7 +233,13 @@ function runPool(
   entry: string,
   execArgv: string[] | undefined,
   baseDir: string,
-  toggles: { source: boolean; config: boolean; deps: boolean; scanMinified: boolean },
+  toggles: {
+    source: boolean;
+    config: boolean;
+    deps: boolean;
+    scanMinified: boolean;
+    disabledRules?: string[];
+  },
   chunks: ScanChunk[],
   concurrency: number,
   onFile?: (file: string) => void,

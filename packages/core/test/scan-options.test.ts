@@ -58,6 +58,31 @@ test("scan honours include (only src/ scanned)", async () => {
   }
 });
 
+test("disabledRules suppresses exactly the listed rules", async () => {
+  const dir = await makeTree();
+  try {
+    const base = await scan({ root: dir });
+    assert.ok(base.findings.some((f) => f.ruleId === "node-crypto-ecdh"));
+    assert.ok(base.findings.some((f) => f.ruleId === "jwt-classical-alg"));
+
+    const filtered = await scan({ root: dir, disabledRules: ["node-crypto-ecdh"] });
+    assert.ok(
+      !filtered.findings.some((f) => f.ruleId === "node-crypto-ecdh"),
+      "disabled rule is dropped",
+    );
+    assert.ok(
+      filtered.findings.some((f) => f.ruleId === "jwt-classical-alg"),
+      "other rules are untouched",
+    );
+
+    // An empty / absent list leaves the finding set unchanged.
+    const noop = await scan({ root: dir, disabledRules: [] });
+    assert.equal(noop.findings.length, base.findings.length);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("scan honours an explicit files list (incremental)", async () => {
   const dir = await makeTree();
   try {

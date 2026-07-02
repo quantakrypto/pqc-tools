@@ -101,6 +101,46 @@ export type DetectorScope = "source" | "config";
  */
 export type DetectorLanguage = "js" | "python" | "go" | "java" | "any";
 
+/**
+ * Declarative metadata for a single rule a detector can emit. This is the
+ * catalog entry: the stable, queryable description of a rule keyed by the
+ * `ruleId` it stamps onto findings. It is the single source of truth for a
+ * rule's title / severity / category / remediation, consumed by the SARIF
+ * `rules[]` block, the MCP `explain_finding` resolver, and future per-rule
+ * enable/disable + language-pack work.
+ *
+ * For most rules the metadata is fixed and `detect()` builds findings straight
+ * from it (see `findingFromRule`). A few rules are inherently multi-variant
+ * (e.g. `node-crypto-keygen` spans RSA/EC/DSA/DH/Ed25519 at different
+ * severities); for those the metadata here is a REPRESENTATIVE umbrella and
+ * `detect()` refines the per-finding fields at match time. The catalog always
+ * enumerates every emittable ruleId regardless.
+ */
+export interface RuleMeta {
+  /** Stable rule id — matches {@link Finding.ruleId}. Unique across the catalog. */
+  id: string;
+  /** Canonical human title. */
+  title: string;
+  category: FindingCategory;
+  severity: Severity;
+  /** Default confidence for findings of this rule. */
+  confidence: Confidence;
+  /** Harvest-now-decrypt-later exposure. */
+  hndl: boolean;
+  /** Representative classical algorithm family; refined per-finding when it varies. */
+  algorithm?: AlgorithmFamily;
+  /** Associated CWE identifier (e.g. "CWE-327"). */
+  cwe?: string;
+  /** Suggested post-quantum remediation. When omitted, derived from {@link algorithm}. */
+  remediation?: string;
+  /** Canonical one-line human explanation; may be refined per-finding. */
+  message: string;
+  /** True when this rule's matched snippet IS sensitive key material. */
+  sensitive?: boolean;
+  /** Short description of what the rule detects (for catalog / MCP surfaces). */
+  description?: string;
+}
+
 /** A pluggable source detector. Detectors are pure and stateless. */
 export interface Detector {
   /** Unique id, used as the Finding.ruleId prefix space. */
@@ -118,6 +158,13 @@ export interface Detector {
    * Defaults to `"js"` when omitted.
    */
   language?: DetectorLanguage;
+  /**
+   * The rules this detector can emit, as declarative metadata. Together across
+   * all detectors these form the rule catalog ({@link DetectorRegistry.ruleCatalog}).
+   * Optional for backward compatibility with externally-defined detectors, but
+   * all built-in detectors declare it.
+   */
+  rules?: RuleMeta[];
   /** Whether this detector should run against the given file path. */
   appliesTo(filePath: string): boolean;
   /** Inspect a single file's contents and return zero or more findings. */
@@ -170,6 +217,13 @@ export interface ScanOptions {
    * registry's detectors are used.
    */
   detectors?: Detector[];
+  /**
+   * Rule ids to suppress. Any finding whose `ruleId` is listed here is dropped
+   * after detection. Serializable (a plain string array), so it is honoured on
+   * both the serial and the worker-thread (`scanParallel`) paths. See the rule
+   * catalog ({@link DetectorRegistry.ruleCatalog}) for the valid ids.
+   */
+  disabledRules?: string[];
   /** Optional progress callback. */
   onFile?: (file: string) => void;
   /**
