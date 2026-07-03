@@ -74,24 +74,46 @@ function remediationText(algorithm) {
 }
 
 // ../core/dist/detect-utils.js
-function offsetToLineCol(content, offset) {
-  let line = 1;
-  let lastNewline = -1;
-  for (let i = 0; i < offset && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) {
-      line++;
-      lastNewline = i;
+var cachedContent = null;
+var cachedLineStarts = [];
+function lineStartsFor(content) {
+  if (content === cachedContent)
+    return cachedLineStarts;
+  const starts = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10)
+      starts.push(i + 1);
+  }
+  cachedContent = content;
+  cachedLineStarts = starts;
+  return starts;
+}
+function lineIndexFor(starts, offset) {
+  let lo = 0;
+  let hi = starts.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >>> 1;
+    if (starts[mid] <= offset) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
     }
   }
-  return { line, column: offset - lastNewline };
+  return best;
+}
+function offsetToLineCol(content, offset) {
+  const starts = lineStartsFor(content);
+  const idx = lineIndexFor(starts, offset);
+  return { line: idx + 1, column: offset - starts[idx] + 1 };
 }
 function lineAt(content, offset) {
-  let start = offset;
-  while (start > 0 && content.charCodeAt(start - 1) !== 10)
-    start--;
-  let end = offset;
-  while (end < content.length && content.charCodeAt(end) !== 10)
-    end++;
+  const starts = lineStartsFor(content);
+  const idx = lineIndexFor(starts, offset);
+  const start = starts[idx];
+  const nextStart = idx + 1 < starts.length ? starts[idx + 1] : content.length + 1;
+  const end = Math.min(nextStart - 1, content.length);
   return content.slice(start, end).replace(/\r$/, "").trim();
 }
 function makeFinding(spec) {

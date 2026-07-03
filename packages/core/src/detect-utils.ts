@@ -20,28 +20,62 @@ export interface LineCol {
 }
 
 /**
+ * Memoized line-start offsets for the CURRENT content string. A scan processes
+ * all of one file's findings consecutively against the same `content` reference,
+ * so a single-entry cache turns the previously O(offset)-per-finding line/column
+ * math into O(log n) — the whole file is O(n log n) instead of O(n²). Without
+ * this, a large file with many findings scaled quadratically (a real perf cliff,
+ * caught by the ReDoS/time-budget test).
+ */
+let cachedContent: string | null = null;
+let cachedLineStarts: number[] = [];
+function lineStartsFor(content: string): number[] {
+  if (content === cachedContent) return cachedLineStarts;
+  const starts = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10 /* \n */) starts.push(i + 1);
+  }
+  cachedContent = content;
+  cachedLineStarts = starts;
+  return starts;
+}
+
+/** Index of the line containing `offset` (0-based into the line-starts array). */
+function lineIndexFor(starts: readonly number[], offset: number): number {
+  let lo = 0;
+  let hi = starts.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    if (starts[mid] <= offset) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+/**
  * Convert a 0-based character offset within `content` into a 1-based
  * line/column. Newlines are LF; CR is treated as an ordinary character, so on
  * CRLF files the column includes the trailing CR offset harmlessly.
  */
 export function offsetToLineCol(content: string, offset: number): LineCol {
-  let line = 1;
-  let lastNewline = -1;
-  for (let i = 0; i < offset && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10 /* \n */) {
-      line++;
-      lastNewline = i;
-    }
-  }
-  return { line, column: offset - lastNewline };
+  const starts = lineStartsFor(content);
+  const idx = lineIndexFor(starts, offset);
+  return { line: idx + 1, column: offset - starts[idx] + 1 };
 }
 
 /** Extract the (trimmed) single source line containing `offset`. */
 export function lineAt(content: string, offset: number): string {
-  let start = offset;
-  while (start > 0 && content.charCodeAt(start - 1) !== 10) start--;
-  let end = offset;
-  while (end < content.length && content.charCodeAt(end) !== 10) end++;
+  const starts = lineStartsFor(content);
+  const idx = lineIndexFor(starts, offset);
+  const start = starts[idx];
+  const nextStart = idx + 1 < starts.length ? starts[idx + 1] : content.length + 1;
+  // nextStart points just past the '\n'; the line content ends before it.
+  const end = Math.min(nextStart - 1, content.length);
   return content.slice(start, end).replace(/\r$/, "").trim();
 }
 
