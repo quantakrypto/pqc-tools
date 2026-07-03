@@ -568,7 +568,15 @@ function multiFamilyRemediation(algorithms: readonly AlgorithmFamily[]): string 
  */
 export function manifestEcosystem(file: string): DependencyEcosystem | null {
   const base = (file.split("/").pop() ?? file).toLowerCase();
-  if (base === "package.json" || base === "package-lock.json") return "npm";
+  if (
+    base === "package.json" ||
+    base === "package-lock.json" ||
+    base === "npm-shrinkwrap.json" ||
+    base === "yarn.lock" ||
+    base === "pnpm-lock.yaml"
+  ) {
+    return "npm";
+  }
   if (base === "requirements.txt" || /^requirements[\w.-]*\.txt$/.test(base)) return "pypi";
   if (base === "pyproject.toml" || base === "pipfile") return "pypi";
   if (base === "cargo.toml") return "cargo";
@@ -713,7 +721,14 @@ export function scanManifest(file: string, content: string): Finding[] {
   const db = BY_ECOSYSTEM.get(ecosystem);
   if (!db) return [];
 
-  if (ecosystem === "npm") return scanNpmManifest(content, file, db);
+  if (ecosystem === "npm") {
+    const base = (file.split("/").pop() ?? file).toLowerCase();
+    // yarn.lock / pnpm-lock.yaml are not JSON — extract names from their text.
+    if (base === "yarn.lock" || base === "pnpm-lock.yaml") {
+      return scanNpmLockfile(content, file, db);
+    }
+    return scanNpmManifest(content, file, db);
+  }
 
   const found = new Map<string, VulnerableDependency>(); // dedupe by entry
   for (const raw of candidateNames(ecosystem, content)) {
@@ -776,6 +791,46 @@ function scanNpmManifest(
     const dep = db.get(name);
     if (!dep) continue;
     findings.push(dependencyFinding(dep, file, content, offsetOfKey(content, name)));
+  }
+  return sortByTitle(findings);
+}
+
+/**
+ * Extract candidate package names from a yarn.lock / pnpm-lock.yaml text body.
+ * Generous — every `name@…` (and pnpm's `/name/version`) token is captured; the
+ * caller filters against the vulnerable-dependency DB, so over-capture is safe.
+ * Handles yarn v1 (`elliptic@^6.5.4:`), yarn berry (`"elliptic@npm:^6.5.4":`),
+ * and pnpm (`/elliptic@6.5.4:`, scoped `/@noble/curves@1.2.0:`).
+ */
+function npmLockfileCandidates(content: string): string[] {
+  const names = new Set<string>();
+  const at = /(?:^|[\s,"'/])((?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*)@/gm;
+  let m: RegExpExecArray | null;
+  while ((m = at.exec(content)) !== null) names.add(m[1].toLowerCase());
+  // pnpm's older `/name/version` form (name followed by a version digit).
+  const slash = /(?:^|\s)\/((?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*)\/\d/gm;
+  while ((m = slash.exec(content)) !== null) names.add(m[1].toLowerCase());
+  return [...names];
+}
+
+/**
+ * npm lockfile scan (yarn.lock / pnpm-lock.yaml): match every package token in
+ * the lockfile text against the vulnerable-dependency DB. Catches transitive
+ * dependencies that never appear in package.json.
+ */
+function scanNpmLockfile(
+  content: string,
+  file: string,
+  db: Map<string, VulnerableDependency>,
+): Finding[] {
+  const found = new Map<string, VulnerableDependency>();
+  for (const name of npmLockfileCandidates(content)) {
+    const dep = db.get(name);
+    if (dep) found.set(dep.name, dep);
+  }
+  const findings: Finding[] = [];
+  for (const dep of found.values()) {
+    findings.push(dependencyFinding(dep, file, content, offsetOfName(content, dep.name)));
   }
   return sortByTitle(findings);
 }

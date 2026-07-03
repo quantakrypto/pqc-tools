@@ -340,8 +340,11 @@ async function* walkDir(absDir: string, relDir: string, ctx: WalkContext): Async
     if (!entry.isFile()) continue;
     if (isExcluded(rel, ctx.exclude)) continue;
     if (!isIncluded(rel, ctx.include)) continue;
-    if (isBinaryPath(rel)) continue;
-    if (isGeneratedPath(rel)) continue;
+    // Dependency manifests (incl. yarn.lock / pnpm-lock.yaml) are always read —
+    // they carry the dependency tree and must not be dropped as binary/generated.
+    const manifest = isManifestFile(rel);
+    if (!manifest && isBinaryPath(rel)) continue;
+    if (!manifest && isGeneratedPath(rel)) continue;
 
     try {
       const s = await stat(abs);
