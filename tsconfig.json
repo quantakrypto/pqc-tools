@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/core" },
+    { "path": "packages/agent" },
     { "path": "packages/qscan" },
     { "path": "packages/mcp" },
     { "path": "packages/action" },
