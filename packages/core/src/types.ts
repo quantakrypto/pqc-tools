@@ -50,6 +50,21 @@ export interface SourceLocation {
   snippet?: string;
 }
 
+/** Relative urgency an LLM triage pass assigns to a finding. */
+export type TriagePriority = "now" | "soon" | "later";
+
+/**
+ * Optional LLM triage annotation attached to a finding by `qscan --triage`.
+ * Purely additive: it re-ranks and explains, it never suppresses a finding and
+ * never influences the exit code (which is computed from `severity` alone).
+ */
+export interface TriageAnnotation {
+  /** 0–100 real-world exposure/exploitability estimate. */
+  exposureScore: number;
+  priority: TriagePriority;
+  rationale: string;
+}
+
 /** A single detected concern. */
 export interface Finding {
   /** Stable rule identifier, e.g. "rsa-keygen", "ecdh-usage", "tls-legacy-version", "dep-vulnerable". */
@@ -74,6 +89,8 @@ export interface Finding {
    * snippet for such findings, regardless of any redaction flag.
    */
   sensitive?: boolean;
+  /** Optional LLM triage annotation (`qscan --triage`); never affects exit code. */
+  triage?: TriageAnnotation;
   location: SourceLocation;
 }
 

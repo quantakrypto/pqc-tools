@@ -191,11 +191,31 @@ export async function runQscan(
     suppressed = split.suppressed;
   }
 
+  // Exit code is computed from RAW severities, BEFORE triage runs, so the
+  // (optional) LLM triage pass can never make a failing scan pass CI.
   const exitCode = result.findings.some((f) =>
     meetsThreshold(f.severity, options.severityThreshold),
   )
     ? EXIT.FINDINGS
     : EXIT.OK;
+
+  // Optional BYOK triage: annotate + re-sort findings (never suppresses). The
+  // agent (networked) package is loaded only here, via dynamic import.
+  if (options.triage) {
+    const { runTriage } = await import("./triage-run.js");
+    const triaged = await runTriage(result, {
+      level: options.contextLevel ?? "snippet",
+      floor: options.triageFloor,
+      dryRun: options.dryRun,
+      provider: options.llmProvider,
+      model: options.llmModel,
+      cacheFile: options.cacheFile,
+      root: options.path,
+    });
+    if (triaged.preflight !== undefined) {
+      return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };
+    }
+  }
 
   return {
     result,

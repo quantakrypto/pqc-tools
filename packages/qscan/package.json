@@ -36,6 +36,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@quantakrypto/agent": "0.4.0",
     "@quantakrypto/core": "0.4.0"
   },
   "scripts": {

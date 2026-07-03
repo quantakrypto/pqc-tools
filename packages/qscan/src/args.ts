@@ -9,7 +9,13 @@
  */
 
 import { meetsThreshold, SEVERITY_ORDER, severityRank } from "@quantakrypto/core";
-import type { ReportFormat, Severity } from "@quantakrypto/core";
+import type { ContextLevel, ReportFormat, Severity } from "@quantakrypto/core";
+
+/** Valid context levels for `--context` (how much source triage/remediate sends). */
+const CONTEXT_LEVELS: readonly ContextLevel[] = ["metadata", "snippet", "function", "file"];
+/** Valid `--llm-provider` values. */
+const LLM_PROVIDERS = ["anthropic", "openai-compatible"] as const;
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 // Severity ordering, ranking, and threshold logic are the monorepo's single
 // source of truth in `@quantakrypto/core`. Re-export them here so existing
@@ -81,6 +87,18 @@ export interface QscanOptions {
   disabledRules?: string[];
   /** Content-hash scan cache path (`--cache [path]`); reuse unchanged files. */
   cacheFile?: string;
+  /** Run the BYOK LLM triage pass (`--triage`): annotate + re-sort, never suppress. */
+  triage: boolean;
+  /** Only triage findings at/above this seriousness (`--triage-floor`). Default: medium. */
+  triageFloor?: Severity;
+  /** How much source context leaves the machine (`--context`). Default: snippet. */
+  contextLevel?: ContextLevel;
+  /** Print the exact triage payload and exit without calling the provider (`--dry-run`). */
+  dryRun: boolean;
+  /** BYOK provider (`--llm-provider`). Default: anthropic. */
+  llmProvider?: LlmProvider;
+  /** BYOK model id (`--llm-model`). */
+  llmModel?: string;
   /**
    * Omit code snippets from the JSON/SARIF report (`--no-snippets`). Passed to
    * core's reporters as `{ redactSnippets: true }`. Snippets of `sensitive`
@@ -152,6 +170,8 @@ export function defaultOptions(): QscanOptions {
     quiet: false,
     noSnippets: false,
     noConfigFile: false,
+    triage: false,
+    dryRun: false,
   };
 }
 
@@ -258,6 +278,26 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--top":
         options.topN = asInt(takeValue(), "--top");
         break;
+      case "--triage":
+        rejectInlineValue();
+        options.triage = true;
+        break;
+      case "--triage-floor":
+        options.triageFloor = asSeverity(takeValue());
+        break;
+      case "--context":
+        options.contextLevel = asContextLevel(takeValue());
+        break;
+      case "--dry-run":
+        rejectInlineValue();
+        options.dryRun = true;
+        break;
+      case "--llm-provider":
+        options.llmProvider = asProvider(takeValue());
+        break;
+      case "--llm-model":
+        options.llmModel = takeValue();
+        break;
       case "--cache": {
         // `--cache` alone uses the default file; `--cache <path>` names it.
         if (inlineValue !== undefined) {
@@ -356,6 +396,22 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 export function asFormat(value: string): QscanFormat {
   if ((FORMATS as readonly string[]).includes(value)) return value as QscanFormat;
   throw new ArgError(`invalid --format "${value}" (expected one of: ${FORMATS.join(", ")})`);
+}
+
+/** Validate/normalize a `--context` level. */
+export function asContextLevel(value: string): ContextLevel {
+  if ((CONTEXT_LEVELS as readonly string[]).includes(value)) return value as ContextLevel;
+  throw new ArgError(
+    `invalid --context "${value}" (expected one of: ${CONTEXT_LEVELS.join(", ")})`,
+  );
+}
+
+/** Validate/normalize a `--llm-provider` value. */
+export function asProvider(value: string): LlmProvider {
+  if ((LLM_PROVIDERS as readonly string[]).includes(value)) return value as LlmProvider;
+  throw new ArgError(
+    `invalid --llm-provider "${value}" (expected one of: ${LLM_PROVIDERS.join(", ")})`,
+  );
 }
 
 /** Validate/normalize a non-negative integer flag value. */

@@ -43,6 +43,17 @@ OPTIONS
   --top <n>                     List <n> findings in the human report (default: 5)
   --cache [file]                Reuse findings for unchanged files across runs
                                 (default file: .quantakrypto-cache.json)
+  --triage                      BYOK LLM pass that re-ranks findings by real
+                                exposure and explains them (never suppresses,
+                                never changes the exit code). Needs an API key in
+                                QK_LLM_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY
+  --triage-floor <level>        Only triage findings at/above this level (default: medium)
+  --context <level>             Source shared with the LLM: metadata|snippet|
+                                function|file (default: snippet; secrets always redacted)
+  --dry-run                     With --triage, print the exact payload that would
+                                be sent and exit without calling the provider
+  --llm-provider <name>         anthropic | openai-compatible (default: anthropic)
+  --llm-model <id>              Model id for the BYOK provider
   --baseline <file>             Suppress findings listed in a baseline file
   --write-baseline <file>       Write current findings as a baseline, then exit 0
   --quiet                       Suppress the human summary banner

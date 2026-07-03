@@ -4,7 +4,7 @@
  * `@quantakrypto/agent` package speak the same shapes without the offline side
  * ever importing the network client.
  */
-import type { Severity } from "./types.js";
+import type { Severity, TriageAnnotation } from "./types.js";
 
 /** How much source context a redacted request carries. */
 export type ContextLevel = "metadata" | "snippet" | "function" | "file";
@@ -27,13 +27,11 @@ export interface RedactedContext {
   redactedSecret: boolean;
 }
 
-/** An LLM triage verdict for a single finding (never suppresses it). */
-export interface TriageVerdict {
+/** An LLM triage verdict for a single finding (never suppresses it). The
+ * exposure/priority/rationale body is the {@link TriageAnnotation} that gets
+ * attached to the finding; `fingerprint` links it back to that finding. */
+export interface TriageVerdict extends TriageAnnotation {
   fingerprint: string;
-  /** 0–100 real-world exposure/exploitability. */
-  exposureScore: number;
-  priority: "now" | "soon" | "later";
-  rationale: string;
 }
 
 /** A concrete proposed edit: the full new content for a single file. */
