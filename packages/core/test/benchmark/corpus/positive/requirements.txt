@@ -1,4 +1,4 @@
 # service dependencies
 pycryptodome==3.19.0
-cryptography==41.0.0
+cryptography==48.0.1
 requests==2.31.0
