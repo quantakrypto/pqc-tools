@@ -17,5 +17,7 @@ export type { JsonSchema } from "./validate.js";
 export { validateAgainstSchema } from "./validate.js";
 export { triageFindings } from "./triage.js";
 export type { TriageOptions } from "./triage.js";
+export { proposeFix, FIX_PROMPT_VERSION } from "./remediate.js";
+export type { ProposeFixOptions } from "./remediate.js";
 export { TRIAGE_PROMPT_VERSION } from "./prompt.js";
 export { loadResponseCache, saveResponseCache, cacheKey } from "./response-cache.js";
