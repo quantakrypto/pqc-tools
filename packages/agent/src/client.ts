@@ -3,6 +3,8 @@
  * implement {@link LlmClient}; {@link resolveClient} picks one from config.
  */
 import type { JsonSchema } from "./validate.js";
+import { anthropicClient } from "./anthropic.js";
+import { openAiCompatibleClient } from "./openai.js";
 
 /** A single structured completion request. */
 export interface LlmRequest {
@@ -30,4 +32,11 @@ export interface LlmConfig {
   timeoutMs?: number;
   /** Repair retries on an invalid response. Defaults to 1. */
   maxRetries?: number;
+}
+
+/** Pick the adapter for `config.provider`. `fetchImpl` is injectable for tests. */
+export function resolveClient(config: LlmConfig, fetchImpl: typeof fetch = fetch): LlmClient {
+  return config.provider === "anthropic"
+    ? anthropicClient(config, fetchImpl)
+    : openAiCompatibleClient(config, fetchImpl);
 }

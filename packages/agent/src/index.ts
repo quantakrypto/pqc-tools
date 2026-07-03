@@ -8,3 +8,10 @@
  * reuses them without ever loading this package.
  */
 export const AGENT_PACKAGE = "@quantakrypto/agent";
+
+export type { LlmClient, LlmConfig, LlmRequest } from "./client.js";
+export { resolveClient } from "./client.js";
+export { anthropicClient } from "./anthropic.js";
+export { openAiCompatibleClient } from "./openai.js";
+export type { JsonSchema } from "./validate.js";
+export { validateAgainstSchema } from "./validate.js";
