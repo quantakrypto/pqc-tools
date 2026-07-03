@@ -179,6 +179,16 @@ fixed that the scanner still flags.
 > deterministically. The BYOK client that calls a provider directly lives only
 > in `qscan --triage` (for CI, where there is no host agent).
 
+## Resources & prompts
+
+Beyond tools, the server exposes MCP **resources** and a **prompt** (advertised in
+the `initialize` capabilities, all offline/static):
+
+- `resources/list` + `resources/read` — `quantakrypto://rules` (the full rule
+  catalog as JSON) and `quantakrypto://guide/migration` (a Markdown migration guide).
+- `prompts/list` + `prompts/get` — the `migrate` prompt (optional `path` arg): a
+  ready-made "scan → triage → remediate → verify, draft PR only" workflow.
+
 ## Hosted HTTP server (safe-by-default)
 
 The same `McpServer` can be served over HTTP (a Streamable-HTTP-style JSON-RPC

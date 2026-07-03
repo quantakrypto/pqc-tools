@@ -145,3 +145,71 @@ test("tools/call missing name yields InvalidParams", async () => {
   );
   assert.equal(res.error.code, ErrorCode.InvalidParams);
 });
+
+test("resources/list advertises the rule catalog and migration guide", async () => {
+  const server = createQuantakryptoServer();
+  const res = expectSuccess(
+    await server.handle({ jsonrpc: "2.0", id: 9, method: "resources/list" }),
+  );
+  const { resources } = res.result as { resources: { uri: string }[] };
+  const uris = resources.map((r) => r.uri);
+  assert.ok(uris.includes("quantakrypto://rules"));
+  assert.ok(uris.includes("quantakrypto://guide/migration"));
+});
+
+test("resources/read returns the rule catalog JSON", async () => {
+  const server = createQuantakryptoServer();
+  const res = expectSuccess(
+    await server.handle({
+      jsonrpc: "2.0",
+      id: 10,
+      method: "resources/read",
+      params: { uri: "quantakrypto://rules" },
+    }),
+  );
+  const { contents } = res.result as { contents: { mimeType: string; text: string }[] };
+  assert.equal(contents[0].mimeType, "application/json");
+  const catalog = JSON.parse(contents[0].text) as { id: string }[];
+  assert.ok(Array.isArray(catalog) && catalog.length > 0);
+});
+
+test("resources/read rejects an unknown uri", async () => {
+  const server = createQuantakryptoServer();
+  const res = await server.handle({
+    jsonrpc: "2.0",
+    id: 11,
+    method: "resources/read",
+    params: { uri: "quantakrypto://nope" },
+  });
+  assert.ok(res && "error" in (res as object));
+});
+
+test("prompts/list + prompts/get materialize the migrate prompt", async () => {
+  const server = createQuantakryptoServer();
+  const list = expectSuccess(
+    await server.handle({ jsonrpc: "2.0", id: 12, method: "prompts/list" }),
+  );
+  assert.ok(
+    (list.result as { prompts: { name: string }[] }).prompts.some((p) => p.name === "migrate"),
+  );
+
+  const got = expectSuccess(
+    await server.handle({
+      jsonrpc: "2.0",
+      id: 13,
+      method: "prompts/get",
+      params: { name: "migrate", arguments: { path: "src" } },
+    }),
+  );
+  const { messages } = got.result as { messages: { content: { text: string } }[] };
+  assert.match(messages[0].content.text, /Migrate src/);
+  assert.match(messages[0].content.text, /verify_fix/);
+});
+
+test("initialize advertises resources + prompts capabilities", async () => {
+  const server = createQuantakryptoServer();
+  const res = expectSuccess(await server.handle({ jsonrpc: "2.0", id: 14, method: "initialize" }));
+  const caps = (res.result as { capabilities: Record<string, unknown> }).capabilities;
+  assert.ok(caps.resources);
+  assert.ok(caps.prompts);
+});

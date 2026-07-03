@@ -33,6 +33,7 @@ import type {
   ToolDescriptor,
   ToolResult,
 } from "./protocol.js";
+import { RESOURCES, PROMPTS, readResource, getPrompt } from "./resources.js";
 
 /** Identifying info advertised to clients during `initialize`. */
 export interface ServerInfo {
@@ -138,9 +139,49 @@ export class McpServer {
         return { tools: this.listTools() };
       case "tools/call":
         return this.onToolsCall(req.params, context);
+      case "resources/list":
+        return { resources: RESOURCES };
+      case "resources/read":
+        return this.onResourcesRead(req.params);
+      case "prompts/list":
+        return { prompts: PROMPTS };
+      case "prompts/get":
+        return this.onPromptsGet(req.params);
       default:
         throw new RpcError(ErrorCode.MethodNotFound, `method not found: ${req.method}`);
     }
+  }
+
+  /** `resources/read`: return the body for a known resource URI. */
+  private onResourcesRead(params: unknown): unknown {
+    if (typeof params !== "object" || params === null || Array.isArray(params)) {
+      throw new RpcError(ErrorCode.InvalidParams, "resources/read requires an object params");
+    }
+    const uri = (params as { uri?: unknown }).uri;
+    if (typeof uri !== "string" || uri.length === 0) {
+      throw new RpcError(ErrorCode.InvalidParams, "resources/read requires a 'uri' string");
+    }
+    const contents = readResource(uri);
+    if (!contents) throw new RpcError(ErrorCode.InvalidParams, `unknown resource: ${uri}`);
+    return { contents: [contents] };
+  }
+
+  /** `prompts/get`: materialize a named prompt with optional arguments. */
+  private onPromptsGet(params: unknown): unknown {
+    if (typeof params !== "object" || params === null || Array.isArray(params)) {
+      throw new RpcError(ErrorCode.InvalidParams, "prompts/get requires an object params");
+    }
+    const { name, arguments: args } = params as { name?: unknown; arguments?: unknown };
+    if (typeof name !== "string" || name.length === 0) {
+      throw new RpcError(ErrorCode.InvalidParams, "prompts/get requires a 'name' string");
+    }
+    const promptArgs =
+      args && typeof args === "object" && !Array.isArray(args)
+        ? (args as Record<string, unknown>)
+        : {};
+    const prompt = getPrompt(name, promptArgs);
+    if (!prompt) throw new RpcError(ErrorCode.InvalidParams, `unknown prompt: ${name}`);
+    return prompt;
   }
 
   /** Build the `initialize` result. */
@@ -149,8 +190,10 @@ export class McpServer {
     const result: Record<string, unknown> = {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {
-        // We expose tools; our list is static, so listChanged is false.
+        // Everything we expose is static, so listChanged is false throughout.
         tools: { listChanged: false },
+        resources: { listChanged: false },
+        prompts: { listChanged: false },
       },
       serverInfo: { name: this.info.name, version: this.info.version },
     };
