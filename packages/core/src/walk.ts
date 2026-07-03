@@ -118,12 +118,79 @@ export function toPosix(p: string): string {
   return p.split(path.sep).join("/");
 }
 
-/** True if `rel` (a POSIX relative path) matches any pattern (substring/prefix). */
-function matchesAny(rel: string, patterns: readonly string[]): boolean {
+/** A pattern is treated as a glob when it contains one of these metacharacters. */
+function hasGlobMeta(pattern: string): boolean {
+  return /[*?[]/.test(pattern);
+}
+
+/**
+ * Translate a glob into an anchored RegExp: `*` matches within a path segment
+ * (not `/`), `**` matches across segments, `**​/` is an optional path prefix,
+ * `?` matches a single non-`/` char, `[...]` is a character class. Other regex
+ * metacharacters are escaped.
+ */
+function globToRegExp(glob: string): RegExp {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        i++; // consume the second '*'
+        if (glob[i + 1] === "/") {
+          i++; // consume the trailing '/'
+          re += "(?:.*/)?"; // zero or more path segments
+        } else {
+          re += ".*"; // '**' spanning segments
+        }
+      } else {
+        re += "[^/]*"; // '*' within a segment
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else if (c === "[") {
+      // Pass a character class through; find its closing ']'.
+      const end = glob.indexOf("]", i + 1);
+      if (end === -1) {
+        re += "\\[";
+      } else {
+        re += glob.slice(i, end + 1);
+        i = end;
+      }
+    } else if ("\\^$.|+(){}".includes(c)) {
+      re += "\\" + c;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+
+/** Memoized glob→RegExp so a pattern is compiled once, not once per file. */
+const GLOB_CACHE = new Map<string, RegExp>();
+function globRegExp(pattern: string): RegExp {
+  let re = GLOB_CACHE.get(pattern);
+  if (!re) {
+    re = globToRegExp(pattern);
+    GLOB_CACHE.set(pattern, re);
+  }
+  return re;
+}
+
+/**
+ * True if `rel` (a POSIX relative path) matches any pattern. A pattern with a
+ * glob metacharacter (`*`, `?`, `[`) is matched as an anchored glob; a plain
+ * pattern keeps the historical substring / path-prefix semantics (so `"src"`
+ * still matches `src/a.ts` and `"secrets"` matches anywhere).
+ */
+export function matchesAny(rel: string, patterns: readonly string[]): boolean {
   for (const pattern of patterns) {
     if (!pattern) continue;
     const p = toPosix(pattern).replace(/\/+$/, "");
-    // Substring match (handles "src/legacy" or "secrets")...
+    if (hasGlobMeta(p)) {
+      if (globRegExp(p).test(rel)) return true;
+      continue;
+    }
+    // Plain pattern: substring match (handles "src/legacy" or "secrets")...
     if (rel.includes(p)) return true;
     // ...and explicit path-prefix match ("foo" should match "foo/bar.ts").
     if (rel === p || rel.startsWith(`${p}/`)) return true;

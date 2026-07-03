@@ -976,11 +976,62 @@ var BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
 function toPosix(p) {
   return p.split(path.sep).join("/");
 }
+function hasGlobMeta(pattern) {
+  return /[*?[]/.test(pattern);
+}
+function globToRegExp(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        i++;
+        if (glob[i + 1] === "/") {
+          i++;
+          re += "(?:.*/)?";
+        } else {
+          re += ".*";
+        }
+      } else {
+        re += "[^/]*";
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else if (c === "[") {
+      const end = glob.indexOf("]", i + 1);
+      if (end === -1) {
+        re += "\\[";
+      } else {
+        re += glob.slice(i, end + 1);
+        i = end;
+      }
+    } else if ("\\^$.|+(){}".includes(c)) {
+      re += "\\" + c;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+var GLOB_CACHE = /* @__PURE__ */ new Map();
+function globRegExp(pattern) {
+  let re = GLOB_CACHE.get(pattern);
+  if (!re) {
+    re = globToRegExp(pattern);
+    GLOB_CACHE.set(pattern, re);
+  }
+  return re;
+}
 function matchesAny(rel, patterns) {
   for (const pattern of patterns) {
     if (!pattern)
       continue;
     const p = toPosix(pattern).replace(/\/+$/, "");
+    if (hasGlobMeta(p)) {
+      if (globRegExp(p).test(rel))
+        return true;
+      continue;
+    }
     if (rel.includes(p))
       return true;
     if (rel === p || rel.startsWith(`${p}/`))
@@ -3092,9 +3143,9 @@ function filterExplicitFileList(files, options) {
   return list.filter((rel) => {
     if (isBinaryPath(rel))
       return false;
-    if (include.length > 0 && !matchesAny2(rel, include))
+    if (include.length > 0 && !matchesAny(rel, include))
       return false;
-    if (matchesAny2(rel, exclude))
+    if (matchesAny(rel, exclude))
       return false;
     return true;
   });
@@ -3102,18 +3153,6 @@ function filterExplicitFileList(files, options) {
 async function* filterExplicitFiles(files, options) {
   for (const rel of filterExplicitFileList(files, options))
     yield rel;
-}
-function matchesAny2(rel, patterns) {
-  for (const pattern of patterns) {
-    if (!pattern)
-      continue;
-    const p = toPosix(pattern).replace(/\/+$/, "");
-    if (rel.includes(p))
-      return true;
-    if (rel === p || rel.startsWith(`${p}/`))
-      return true;
-  }
-  return false;
 }
 
 // ../core/dist/parallel.js

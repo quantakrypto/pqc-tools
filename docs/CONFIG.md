@@ -103,9 +103,12 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 
 ### 4.2 Pattern and list semantics
 
-- Patterns reuse qScan's existing matcher (substring / path-prefix, extended to
-  globs if/when the implementation adds them); this spec does not mandate a new
-  glob engine.
+- Patterns support **globs** and plain matching: a pattern containing `*`, `?`,
+  or `[…]` is matched as an anchored glob (`*` within a path segment, `**` across
+  segments, `**/` an optional path prefix, e.g. `src/**`, `**/*.ts`,
+  `**/vendor/**`); a pattern with no glob metacharacter keeps the historical
+  substring / path-prefix semantics (`"src"` matches `src/a.ts`, `"secrets"`
+  matches anywhere).
 - **`exclude`** from config is **unioned** with built-in default ignores (unless
   `noDefaultIgnores: true`) and with any CLI `--ignore` flags (CLI appends).
 - **`include`** from config sets the base inclusion set; CLI include flags (if

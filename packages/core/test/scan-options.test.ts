@@ -44,6 +44,41 @@ test("include filter restricts the walk", async () => {
   }
 });
 
+test("include/exclude support globs (** across segments, * within a segment)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-glob-"));
+  try {
+    await mkdir(path.join(dir, "src", "nested"), { recursive: true });
+    await mkdir(path.join(dir, "test"), { recursive: true });
+    await writeFile(path.join(dir, "src", "a.ts"), "//\n");
+    await writeFile(path.join(dir, "src", "b.js"), "//\n");
+    await writeFile(path.join(dir, "src", "nested", "deep.ts"), "//\n");
+    await writeFile(path.join(dir, "test", "c.ts"), "//\n");
+
+    // src/** matches every file under src (including nested), nothing under test/.
+    assert.deepEqual(await collect(walkFiles(dir, { include: ["src/**"] })), [
+      "src/a.ts",
+      "src/b.js",
+      "src/nested/deep.ts",
+    ]);
+    // **/*.ts matches .ts anywhere; the .js is excluded.
+    assert.deepEqual(await collect(walkFiles(dir, { include: ["**/*.ts"] })), [
+      "src/a.ts",
+      "src/nested/deep.ts",
+      "test/c.ts",
+    ]);
+    // exclude **/*.js drops only the .js file.
+    const noJs = await collect(walkFiles(dir, { exclude: ["**/*.js"] }));
+    assert.ok(!noJs.includes("src/b.js"));
+    assert.ok(noJs.includes("src/a.ts"));
+    // A plain (non-glob) pattern keeps the historical substring semantics.
+    assert.deepEqual(await collect(walkFiles(dir, { include: ["nested"] })), [
+      "src/nested/deep.ts",
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("scan honours include (only src/ scanned)", async () => {
   const dir = await makeTree();
   try {

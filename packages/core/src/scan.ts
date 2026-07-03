@@ -13,7 +13,7 @@ import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
-import { walkFiles, toPosix, isBinaryPath, looksMinified } from "./walk.js";
+import { walkFiles, toPosix, isBinaryPath, looksMinified, matchesAny } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import { stripCommentFindings, stripIgnoredFindings } from "./comments.js";
 import { sourceDetectors } from "./detectors/source.js";
@@ -254,15 +254,4 @@ export function filterExplicitFileList(
 /** Async-generator wrapper around {@link filterExplicitFileList} for `scan()`. */
 async function* filterExplicitFiles(files: string[], options: ScanOptions): AsyncGenerator<string> {
   for (const rel of filterExplicitFileList(files, options)) yield rel;
-}
-
-/** Local substring/prefix matcher (mirrors the walker's pattern semantics). */
-function matchesAny(rel: string, patterns: readonly string[]): boolean {
-  for (const pattern of patterns) {
-    if (!pattern) continue;
-    const p = toPosix(pattern).replace(/\/+$/, "");
-    if (rel.includes(p)) return true;
-    if (rel === p || rel.startsWith(`${p}/`)) return true;
-  }
-  return false;
 }
