@@ -315,8 +315,9 @@ function multiFamilyRemediation(algorithms) {
 }
 function manifestEcosystem(file) {
   const base = (file.split("/").pop() ?? file).toLowerCase();
-  if (base === "package.json" || base === "package-lock.json")
+  if (base === "package.json" || base === "package-lock.json" || base === "npm-shrinkwrap.json" || base === "yarn.lock" || base === "pnpm-lock.yaml") {
     return "npm";
+  }
   if (base === "requirements.txt" || /^requirements[\w.-]*\.txt$/.test(base))
     return "pypi";
   if (base === "pyproject.toml" || base === "pipfile")
@@ -433,8 +434,13 @@ function scanManifest(file, content) {
   const db = BY_ECOSYSTEM.get(ecosystem);
   if (!db)
     return [];
-  if (ecosystem === "npm")
+  if (ecosystem === "npm") {
+    const base = (file.split("/").pop() ?? file).toLowerCase();
+    if (base === "yarn.lock" || base === "pnpm-lock.yaml") {
+      return scanNpmLockfile(content, file, db);
+    }
     return scanNpmManifest(content, file, db);
+  }
   const found = /* @__PURE__ */ new Map();
   for (const raw of candidateNames(ecosystem, content)) {
     const dep = db.get(normalizeName(ecosystem, raw));
@@ -488,6 +494,30 @@ function scanNpmManifest(content, file, db) {
     if (!dep)
       continue;
     findings.push(dependencyFinding(dep, file, content, offsetOfKey(content, name)));
+  }
+  return sortByTitle(findings);
+}
+function npmLockfileCandidates(content) {
+  const names = /* @__PURE__ */ new Set();
+  const at = /(?:^|[\s,"'/])((?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*)@/gm;
+  let m;
+  while ((m = at.exec(content)) !== null)
+    names.add(m[1].toLowerCase());
+  const slash = /(?:^|\s)\/((?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*)\/\d/gm;
+  while ((m = slash.exec(content)) !== null)
+    names.add(m[1].toLowerCase());
+  return [...names];
+}
+function scanNpmLockfile(content, file, db) {
+  const found = /* @__PURE__ */ new Map();
+  for (const name of npmLockfileCandidates(content)) {
+    const dep = db.get(name);
+    if (dep)
+      found.set(dep.name, dep);
+  }
+  const findings = [];
+  for (const dep of found.values()) {
+    findings.push(dependencyFinding(dep, file, content, offsetOfName(content, dep.name)));
   }
   return sortByTitle(findings);
 }
@@ -1122,9 +1152,10 @@ async function* walkDir(absDir, relDir, ctx) {
       continue;
     if (!isIncluded(rel, ctx.include))
       continue;
-    if (isBinaryPath(rel))
+    const manifest = isManifestFile(rel);
+    if (!manifest && isBinaryPath(rel))
       continue;
-    if (isGeneratedPath(rel))
+    if (!manifest && isGeneratedPath(rel))
       continue;
     try {
       const s = await stat(abs);
@@ -3672,6 +3703,17 @@ async function scanParallel(options) {
     return scan(options);
   }
   const files = await enumerateFiles(options, baseDir);
+  if (options.signal?.aborted)
+    throw new AbortError();
+  if (typeof options.maxFiles === "number" && files.length > options.maxFiles) {
+    throw new BudgetExceededError(`maxFiles budget exceeded (limit: ${options.maxFiles}).`);
+  }
+  if (typeof options.maxBytes === "number") {
+    const totalBytes = files.reduce((n, f) => n + f.size, 0);
+    if (totalBytes > options.maxBytes) {
+      throw new BudgetExceededError(`maxBytes budget exceeded (limit: ${options.maxBytes}).`);
+    }
+  }
   if (!shouldParallelize(options, files)) {
     return scan({ ...options, files: files.map((f) => f.rel) });
   }
@@ -3694,8 +3736,10 @@ async function scanParallel(options) {
   };
   let results;
   try {
-    results = await runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, options.onFile);
-  } catch {
+    results = await runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, options.onFile, options.signal);
+  } catch (err) {
+    if (err instanceof AbortError || err instanceof BudgetExceededError)
+      throw err;
     return scan({ ...options, files: files.map((f) => f.rel) });
   }
   const merged = mergeChunkResults(results);
@@ -3717,17 +3761,33 @@ async function scanParallel(options) {
     toolVersion: VERSION
   };
 }
-function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, onFile) {
+function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, onFile, signal) {
   return new Promise((resolve2, reject) => {
     const results = new Array(chunks.length);
     let next = 0;
     let done = 0;
     let failed = false;
     const workers = [];
+    const onAbort = () => {
+      if (failed)
+        return;
+      failed = true;
+      cleanup();
+      reject(new AbortError());
+    };
     const cleanup = () => {
+      if (signal)
+        signal.removeEventListener("abort", onAbort);
       for (const w of workers)
         void w.terminate();
     };
+    if (signal) {
+      if (signal.aborted) {
+        reject(new AbortError());
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
     const dispatch = (w) => {
       if (failed)
         return;
@@ -3791,6 +3851,7 @@ var init_parallel = __esm({
     init_detect_utils();
     init_inventory();
     init_scan();
+    init_errors();
     init_version();
     DEFAULT_PARALLEL_THRESHOLD_BYTES = 2 * 1024 * 1024;
     DEFAULT_PARALLEL_FILE_THRESHOLD = 200;
