@@ -125,8 +125,9 @@ function hasGlobMeta(pattern: string): boolean {
 
 /**
  * Translate a glob into an anchored RegExp: `*` matches within a path segment
- * (not `/`), `**` matches across segments, `**​/` is an optional path prefix,
- * `?` matches a single non-`/` char, `[...]` is a character class. Other regex
+ * (not `/`), `**` matches across segments, a leading `**` before a slash is an
+ * optional path prefix, `?` matches a single non-`/` char, `[...]` is a
+ * character class. Other regex
  * metacharacters are escaped.
  */
 function globToRegExp(glob: string): RegExp {
