@@ -33,6 +33,8 @@ export type {
 export { buildContext, renderPreflight } from "./redact.js";
 export { TRIAGE_RUBRIC, TRIAGE_VERDICT_SCHEMA, buildTriageRequest } from "./triage.js";
 export type { TriageRequest } from "./triage.js";
+export { checkPatchPolicy } from "./patch-policy.js";
+export type { PolicyContext, PolicyDecision } from "./patch-policy.js";
 
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
