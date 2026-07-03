@@ -22,6 +22,8 @@ test("normalizeAlgorithm maps aliases onto canonical families", () => {
   assert.equal(normalizeAlgorithm("ecdsa"), "ECDSA");
   assert.equal(normalizeAlgorithm("Ed25519"), "EdDSA");
   assert.equal(normalizeAlgorithm("x25519"), "X25519");
+  assert.equal(normalizeAlgorithm("X448"), "X448");
+  assert.equal(normalizeAlgorithm("curve448"), "X448");
   assert.equal(normalizeAlgorithm("Diffie-Hellman"), "DH");
   assert.equal(normalizeAlgorithm("totally-made-up"), "unknown");
 });

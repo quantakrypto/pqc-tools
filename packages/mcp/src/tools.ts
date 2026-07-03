@@ -19,6 +19,7 @@ import {
   detectors,
   remediationFor,
   scan,
+  SEVERITY_ORDER,
   toCbom,
   vulnerableDependencies,
 } from "@quantakrypto/core";
@@ -29,7 +30,6 @@ import type {
   Remediation,
   ScanOptions,
   ScanResult,
-  Severity,
   VulnerableDependency,
 } from "@quantakrypto/core";
 
@@ -37,9 +37,6 @@ import { errorResult, textResult } from "./protocol.js";
 import type { JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./protocol.js";
 import { resolveRule } from "./rules.js";
 import { resolveFsConfig, resolveScanPath } from "./fsconfig.js";
-
-/** Severity order for stable, human-friendly summaries. */
-const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
 
 /** All classical algorithm families we can advise on, used for validation/help. */
 const ALGORITHM_FAMILIES: AlgorithmFamily[] = [
@@ -50,6 +47,7 @@ const ALGORITHM_FAMILIES: AlgorithmFamily[] = [
   "DH",
   "DSA",
   "X25519",
+  "X448",
   "ECIES",
   "unknown",
 ];
@@ -131,6 +129,7 @@ function normalizeAlgorithm(input: string): AlgorithmFamily {
   if (cleaned.startsWith("RSA")) return "RSA";
   if (cleaned.includes("ECDSA")) return "ECDSA";
   if (cleaned.includes("ED25519") || cleaned.includes("EDDSA")) return "EdDSA";
+  if (cleaned.includes("X448") || cleaned.includes("CURVE448")) return "X448";
   if (cleaned.includes("X25519") || cleaned.includes("CURVE25519")) return "X25519";
   if (cleaned.includes("ECDH")) return "ECDH";
   if (cleaned.includes("ECIES")) return "ECIES";
