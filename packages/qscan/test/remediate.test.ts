@@ -50,12 +50,55 @@ test("apply mode writes the fix and a re-scan is clean of the finding", async ()
   }
 });
 
-test("pr mode is gated until the LLM layer ships", async () => {
+test("pr mode opens a DRAFT PR via the injected backend and never writes the tree", async () => {
   const dir = await fixture();
   try {
-    const run = await runRemediate({ path: dir, mode: "pr", llm: false });
-    assert.equal(run.exitCode, 2);
-    assert.match(run.output, /pr is not available yet/);
+    let seen: { branch: string; patches: unknown[]; body: string } | null = null;
+    const run = await runRemediate(
+      { path: dir, mode: "pr", llm: false },
+      {
+        branchSuffix: "test",
+        openDraftPr: async (plan) => {
+          seen = plan;
+          return { url: "https://example/pr/1" };
+        },
+      },
+    );
+    assert.equal(run.exitCode, 0);
+    assert.ok(seen, "the draft-PR backend was called");
+    assert.equal(seen.branch, "quantakrypto/remediate-test");
+    assert.equal(seen.patches.length, 1);
+    assert.match(seen.body, /draft/i);
+    assert.match(run.output, /DRAFT PR/);
+    // The working tree is NOT mutated in pr mode (the backend isolates it).
+    assert.equal(await readFile(join(dir, "server.ts"), "utf8"), LEGACY);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("--llm proposes a fix for a finding no codemod covers, gated by verify", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "qremediate-llm-"));
+  try {
+    await writeFile(
+      join(dir, "keys.ts"),
+      "export const k = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });\n",
+      "utf8",
+    );
+    const run = await runRemediate(
+      { path: dir, mode: "diff", llm: true },
+      {
+        // Simulate the LLM returning PQC code that clears the finding.
+        llmPatchSource: async (finding) => ({
+          path: finding.location.file,
+          newContent: "export const k = mlkem768.keygen();\n",
+          ruleId: finding.ruleId,
+          source: "llm",
+        }),
+      },
+    );
+    assert.match(run.output, /mlkem768/);
+    assert.match(run.output, /1 verified fix/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
