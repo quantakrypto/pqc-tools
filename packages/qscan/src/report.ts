@@ -14,6 +14,7 @@
 import {
   ANALYZABLE_LANGUAGES_LABEL,
   defaultRegistry,
+  DEP_VULNERABLE_RULE,
   SEVERITY_ORDER,
   severityRank,
   toCbom,
@@ -63,12 +64,13 @@ export function renderJson(result: ScanResult, opts?: ReportOptions): string {
  */
 export function renderSarif(result: ScanResult, opts?: ReportOptions): string {
   // Advertise the full rule catalog (not just the rules that fired) so SARIF
-  // consumers see complete metadata for every rule qScan can emit.
-  return JSON.stringify(
-    toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts }),
-    null,
-    2,
-  );
+  // consumers see complete metadata for every rule qScan can emit. The detector
+  // registry's catalog is source/config rules only; `dep-vulnerable` comes from
+  // the manifest scanner, so add its generic entry — otherwise SARIF would build
+  // that rule from the first dependency finding and leak one package's specifics
+  // into the shared rule description.
+  const catalog = [...defaultRegistry.ruleCatalog(), DEP_VULNERABLE_RULE];
+  return JSON.stringify(toSarif(result, { catalog, ...opts }), null, 2);
 }
 
 /**
@@ -192,6 +194,13 @@ export function renderHuman(
 function nextStep(findings: Finding[]): string {
   const worst = [...findings].sort(compareFindings)[0];
   if (!worst) return "review the findings above.";
+  // A dependency finding points at a manifest — you replace the *package*, not
+  // "migrate package.json". Phrase it as a dependency swap.
+  if (worst.category === "dependency") {
+    return worst.remediation
+      ? `replace the vulnerable dependency in ${worst.location.file} — ${worst.remediation}`
+      : `replace the vulnerable dependency in ${worst.location.file}.`;
+  }
   if (worst.remediation) {
     return `migrate ${worst.location.file} — ${worst.remediation}`;
   }

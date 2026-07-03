@@ -109,11 +109,16 @@ export class DetectorRegistry {
 }
 
 /**
- * The default registry, preloaded with the built-in detectors in run order:
- * the JS/TS source + config detectors, then the language-agnostic PEM detector.
- * The manifest (dependency) scanner is handled separately by `scan()`.
+ * The built-in detectors, in run order: the JS/TS source + config detectors,
+ * then the per-language detectors (Python, Go, Java, C#, Rust, Ruby, C/C++),
+ * then the language-agnostic PEM detector. The manifest (dependency) scanner is
+ * handled separately by `scan()`.
+ *
+ * This is the single source of truth for the default detector set: both
+ * {@link defaultRegistry} and the public `detectors` export (re-exported from
+ * `scan.ts`) are built from it, so the two can never drift out of sync.
  */
-export const defaultRegistry = new DetectorRegistry([
+export const builtinDetectors: Detector[] = [
   ...sourceDetectors,
   pythonDetector,
   goDetector,
@@ -123,4 +128,10 @@ export const defaultRegistry = new DetectorRegistry([
   rubyDetector,
   cDetector,
   pemDetector,
-]);
+];
+
+/**
+ * The default registry, preloaded with {@link builtinDetectors}. Used by
+ * `scan()` whenever `options.detectors` is not supplied.
+ */
+export const defaultRegistry = new DetectorRegistry(builtinDetectors);

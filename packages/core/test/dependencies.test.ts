@@ -208,3 +208,13 @@ test("multi-family dependency remediation names all exposed families (C5)", () =
   assert.match(f.remediation, /ML-KEM|X25519MLKEM768/);
   assert.match(f.remediation, /ML-DSA/);
 });
+
+test("multi-family remediation de-dupes by target: ML-DSA / ML-KEM named once each", () => {
+  // A KEM+signature library used to read "…ML-DSA-65 for signatures; ML-DSA-65
+  // (FIPS 204)" because the old per-string Set couldn't collapse the two. Now
+  // the KEM target and the signature target are each named exactly once.
+  const f = scanManifest("package.json", JSON.stringify({ dependencies: { jose: "5" } }))[0];
+  const rem = f.remediation ?? "";
+  assert.equal(rem.match(/ML-DSA/g)?.length, 1, `ML-DSA should appear once: "${rem}"`);
+  assert.equal(rem.match(/ML-KEM/g)?.length, 1, `ML-KEM should appear once: "${rem}"`);
+});

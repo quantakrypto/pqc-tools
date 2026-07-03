@@ -72,6 +72,12 @@ var REMEDIATIONS = {
 function remediationText(algorithm) {
   return REMEDIATIONS[algorithm].recommendation;
 }
+function isConfidentialityFamily(algorithm) {
+  return algorithm === "RSA" || algorithm === "ECDH" || algorithm === "DH" || algorithm === "X25519" || algorithm === "X448" || algorithm === "ECIES";
+}
+function isSignatureFamily(algorithm) {
+  return algorithm === "RSA" || algorithm === "ECDSA" || algorithm === "EdDSA" || algorithm === "DSA";
+}
 
 // ../core/dist/detect-utils.js
 var cachedContent = null;
@@ -242,6 +248,19 @@ var CWE_CERT_VALIDATION = "CWE-295";
 var CWE_HARDCODED_KEY = "CWE-798";
 
 // ../core/dist/dependencies.js
+var DEP_VULNERABLE_RULE = {
+  id: "dep-vulnerable",
+  title: "Quantum-vulnerable dependency",
+  category: "dependency",
+  // Representative default; each SARIF result carries its own per-package level.
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "A dependency implements classical public-key cryptography that is broken by quantum computers. Replace or upgrade it to a post-quantum alternative.",
+  remediation: "Move to a post-quantum alternative \u2014 ML-KEM-768 (FIPS 203) for key exchange/encryption and ML-DSA-65 (FIPS 204) for signatures, ideally via a hybrid.",
+  description: "Flags packages in a dependency manifest known to implement quantum-vulnerable public-key cryptography (RSA, ECDH/ECDSA, DH, EdDSA, \u2026)."
+};
 var vulnerableDependencies = [
   {
     name: "node-forge",
@@ -700,19 +719,26 @@ var KEY_REGEX_BY_NAME = new Map(vulnerableDependencies.filter((d) => d.ecosystem
   const escaped = d.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
   return [d.name, new RegExp(`"${escaped}"\\s*:`)];
 }));
-var CONFIDENTIALITY_FAMILIES = /* @__PURE__ */ new Set([
-  "RSA",
-  "ECDH",
-  "DH",
-  "ECIES",
-  "X25519",
-  "X448"
-]);
 function multiFamilyRemediation(algorithms) {
-  const parts = /* @__PURE__ */ new Set();
-  for (const a of algorithms)
-    parts.add(remediationText(a));
-  return [...parts].join("; ");
+  let needsKem = false;
+  let needsSig = false;
+  let needsReview = false;
+  for (const a of algorithms) {
+    if (isConfidentialityFamily(a))
+      needsKem = true;
+    if (isSignatureFamily(a))
+      needsSig = true;
+    if (a === "unknown")
+      needsReview = true;
+  }
+  const parts = [];
+  if (needsKem)
+    parts.push("ML-KEM-768 (FIPS 203, hybrid X25519MLKEM768) for key exchange/encryption");
+  if (needsSig)
+    parts.push("ML-DSA-65 (FIPS 204) for signatures");
+  if (needsReview && parts.length === 0)
+    parts.push(remediationText("unknown"));
+  return parts.join("; ");
 }
 function manifestEcosystem(file) {
   const base = (file.split("/").pop() ?? file).toLowerCase();
@@ -807,7 +833,7 @@ function dependencyFinding(dep, file, content, index) {
     confidence: "high",
     algorithm,
     // Confidentiality libs are HNDL-exposed; signature-only ones are not.
-    hndl: dep.algorithms.some((a) => CONFIDENTIALITY_FAMILIES.has(a)),
+    hndl: dep.algorithms.some(isConfidentialityFamily),
     cwe: CWE_BROKEN_CRYPTO,
     message: `${dep.name} \u2014 ${dep.reason}`,
     remediation: multiFamilyRemediation(dep.algorithms),
@@ -2980,7 +3006,7 @@ var DetectorRegistry = class _DetectorRegistry {
     return new _DetectorRegistry(this.all());
   }
 };
-var defaultRegistry = new DetectorRegistry([
+var builtinDetectors = [
   ...sourceDetectors,
   pythonDetector,
   goDetector,
@@ -2990,7 +3016,8 @@ var defaultRegistry = new DetectorRegistry([
   rubyDetector,
   cDetector,
   pemDetector
-]);
+];
+var defaultRegistry = new DetectorRegistry(builtinDetectors);
 
 // ../core/dist/inventory.js
 var SEVERITIES = ["critical", "high", "medium", "low", "info"];
@@ -3067,17 +3094,6 @@ var BudgetExceededError = class extends Error {
 };
 
 // ../core/dist/scan.js
-var detectors = [
-  ...sourceDetectors,
-  pythonDetector,
-  goDetector,
-  javaDetector,
-  csharpDetector,
-  rustDetector,
-  rubyDetector,
-  cDetector,
-  pemDetector
-];
 function compareFindings(a, b) {
   if (a.location.file !== b.location.file)
     return a.location.file < b.location.file ? -1 : 1;
@@ -3963,7 +3979,8 @@ function renderJson(result, opts) {
   return JSON.stringify(toJson(result, opts), null, 2);
 }
 function renderSarif(result, opts) {
-  return JSON.stringify(toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts }), null, 2);
+  const catalog = [...defaultRegistry.ruleCatalog(), DEP_VULNERABLE_RULE];
+  return JSON.stringify(toSarif(result, { catalog, ...opts }), null, 2);
 }
 function renderCbom(result) {
   return JSON.stringify(toCbom(result), null, 2);
@@ -4034,6 +4051,9 @@ function nextStep(findings) {
   const worst = [...findings].sort(compareFindings2)[0];
   if (!worst)
     return "review the findings above.";
+  if (worst.category === "dependency") {
+    return worst.remediation ? `replace the vulnerable dependency in ${worst.location.file} \u2014 ${worst.remediation}` : `replace the vulnerable dependency in ${worst.location.file}.`;
+  }
   if (worst.remediation) {
     return `migrate ${worst.location.file} \u2014 ${worst.remediation}`;
   }
@@ -4261,10 +4281,6 @@ function readInputs(env = process.env) {
     redactSnippets: getBooleanInput("redact-snippets", false, env)
   };
 }
-function renderReportWithOptions(result, format, opts) {
-  const doc = format === "sarif" ? toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts }) : toJson(result, opts);
-  return JSON.stringify(doc, null, 2);
-}
 function shouldFail(blockingCount, failOnFindings) {
   return failOnFindings && blockingCount > 0;
 }
@@ -4413,7 +4429,7 @@ async function run(env = process.env) {
   await mkdir2(dirname4(outputPath), { recursive: true });
   await writeFile3(
     outputPath,
-    renderReportWithOptions(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
+    renderReport(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
     "utf8"
   );
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);

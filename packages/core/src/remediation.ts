@@ -96,6 +96,31 @@ export function remediationText(algorithm: AlgorithmFamily): string {
   return REMEDIATIONS[algorithm].recommendation;
 }
 
+/**
+ * True when a family's PQC replacement is a KEM — i.e. it's used for
+ * confidentiality / key-agreement (and is therefore harvest-now-decrypt-later
+ * exposed). RSA is in both this set and {@link isSignatureFamily}. Single
+ * source of truth for the family→target taxonomy used by tier guidance and the
+ * multi-family remediation composer.
+ */
+export function isConfidentialityFamily(algorithm: AlgorithmFamily): boolean {
+  return (
+    algorithm === "RSA" ||
+    algorithm === "ECDH" ||
+    algorithm === "DH" ||
+    algorithm === "X25519" ||
+    algorithm === "X448" ||
+    algorithm === "ECIES"
+  );
+}
+
+/** True when a family's PQC replacement is a signature scheme (ML-DSA / SLH-DSA). */
+export function isSignatureFamily(algorithm: AlgorithmFamily): boolean {
+  return (
+    algorithm === "RSA" || algorithm === "ECDSA" || algorithm === "EdDSA" || algorithm === "DSA"
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Security-tier guidance (CNSA 2.0 Category 5) + stateful HBS (SP 800-208)     */
 /* -------------------------------------------------------------------------- */
@@ -135,14 +160,7 @@ export function remediationForTier(
   const base = REMEDIATIONS[algorithm];
   const params = TIER_PARAMS[tier];
   // Confidentiality families lean on the KEM; signature families on the signer.
-  const isConfidentiality =
-    algorithm === "RSA" ||
-    algorithm === "ECDH" ||
-    algorithm === "DH" ||
-    algorithm === "X25519" ||
-    algorithm === "X448" ||
-    algorithm === "ECIES";
-  const primary = isConfidentiality ? params.kem : params.signature;
+  const primary = isConfidentialityFamily(algorithm) ? params.kem : params.signature;
   return {
     algorithm,
     recommendation: `${base.recommendation} — ${tier}: ${primary}`,
@@ -167,7 +185,5 @@ export const STATEFUL_HBS_NOTE =
 /** True when stateful HBS (SP 800-208) is a reasonable alternative for a family. */
 export function statefulHbsApplies(algorithm: AlgorithmFamily): boolean {
   // Signature families only — LMS/XMSS are signatures, not KEMs.
-  return (
-    algorithm === "RSA" || algorithm === "ECDSA" || algorithm === "EdDSA" || algorithm === "DSA"
-  );
+  return isSignatureFamily(algorithm);
 }

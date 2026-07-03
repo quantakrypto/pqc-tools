@@ -407,7 +407,8 @@ const suggestHybridTool: ToolDefinition = {
       lines.push(`Recommended replacement: ${rem.value.recommendation}`);
       lines.push(`Rationale: ${rem.value.detail}`);
     } else {
-      // Static fallback table so the tool stays useful even with a stubbed core.
+      // Defensive fallback: core has a remediation for every known family, so
+      // this only triggers if the lookup throws or the algorithm is unrecognised.
       lines.push(...staticHybridAdvice(algorithm));
     }
 

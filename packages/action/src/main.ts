@@ -19,16 +19,13 @@ import { pathToFileURL } from "node:url";
 
 import {
   applyBaseline,
-  defaultRegistry,
   fingerprintFinding,
   loadBaseline,
   meetsThreshold,
   SEVERITY_ORDER,
-  toJson,
-  toSarif,
 } from "@quantakrypto/core";
-import type { Baseline, Finding, ReportOptions, ScanResult, Severity } from "@quantakrypto/core";
-import { runQscan } from "@quantakrypto/qscan";
+import type { Baseline, Finding, ScanResult, Severity } from "@quantakrypto/core";
+import { renderReport, runQscan } from "@quantakrypto/qscan";
 
 import {
   error as annotateError,
@@ -83,26 +80,6 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
     githubToken: githubToken || undefined,
     redactSnippets: getBooleanInput("redact-snippets", false, env),
   };
-}
-
-/**
- * Render the scan result in the requested format, honouring `redactSnippets`.
- *
- * We call core's `toSarif`/`toJson` directly (rather than qScan's `renderReport`,
- * which does not yet thread report options) so the `redact-snippets` input can
- * drop `location.snippet` from the written report. The serialized shape is
- * identical to qScan's — both delegate to the same core serializers.
- */
-function renderReportWithOptions(
-  result: ScanResult,
-  format: "sarif" | "json",
-  opts: ReportOptions,
-): string {
-  const doc =
-    format === "sarif"
-      ? toSarif(result, { catalog: defaultRegistry.ruleCatalog(), ...opts })
-      : toJson(result, opts);
-  return JSON.stringify(doc, null, 2);
 }
 
 /**
@@ -368,9 +345,12 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // scanning without leaking matched source.
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir(dirname(outputPath), { recursive: true });
+  // qScan's renderReport is the single source of truth for report serialization
+  // (and threads redactSnippets + the full SARIF rule catalog, incl. the
+  // dependency rule). The Action and CLI now share it verbatim.
   await writeFile(
     outputPath,
-    renderReportWithOptions(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
+    renderReport(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
     "utf8",
   );
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);

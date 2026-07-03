@@ -18,38 +18,20 @@ import { isAnalyzableSource } from "./detect-utils.js";
 import { stripCommentFindings, stripIgnoredFindings } from "./comments.js";
 import { hashContent, loadCache, rulesetFingerprint, saveCache } from "./cache.js";
 import type { CacheEntry } from "./cache.js";
-import { sourceDetectors } from "./detectors/source.js";
-import { pythonDetector } from "./detectors/python.js";
-import { goDetector } from "./detectors/go.js";
-import { javaDetector } from "./detectors/java.js";
-import { csharpDetector } from "./detectors/csharp.js";
-import { rustDetector } from "./detectors/rust.js";
-import { rubyDetector } from "./detectors/ruby.js";
-import { cDetector } from "./detectors/c.js";
-import { pemDetector } from "./detectors/pem.js";
-import { defaultRegistry, detectorScope } from "./registry.js";
+import { builtinDetectors, defaultRegistry, detectorScope } from "./registry.js";
 import { isManifestFile, scanManifest } from "./dependencies.js";
 import { buildInventory } from "./inventory.js";
 import { AbortError, BudgetExceededError } from "./errors.js";
 import { VERSION } from "./version.js";
 
 /**
- * The full set of built-in detectors exposed on the public API. The source
- * detectors are per-language (JS/TS, Python, Go); the PEM / SSH-cert detectors
- * apply to every text file. The manifest scanner is handled separately (it
- * parses JSON rather than running a Detector).
+ * The full set of built-in detectors exposed on the public API. Re-exported
+ * from {@link builtinDetectors} in `registry.ts` — the single source of truth
+ * the {@link defaultRegistry} is also built from — so the public array and the
+ * registry can never drift apart. The manifest scanner is handled separately
+ * (it parses JSON rather than running a Detector).
  */
-export const detectors: Detector[] = [
-  ...sourceDetectors,
-  pythonDetector,
-  goDetector,
-  javaDetector,
-  csharpDetector,
-  rustDetector,
-  rubyDetector,
-  cDetector,
-  pemDetector,
-];
+export const detectors: Detector[] = builtinDetectors;
 
 /** Stable comparator: by file, then line, then ruleId. Exported for reuse. */
 export function compareFindings(a: Finding, b: Finding): number {

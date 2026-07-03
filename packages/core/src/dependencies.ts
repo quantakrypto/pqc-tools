@@ -15,11 +15,41 @@ import type {
   AlgorithmFamily,
   DependencyEcosystem,
   Finding,
+  RuleMeta,
   VulnerableDependency,
 } from "./types.js";
 import { makeFinding } from "./detect-utils.js";
-import { remediationText } from "./remediation.js";
+import { isConfidentialityFamily, isSignatureFamily, remediationText } from "./remediation.js";
 import { CWE_BROKEN_CRYPTO } from "./cwe.js";
+
+/**
+ * Catalog entry for the `dep-vulnerable` rule. Dependency findings are produced
+ * by the manifest scanner rather than a registered {@link Detector}, so this
+ * rule is absent from `defaultRegistry.ruleCatalog()`. Reporters (SARIF) merge
+ * it in so the rule advertises a GENERIC description — the per-package specifics
+ * (title/severity/HNDL/remediation) live on each individual finding/result, not
+ * on the shared rule. Without this, SARIF would leak the first dependency's
+ * package-specific text into the rule-level `shortDescription` for every dep.
+ */
+export const DEP_VULNERABLE_RULE: RuleMeta = {
+  id: "dep-vulnerable",
+  title: "Quantum-vulnerable dependency",
+  category: "dependency",
+  // Representative default; each SARIF result carries its own per-package level.
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A dependency implements classical public-key cryptography that is broken by " +
+    "quantum computers. Replace or upgrade it to a post-quantum alternative.",
+  remediation:
+    "Move to a post-quantum alternative — ML-KEM-768 (FIPS 203) for key exchange/" +
+    "encryption and ML-DSA-65 (FIPS 204) for signatures, ideally via a hybrid.",
+  description:
+    "Flags packages in a dependency manifest known to implement quantum-vulnerable " +
+    "public-key cryptography (RSA, ECDH/ECDSA, DH, EdDSA, …).",
+};
 
 /** Known quantum-vulnerable npm dependencies. */
 export const vulnerableDependencies: VulnerableDependency[] = [
@@ -504,25 +534,31 @@ const KEY_REGEX_BY_NAME = new Map<string, RegExp>(
     }),
 );
 
-/** Algorithm families that expose confidentiality (HNDL) rather than only signing. */
-const CONFIDENTIALITY_FAMILIES: ReadonlySet<AlgorithmFamily> = new Set<AlgorithmFamily>([
-  "RSA",
-  "ECDH",
-  "DH",
-  "ECIES",
-  "X25519",
-  "X448",
-]);
-
 /**
  * Build a remediation string covering ALL families a package exposes (C5),
- * rather than only `algorithms[0]`. De-duplicates the per-family recommendation
- * strings and joins them, so a signature+KEM library points at both replacements.
+ * rather than only `algorithms[0]`. De-duplicates by PQC *target* — the KEM
+ * target and the signature target are each named at most once — so a library
+ * exposing both a confidentiality family and a signature family reads
+ * "ML-KEM-768 … for key exchange/encryption; ML-DSA-65 (FIPS 204) for
+ * signatures" instead of repeating ML-DSA (the old per-string Set couldn't
+ * collapse "ML-DSA-65 for signatures" against a standalone "ML-DSA-65 (FIPS 204)").
  */
 function multiFamilyRemediation(algorithms: readonly AlgorithmFamily[]): string {
-  const parts = new Set<string>();
-  for (const a of algorithms) parts.add(remediationText(a));
-  return [...parts].join("; ");
+  let needsKem = false;
+  let needsSig = false;
+  let needsReview = false;
+  for (const a of algorithms) {
+    if (isConfidentialityFamily(a)) needsKem = true;
+    if (isSignatureFamily(a)) needsSig = true;
+    if (a === "unknown") needsReview = true;
+  }
+  const parts: string[] = [];
+  if (needsKem)
+    parts.push("ML-KEM-768 (FIPS 203, hybrid X25519MLKEM768) for key exchange/encryption");
+  if (needsSig) parts.push("ML-DSA-65 (FIPS 204) for signatures");
+  // Only fall back to the generic "review" line when nothing concrete applied.
+  if (needsReview && parts.length === 0) parts.push(remediationText("unknown"));
+  return parts.join("; ");
 }
 
 /**
@@ -639,7 +675,7 @@ function dependencyFinding(
     confidence: "high",
     algorithm,
     // Confidentiality libs are HNDL-exposed; signature-only ones are not.
-    hndl: dep.algorithms.some((a) => CONFIDENTIALITY_FAMILIES.has(a)),
+    hndl: dep.algorithms.some(isConfidentialityFamily),
     cwe: CWE_BROKEN_CRYPTO,
     message: `${dep.name} — ${dep.reason}`,
     remediation: multiFamilyRemediation(dep.algorithms),

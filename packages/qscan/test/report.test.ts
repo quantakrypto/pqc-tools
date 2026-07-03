@@ -5,9 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderHuman } from "../src/index.js";
+import { renderHuman, renderSarif } from "../src/index.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "@quantakrypto/core";
-import { makeResult } from "./helpers.js";
+import { makeFinding, makeResult } from "./helpers.js";
 
 test("renderHuman warns when no analyzable source was scanned", () => {
   const result = { ...makeResult([]), filesScanned: 12, analyzedFiles: 0 };
@@ -52,4 +52,47 @@ test("renderHuman surfaces coverage diagnostics when files were skipped", () => 
 test("renderHuman shows no coverage line when nothing was skipped", () => {
   const result = { ...makeResult([]), diagnostics: { unreadable: 0, skippedMinified: 0 } };
   assert.doesNotMatch(renderHuman(result), /Coverage:/);
+});
+
+test("next step for a dependency finding says 'replace', not 'migrate package.json'", () => {
+  const dep = makeFinding({
+    ruleId: "dep-vulnerable",
+    category: "dependency",
+    title: "Quantum-vulnerable dependency: node-forge",
+    message: "node-forge — classical RSA/ECDSA.",
+    location: { file: "package.json", line: 4 },
+  });
+  const out = renderHuman(makeResult([dep]));
+  assert.match(out, /replace the vulnerable dependency in package\.json/);
+  assert.doesNotMatch(out, /migrate package\.json/);
+});
+
+test("SARIF advertises a GENERIC dep-vulnerable rule (no per-package leak)", () => {
+  // Two dependency findings with distinct package-specific titles. The shared
+  // rule's shortDescription must be generic, not either package's title.
+  const findings = [
+    makeFinding({
+      ruleId: "dep-vulnerable",
+      category: "dependency",
+      title: "Quantum-vulnerable dependency: node-forge",
+      message: "node-forge — classical RSA.",
+      location: { file: "package.json", line: 3 },
+    }),
+    makeFinding({
+      ruleId: "dep-vulnerable",
+      category: "dependency",
+      title: "Quantum-vulnerable dependency: elliptic",
+      message: "elliptic — classical ECDSA.",
+      location: { file: "package.json", line: 5 },
+    }),
+  ];
+  const sarif = JSON.parse(renderSarif(makeResult(findings))) as {
+    runs: { tool: { driver: { rules: { id: string; shortDescription: { text: string } }[] } } }[];
+  };
+  const rules = sarif.runs[0].tool.driver.rules;
+  const depRule = rules.find((r) => r.id === "dep-vulnerable");
+  assert.ok(depRule, "the dep-vulnerable rule is advertised");
+  assert.equal(depRule.shortDescription.text, "Quantum-vulnerable dependency");
+  // It must not carry either finding's package-specific title.
+  assert.doesNotMatch(depRule.shortDescription.text, /node-forge|elliptic/);
 });
