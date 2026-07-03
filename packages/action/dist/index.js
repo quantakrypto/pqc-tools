@@ -406,8 +406,10 @@ function dependencyFinding(dep, file, content, index) {
     severity: dep.severity,
     confidence: "high",
     algorithm,
-    // Confidentiality libs are HNDL-exposed; signature-only ones are not.
-    hndl: dep.algorithms.some(isConfidentialityFamily),
+    // Confidentiality libs are HNDL-exposed; signature-only ones are not. An
+    // explicit `dep.hndl` wins (some packages list RSA/EC as a family but only
+    // ever sign — e.g. JWS/JWT libs — and signatures are not HNDL-exposed).
+    hndl: dep.hndl ?? dep.algorithms.some(isConfidentialityFamily),
     cwe: CWE_BROKEN_CRYPTO,
     message: `${dep.name} \u2014 ${dep.reason}`,
     remediation: multiFamilyRemediation(dep.algorithms),
@@ -589,7 +591,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "JWTs commonly signed with RS256/ES256 (classical RSA/ECDSA).",
         algorithms: ["RSA", "ECDSA"],
-        severity: "high"
+        severity: "high",
+        hndl: false
       },
       {
         name: "jose",
@@ -603,7 +606,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "JSON Web Signatures using classical RS/ES algorithms.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "high"
+        severity: "high",
+        hndl: false
       },
       {
         name: "eccrypto",
@@ -659,7 +663,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
         algorithms: ["EdDSA", "RSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "bcrypto",
@@ -729,7 +734,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "JSON Web Algorithms: RSA (RS/PS) and EC (ES) signatures.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "jwk-to-pem",
@@ -743,7 +749,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "JWT signing/verification with classical RS/PS/ES algorithms.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "ssh2",
@@ -771,7 +778,8 @@ var init_dependencies = __esm({
         ecosystem: "npm",
         reason: "HTTP request signing with classical RSA/ECDSA keys.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "libsodium-wrappers",
@@ -828,7 +836,8 @@ var init_dependencies = __esm({
         ecosystem: "pypi",
         reason: "JWT signing with classical RS*/ES* algorithms.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "python-jose",
@@ -950,7 +959,8 @@ var init_dependencies = __esm({
         ecosystem: "maven",
         reason: "Auth0 JWT with classical RS*/ES* algorithms.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       // --- RubyGems ---
       {
@@ -958,7 +968,8 @@ var init_dependencies = __esm({
         ecosystem: "rubygems",
         reason: "Ruby JWT with classical RS*/ES* algorithms.",
         algorithms: ["RSA", "ECDSA"],
-        severity: "medium"
+        severity: "medium",
+        hndl: false
       },
       {
         name: "rbnacl",
@@ -1490,7 +1501,7 @@ var init_source = __esm({
     RE_JOSE_ECDH = /['"`](ECDH-ES(?:\+A(?:128|192|256)KW)?)['"`]/g;
     RE_TLS_LEGACY_VERSION = /(?:minVersion|maxVersion)\s*:\s*['"`]TLSv1(?:\.1)?['"`]|secureProtocol\s*:\s*['"`]TLSv1(?:_1)?_method['"`]/g;
     RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
-    RE_TLS_WEAK_CIPHER = /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+    RE_TLS_WEAK_CIPHER = /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![!-])(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
     RULE_NODE_KEYGEN = {
       id: "node-crypto-keygen",
       title: "Classical key generation",
@@ -1801,11 +1812,14 @@ var init_source = __esm({
       id: "elliptic-ec",
       title: "elliptic curve instantiation",
       description: "the `elliptic` library \u2014 new EC(...)",
-      category: "signature",
+      // `new EC(...)` is a dual-use curve context (ECDSA sign AND ECDH `key.derive()`).
+      // Per this scanner's own EC-ambiguity policy, ambiguous EC is treated as
+      // key-agreement-capable and HNDL-exposed (audit: crypto #8).
+      category: "key-exchange",
       severity: "high",
       confidence: "high",
-      algorithm: "ECDSA",
-      hndl: false,
+      algorithm: "ECDH",
+      hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message: "The `elliptic` library implements classical ECDSA/ECDH, both broken by Shor's algorithm."
     };
@@ -1826,11 +1840,13 @@ var init_source = __esm({
       id: "jsrsasign-keygen",
       title: "jsrsasign key generation",
       description: "jsrsasign KEYUTIL.generateKeypair",
-      category: "signature",
+      // KEYUTIL.generateKeypair("RSA"|"EC") makes keys usable for RSA-OAEP encryption
+      // and ECDH — HNDL-exposed, like Node's generateKeyPair (audit: crypto #13).
+      category: "key-exchange",
       severity: "high",
       confidence: "high",
       algorithm: "unknown",
-      hndl: false,
+      hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message: "jsrsasign generates classical RSA/EC key pairs, which are not quantum-safe.",
       remediation: "ML-KEM-768 (FIPS 203) / ML-DSA-65 (FIPS 204)"
@@ -3344,7 +3360,8 @@ async function scan(options) {
   const cacheFile = options.cacheFile;
   const ruleset = cacheFile ? rulesetFingerprint(dets, options.disabledRules) : "";
   const cache = cacheFile ? await loadCache(cacheFile, ruleset) : null;
-  const nextEntries = cacheFile ? /* @__PURE__ */ new Map() : null;
+  const incremental = Array.isArray(options.files);
+  const nextEntries = cacheFile ? new Map(incremental && cache ? cache : []) : null;
   const signal = options.signal;
   const maxFiles = options.maxFiles;
   const maxBytes = options.maxBytes;
@@ -3457,13 +3474,53 @@ var init_verify = __esm({
 });
 
 // ../core/dist/redact.js
-function stripSecrets(text) {
+function redactPrivateKeyBlocks(text) {
+  const begin = /-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|OPENSSH PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----/;
+  const end = /-----END /;
   let redacted = false;
-  const out = text.replace(SECRET_RE, () => {
-    redacted = true;
-    return "\xABredacted-secret\xBB";
-  });
-  return { text: out, redacted };
+  let inKey = false;
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (!inKey && begin.test(line)) {
+      inKey = true;
+      redacted = true;
+      out.push(REDACTED);
+      continue;
+    }
+    if (inKey) {
+      if (end.test(line))
+        inKey = false;
+      continue;
+    }
+    out.push(line);
+  }
+  return { text: out.join("\n"), redacted };
+}
+function stripSecrets(text) {
+  if (memoInput === text && memoResult)
+    return memoResult;
+  let result;
+  if (text.length > MAX_SECRET_SCAN) {
+    result = { text: REDACTED, redacted: true };
+  } else {
+    try {
+      const pem = redactPrivateKeyBlocks(text);
+      let out = pem.text;
+      let redacted = pem.redacted;
+      for (const re of TOKEN_PATTERNS) {
+        out = out.replace(re, () => {
+          redacted = true;
+          return REDACTED;
+        });
+      }
+      result = { text: out, redacted };
+    } catch {
+      result = { text: REDACTED, redacted: true };
+    }
+  }
+  memoInput = text;
+  memoResult = result;
+  return result;
 }
 function enclosingBlock(lines, idx) {
   let start = idx;
@@ -3515,12 +3572,39 @@ function renderPreflight(contexts) {
 ${c.code}` : head;
   }).join("\n\n---\n\n");
 }
-var SNIPPET_RADIUS, SECRET_RE;
+var SNIPPET_RADIUS, REDACTED, MAX_SECRET_SCAN, TOKEN_PATTERNS, memoInput, memoResult;
 var init_redact = __esm({
   "../core/dist/redact.js"() {
     "use strict";
     SNIPPET_RADIUS = 8;
-    SECRET_RE = /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----|[A-Za-z0-9+/]{120,}={0,2}/g;
+    REDACTED = "\xABredacted-secret\xBB";
+    MAX_SECRET_SCAN = 2e6;
+    TOKEN_PATTERNS = [
+      /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
+      // AWS access key id
+      /\bgh[posru]_[A-Za-z0-9]{20,255}\b/g,
+      // GitHub token
+      /\bgithub_pat_[A-Za-z0-9_]{20,255}\b/g,
+      // GitHub fine-grained PAT
+      /\bxox[baprs]-[A-Za-z0-9-]{10,255}\b/g,
+      // Slack
+      /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,255}\b/g,
+      // OpenAI
+      /\b[rs]k_live_[A-Za-z0-9]{20,255}\b/g,
+      // Stripe
+      /\bAIza[A-Za-z0-9_-]{35}\b/g,
+      // Google API key
+      /\bglpat-[A-Za-z0-9_-]{20,255}\b/g,
+      // GitLab PAT
+      /\beyJ[A-Za-z0-9_-]{8,4096}\.[A-Za-z0-9_-]{8,4096}\.[A-Za-z0-9_-]{6,4096}\b/g,
+      // JWT
+      // Assignment of a secret-looking key (.env / config lines).
+      /(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)["'`]?\s*[:=]\s*["'`]?[^\s"'`,;]{6,4096}/gi,
+      /\b[0-9a-fA-F]{40,4096}\b/g,
+      // long hex run (≥20 bytes)
+      /[A-Za-z0-9+/]{44,4096}={0,2}/g
+      // long base64 run (≥32 bytes)
+    ];
   }
 });
 
@@ -3788,10 +3872,12 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
       }
       signal.addEventListener("abort", onAbort, { once: true });
     }
+    const retired = /* @__PURE__ */ new WeakSet();
     const dispatch = (w) => {
       if (failed)
         return;
       if (next >= chunks.length) {
+        retired.add(w);
         void w.terminate();
         return;
       }
@@ -3832,6 +3918,13 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
           cleanup();
           reject(err);
         }
+      });
+      w.on("exit", (code) => {
+        if (failed || retired.has(w) || done === chunks.length)
+          return;
+        failed = true;
+        cleanup();
+        reject(new Error(`scan worker exited early (code ${code}) before completing its chunk`));
       });
       return w;
     };
@@ -4251,15 +4344,15 @@ function primitiveFor(category) {
     case "signature":
       return "signature";
     case "certificate":
-      return "pki";
+      return "other";
     case "tls":
       return "other";
     default:
       return "other";
   }
 }
-function isQuantumVulnerable(algorithm) {
-  return algorithm !== "unknown";
+function isQuantumVulnerable(_algorithm) {
+  return true;
 }
 function classicalSecurityLevelFor(algorithm) {
   switch (algorithm) {
@@ -5170,7 +5263,10 @@ async function runQscan(opts, hooks = {}) {
       dryRun: options.dryRun,
       provider: options.llmProvider,
       model: options.llmModel,
-      cacheFile: options.cacheFile,
+      // The triage RESPONSE cache must not share a path with the scan cache —
+      // they are different on-disk formats and would clobber each other every
+      // run, defeating both (audit: arch #1). Derive a sibling path.
+      cacheFile: options.cacheFile ? `${options.cacheFile}.responses.json` : void 0,
       root: options.path
     });
     if (triaged.preflight !== void 0) {

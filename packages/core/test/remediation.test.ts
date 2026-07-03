@@ -47,6 +47,12 @@ test("category-5 surfaces the CNSA 2.0 ML-KEM-1024 / ML-DSA-87 tier", () => {
   const kem = remediationForTier("ECDH", "category-5");
   assert.match(kem.recommendation, /ML-KEM-1024/);
   assert.match(kem.detail, /CNSA 2\.0/);
+  // Must NOT surface the category-3 hybrid (ML-KEM-768) at category-5 (audit).
+  assert.doesNotMatch(kem.recommendation, /X25519MLKEM768|ML-KEM-768/);
+  assert.match(kem.detail, /SecP384r1MLKEM1024/);
+
+  // category-3 still recommends the X25519MLKEM768 hybrid (that IS correct there).
+  assert.match(remediationForTier("ECDH", "category-3").recommendation, /X25519MLKEM768/);
 
   const sig = remediationForTier("RSA", "category-5");
   // RSA is confidentiality-leaning → headline is the KEM, but the detail names both.

@@ -129,3 +129,25 @@ test("a content change re-scans; a ruleset change discards the cache", async () 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("an incremental scan (files list) preserves cache entries for unvisited files (audit: arch #4)", async () => {
+  const dir = await tmp();
+  try {
+    await writeFile(join(dir, "a.ts"), "const e = crypto.createECDH('p256');\n");
+    await writeFile(
+      join(dir, "b.ts"),
+      "const k = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });\n",
+    );
+    const cacheFile = join(dir, ".cache.json");
+    await scan({ root: dir, cacheFile });
+    let doc = JSON.parse(await readFile(cacheFile, "utf8")) as { entries: Record<string, unknown> };
+    assert.ok(doc.entries["a.ts"] && doc.entries["b.ts"], "both cached after full scan");
+    // Incremental run over only a.ts must NOT evict b.ts.
+    await scan({ root: dir, cacheFile, files: ["a.ts"] });
+    doc = JSON.parse(await readFile(cacheFile, "utf8")) as { entries: Record<string, unknown> };
+    assert.ok(doc.entries["a.ts"], "a.ts still cached");
+    assert.ok(doc.entries["b.ts"], "b.ts entry preserved across the incremental run");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

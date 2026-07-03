@@ -92,3 +92,51 @@ test("toCbom is deterministic for the same result", () => {
   ]);
   assert.deepEqual(toCbom(r), toCbom(r));
 });
+
+test("CBOM uses valid primitives and marks classical unknown-family findings vulnerable (audit)", () => {
+  const bom = toCbom(
+    result([
+      f({
+        ruleId: "cert-signature-algorithm",
+        category: "certificate",
+        algorithm: "unknown",
+        hndl: false,
+      }),
+      f({
+        ruleId: "node-crypto-sign",
+        category: "signature",
+        algorithm: "unknown",
+        hndl: false,
+        location: { file: "b.ts", line: 1 },
+      }),
+    ]),
+  );
+  const VALID_PRIMITIVES = new Set([
+    "drbg",
+    "mac",
+    "block-cipher",
+    "stream-cipher",
+    "signature",
+    "hash",
+    "pke",
+    "xof",
+    "kdf",
+    "key-agree",
+    "kem",
+    "ae",
+    "combiner",
+    "other",
+    "unknown",
+  ]);
+  for (const c of bom.components) {
+    const prim = (c.cryptoProperties?.algorithmProperties as { primitive?: string })?.primitive;
+    assert.ok(
+      !prim || VALID_PRIMITIVES.has(prim),
+      `primitive "${prim}" is a valid CycloneDX 1.6 enum`,
+    );
+    assert.notEqual(prim, "pki");
+  }
+  // The signature finding's asset must report quantumVulnerable = true.
+  const anyVulnerable = JSON.stringify(bom).includes('"quantumVulnerable":true');
+  assert.ok(anyVulnerable, "classical findings report quantumVulnerable:true");
+});

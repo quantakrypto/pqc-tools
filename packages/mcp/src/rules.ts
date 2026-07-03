@@ -92,8 +92,9 @@ export function resolveRule(ruleId: string): ResolvedRule {
     };
   }
 
-  // 2. Non-detector supplement (dependency scanner, …).
-  const extra = EXTRA_RULES[id];
+  // 2. Non-detector supplement (dependency scanner, …). `hasOwn` guards against
+  // a rule id like `__proto__`/`constructor` resolving to an Object.prototype member.
+  const extra = Object.hasOwn(EXTRA_RULES, id) ? EXTRA_RULES[id] : undefined;
   if (extra) {
     return { ruleId: id, algorithm: extra.algorithm, via: "index" };
   }

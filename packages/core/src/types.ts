@@ -107,6 +107,13 @@ export interface VulnerableDependency {
   /** Algorithm families the package primarily exposes. */
   algorithms: AlgorithmFamily[];
   severity: Severity;
+  /**
+   * Explicit harvest-now-decrypt-later override. When omitted, HNDL is inferred
+   * from whether any listed family is a confidentiality family. Set `false` for
+   * signing-only packages (e.g. JWS/JWT libraries) that list RSA/EC as families
+   * but never do key transport or key agreement — signatures are not HNDL-exposed.
+   */
+  hndl?: boolean;
 }
 
 /**

@@ -70,6 +70,8 @@ export const ErrorCode = {
   MethodNotFound: -32601,
   InvalidParams: -32602,
   InternalError: -32603,
+  /** MCP: resource not found (`resources/read` for an unknown URI). */
+  ResourceNotFound: -32002,
 } as const;
 
 /** An error that carries a JSON-RPC error code, thrown by tool handlers/dispatch. */

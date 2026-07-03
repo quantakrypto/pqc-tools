@@ -222,7 +222,10 @@ export async function runQscan(
       dryRun: options.dryRun,
       provider: options.llmProvider,
       model: options.llmModel,
-      cacheFile: options.cacheFile,
+      // The triage RESPONSE cache must not share a path with the scan cache —
+      // they are different on-disk formats and would clobber each other every
+      // run, defeating both (audit: arch #1). Derive a sibling path.
+      cacheFile: options.cacheFile ? `${options.cacheFile}.responses.json` : undefined,
       root: options.path,
     });
     if (triaged.preflight !== undefined) {

@@ -162,7 +162,8 @@ export class McpServer {
       throw new RpcError(ErrorCode.InvalidParams, "resources/read requires a 'uri' string");
     }
     const contents = readResource(uri);
-    if (!contents) throw new RpcError(ErrorCode.InvalidParams, `unknown resource: ${uri}`);
+    // MCP spec: unknown resource → -32002 (Resource not found), uri in data.
+    if (!contents) throw new RpcError(ErrorCode.ResourceNotFound, "Resource not found", { uri });
     return { contents: [contents] };
   }
 

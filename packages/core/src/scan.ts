@@ -118,7 +118,14 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const cacheFile = options.cacheFile;
   const ruleset = cacheFile ? rulesetFingerprint(dets, options.disabledRules) : "";
   const cache = cacheFile ? await loadCache(cacheFile, ruleset) : null;
-  const nextEntries: Map<string, CacheEntry> | null = cacheFile ? new Map() : null;
+  // A full scan starts with an empty next-cache so files that vanished are
+  // evicted. An INCREMENTAL scan (explicit `files` list) only visits a subset,
+  // so seed the next-cache with the existing entries — otherwise saving would
+  // drop every file we didn't happen to scan this run (audit: arch #4).
+  const incremental = Array.isArray(options.files);
+  const nextEntries: Map<string, CacheEntry> | null = cacheFile
+    ? new Map(incremental && cache ? cache : [])
+    : null;
 
   // Work-budget / cancellation controls (all optional, unlimited when omitted).
   const signal = options.signal;

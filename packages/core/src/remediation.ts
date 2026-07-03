@@ -160,7 +160,24 @@ export function remediationForTier(
   const base = REMEDIATIONS[algorithm];
   const params = TIER_PARAMS[tier];
   // Confidentiality families lean on the KEM; signature families on the signer.
-  const primary = isConfidentialityFamily(algorithm) ? params.kem : params.signature;
+  const isConf = isConfidentialityFamily(algorithm);
+  const primary = isConf ? params.kem : params.signature;
+
+  // Category-5 (CNSA 2.0 / NSS) mandates the ML-KEM-1024 / ML-DSA-87 parameter
+  // sets and must NOT surface the category-3 X25519MLKEM768 hybrid (its PQC
+  // component is ML-KEM-768 — sub-CNSA). Lead with the mandated set; only point
+  // at a hybrid TLS group at the 1024 level (audit: quantum #1, crypto S5).
+  if (tier === "category-5") {
+    const hybridNote = isConf
+      ? " If a hybrid TLS group is required, use SecP384r1MLKEM1024 (draft-ietf-tls-ecdhe-mlkem) — not X25519MLKEM768, whose ML-KEM-768 component does not meet CNSA 2.0."
+      : "";
+    return {
+      algorithm,
+      recommendation: `${primary} — CNSA 2.0 mandates this parameter set (hybrids optional)`,
+      detail: `${base.detail} ${params.note} For CNSA 2.0 / national-security systems use ${params.kem} (KEM) and ${params.signature} (signatures).${hybridNote}`,
+    };
+  }
+
   return {
     algorithm,
     recommendation: `${base.recommendation} — ${tier}: ${primary}`,

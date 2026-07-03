@@ -224,3 +224,23 @@ test("remediate_findings emits an offline fix-request bundle (rubric + schema + 
   );
   assert.ok(bundle.items.every((i) => i.context.code === null));
 });
+
+test("apply_triage rejects a NaN exposureScore instead of accepting it (audit: mcp #3)", async () => {
+  const r = await callTool("apply_triage", {
+    findings: twoFindings,
+    verdicts: [{ fingerprint: "x", exposureScore: NaN, priority: "now", rationale: "r" }],
+  });
+  assert.match(textOf(r), /malformed verdict/);
+});
+
+test("triage_findings bundle schema requires the fingerprint field (audit: mcp bundle)", async () => {
+  const r = await callTool("triage_findings", { findings: twoFindings });
+  const bundle = JSON.parse(r.content[1].text) as { schema: { required: string[] } };
+  assert.ok(bundle.schema.required.includes("fingerprint"), "schema demands fingerprint");
+});
+
+test("triage_findings surfaces a malformed finding as a tool error, not a crash (audit: mcp #4)", async () => {
+  const r = await callTool("triage_findings", { findings: [{}] });
+  assert.equal(r.isError, true);
+  assert.match(textOf(r), /ruleId/);
+});

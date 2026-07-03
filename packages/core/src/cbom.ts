@@ -43,7 +43,10 @@ function primitiveFor(category: FindingCategory): string {
     case "signature":
       return "signature";
     case "certificate":
-      return "pki";
+      // "pki" is NOT a valid CycloneDX 1.6 algorithmProperties.primitive enum
+      // value; use "other" so the CBOM validates (audit: quantum #3). Modeling
+      // certificates as assetType:"certificate" is a future refinement.
+      return "other";
     case "tls":
       return "other";
     default:
@@ -51,9 +54,15 @@ function primitiveFor(category: FindingCategory): string {
   }
 }
 
-/** True when the algorithm family is broken by Shor's algorithm (quantum). */
-function isQuantumVulnerable(algorithm: AlgorithmFamily): boolean {
-  return algorithm !== "unknown";
+/**
+ * Every CBOM asset here is derived from a quantakrypto finding, and the detectors
+ * only ever fire on classical (Shor-broken) public-key crypto — so an asset is
+ * quantum-vulnerable by construction, even when the exact family couldn't be
+ * pinned down (`unknown`). Reporting `false` for `unknown` mislabeled
+ * definitionally-classical findings as safe (audit: crypto #6).
+ */
+function isQuantumVulnerable(_algorithm: AlgorithmFamily): boolean {
+  return true;
 }
 
 /**

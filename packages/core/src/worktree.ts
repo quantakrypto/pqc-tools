@@ -31,14 +31,22 @@ export async function withWorktree<T>(
   }
   const base = await mkdtemp(join(tmpdir(), "quantakrypto-wt-"));
   const dir = join(base, "wt");
-  await git(["worktree", "add", "--detach", dir], repoRoot);
+  // `worktree add` is INSIDE the try so a failure (locked index, disk full)
+  // still cleans up the temp dir in `finally` (audit: arch #6).
   try {
+    await git(["worktree", "add", "--detach", dir], repoRoot);
     return await fn(dir);
   } finally {
     try {
       await git(["worktree", "remove", "--force", dir], repoRoot);
     } catch {
       // best effort — the temp dir removal below still reclaims the disk.
+    }
+    // Prune stale `.git/worktrees/<name>` metadata a failed add/remove can leave.
+    try {
+      await git(["worktree", "prune"], repoRoot);
+    } catch {
+      // best effort
     }
     await rm(base, { recursive: true, force: true });
   }

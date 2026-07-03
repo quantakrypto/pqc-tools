@@ -101,6 +101,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "JWTs commonly signed with RS256/ES256 (classical RSA/ECDSA).",
     algorithms: ["RSA", "ECDSA"],
     severity: "high",
+    hndl: false,
   },
   {
     name: "jose",
@@ -115,6 +116,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "JSON Web Signatures using classical RS/ES algorithms.",
     algorithms: ["RSA", "ECDSA"],
     severity: "high",
+    hndl: false,
   },
   {
     name: "eccrypto",
@@ -171,6 +173,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
     algorithms: ["EdDSA", "RSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "bcrypto",
@@ -241,6 +244,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "JSON Web Algorithms: RSA (RS/PS) and EC (ES) signatures.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "jwk-to-pem",
@@ -255,6 +259,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "JWT signing/verification with classical RS/PS/ES algorithms.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "ssh2",
@@ -283,6 +288,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "HTTP request signing with classical RSA/ECDSA keys.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "libsodium-wrappers",
@@ -341,6 +347,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "JWT signing with classical RS*/ES* algorithms.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "python-jose",
@@ -467,6 +474,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "Auth0 JWT with classical RS*/ES* algorithms.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
 
   // --- RubyGems ---
@@ -476,6 +484,7 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     reason: "Ruby JWT with classical RS*/ES* algorithms.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
+    hndl: false,
   },
   {
     name: "rbnacl",
@@ -682,8 +691,10 @@ function dependencyFinding(
     severity: dep.severity,
     confidence: "high",
     algorithm,
-    // Confidentiality libs are HNDL-exposed; signature-only ones are not.
-    hndl: dep.algorithms.some(isConfidentialityFamily),
+    // Confidentiality libs are HNDL-exposed; signature-only ones are not. An
+    // explicit `dep.hndl` wins (some packages list RSA/EC as a family but only
+    // ever sign — e.g. JWS/JWT libs — and signatures are not HNDL-exposed).
+    hndl: dep.hndl ?? dep.algorithms.some(isConfidentialityFamily),
     cwe: CWE_BROKEN_CRYPTO,
     message: `${dep.name} — ${dep.reason}`,
     remediation: multiFamilyRemediation(dep.algorithms),

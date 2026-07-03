@@ -42,7 +42,7 @@ import type {
 import { errorResult, textResult } from "./protocol.js";
 import type { JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./protocol.js";
 import { resolveRule } from "./rules.js";
-import { resolveFsConfig, resolveScanPath } from "./fsconfig.js";
+import { realpathInsideRoots, resolveFsConfig, resolveScanPath } from "./fsconfig.js";
 
 /** All classical algorithm families we can advise on, used for validation/help. */
 const ALGORITHM_FAMILIES: AlgorithmFamily[] = [
@@ -102,14 +102,22 @@ async function safe<T>(
  * directly. The `signal` from the transport's request deadline (when present) is
  * threaded in so a timed-out request actually aborts the underlying scan.
  */
-function buildScanOptions(
+async function buildScanOptions(
   requested: string,
   context?: ToolContext,
-): { ok: true; options: ScanOptions } | { ok: false; result: ToolResult } {
+): Promise<{ ok: true; options: ScanOptions } | { ok: false; result: ToolResult }> {
   const config = resolveFsConfig(process.env);
   const decision = resolveScanPath(config, requested);
   if (!decision.ok) {
     return { ok: false, result: errorResult(`scan rejected: ${decision.reason}`) };
+  }
+  // Symlink-escape hardening: re-verify containment against the real, resolved
+  // paths so a symlink inside a root can't read outside it (audit: mcp #1).
+  if (!(await realpathInsideRoots(decision.path, config))) {
+    return {
+      ok: false,
+      result: errorResult("scan rejected: path resolves outside the configured root(s) (symlink)."),
+    };
   }
   return {
     ok: true,
@@ -214,7 +222,7 @@ const scanPathTool: ToolDefinition = {
       return errorResult("scan_path requires a non-empty 'path' string.");
     }
     const format = args.format === "json" ? "json" : "summary";
-    const opts = buildScanOptions(path, context);
+    const opts = await buildScanOptions(path, context);
     if (!opts.ok) return opts.result;
     const scanned = await safe("scan", () => scan(opts.options));
     if (!scanned.ok) return scanned.result;
@@ -247,7 +255,7 @@ const inventoryCryptoTool: ToolDefinition = {
     if (typeof path !== "string" || path.length === 0) {
       return errorResult("inventory_crypto requires a non-empty 'path' string.");
     }
-    const opts = buildScanOptions(path, context);
+    const opts = await buildScanOptions(path, context);
     if (!opts.ok) return opts.result;
     const scanned = await safe("scan", () => scan(opts.options));
     if (!scanned.ok) return scanned.result;
@@ -511,7 +519,7 @@ const generateCbomTool: ToolDefinition = {
     if (typeof path !== "string" || path.length === 0) {
       return errorResult("generate_cbom requires a non-empty 'path' string.");
     }
-    const opts = buildScanOptions(path, context);
+    const opts = await buildScanOptions(path, context);
     if (!opts.ok) return opts.result;
     const scanned = await safe("scan", () => scan(opts.options));
     if (!scanned.ok) return scanned.result;
@@ -603,7 +611,7 @@ const planMigrationTool: ToolDefinition = {
     if (typeof path !== "string" || path.length === 0) {
       return errorResult("plan_migration requires a non-empty 'path' string.");
     }
-    const opts = buildScanOptions(path, context);
+    const opts = await buildScanOptions(path, context);
     if (!opts.ok) return opts.result;
     const scanned = await safe("scan", () => scan(opts.options));
     if (!scanned.ok) return scanned.result;
@@ -1006,6 +1014,22 @@ const scoreDeltaTool: ToolDefinition = {
   },
 };
 
+/**
+ * True when every element looks like a scan Finding (a string `ruleId` and a
+ * `location.file`). Guards the triage/remediate tools so a malformed `findings`
+ * element surfaces as a tool `isError` result rather than throwing a protocol
+ * `-32603` internal error downstream (audit: mcp #4).
+ */
+function areFindings(arr: readonly unknown[]): arr is Finding[] {
+  return arr.every(
+    (f) =>
+      f !== null &&
+      typeof f === "object" &&
+      typeof (f as { ruleId?: unknown }).ruleId === "string" &&
+      typeof (f as { location?: { file?: unknown } }).location?.file === "string",
+  );
+}
+
 const triageFindingsTool: ToolDefinition = {
   name: "triage_findings",
   description:
@@ -1023,17 +1047,28 @@ const triageFindingsTool: ToolDefinition = {
     additionalProperties: false,
   },
   async handler(args): Promise<ToolResult> {
-    if (!Array.isArray(args.findings)) {
-      return errorResult("triage_findings requires a 'findings' array.");
+    if (!Array.isArray(args.findings) || !areFindings(args.findings)) {
+      return errorResult(
+        "triage_findings requires a 'findings' array of scan findings (each with a string ruleId and location.file).",
+      );
     }
-    const findings = args.findings as Finding[];
+    const findings = args.findings;
     const request = buildTriageRequest(findings, "metadata");
     // Pair each context with the finding fingerprint the verdict must echo back.
     const items = findings.map((f, i) => ({
       fingerprint: fingerprintFinding(f),
       context: request.contexts[i],
     }));
-    const bundle = { rubric: request.rubric, schema: request.schema, items };
+    // The verdict schema advertised to the agent MUST include `fingerprint`
+    // (the instructions require it, and apply_triage keys on it) — core's
+    // single-verdict schema doesn't, so extend it here (audit: mcp bundle).
+    const props = (request.schema as { properties?: Record<string, unknown> }).properties ?? {};
+    const schema = {
+      type: "object",
+      required: ["fingerprint", "exposureScore", "priority", "rationale"],
+      properties: { fingerprint: { type: "string" }, ...props },
+    };
+    const bundle = { rubric: request.rubric, schema, items };
     return {
       content: [
         {
@@ -1060,7 +1095,10 @@ function parseVerdict(
   const priority = o.priority;
   const rationale = o.rationale;
   if (typeof fingerprint !== "string") return null;
-  if (typeof exposureScore !== "number" || exposureScore < 0 || exposureScore > 100) return null;
+  // `Number.isFinite` rejects NaN/Infinity — NaN passes both `< 0` and `> 100`
+  // (they're false) and would poison the exposure sort comparator (audit: mcp #3).
+  if (typeof exposureScore !== "number" || !Number.isFinite(exposureScore)) return null;
+  if (exposureScore < 0 || exposureScore > 100) return null;
   if (priority !== "now" && priority !== "soon" && priority !== "later") return null;
   if (typeof rationale !== "string") return null;
   return { fingerprint, exposureScore, priority, rationale };
@@ -1085,7 +1123,12 @@ const applyTriageTool: ToolDefinition = {
     if (!Array.isArray(args.findings) || !Array.isArray(args.verdicts)) {
       return errorResult("apply_triage requires 'findings' and 'verdicts' arrays.");
     }
-    const findings = args.findings as Finding[];
+    if (!areFindings(args.findings)) {
+      return errorResult(
+        "apply_triage: each 'findings' element needs a string ruleId and location.file.",
+      );
+    }
+    const findings = args.findings;
     const byFingerprint = new Map<string, ReturnType<typeof parseVerdict>>();
     let skipped = 0;
     for (const raw of args.verdicts) {
@@ -1143,10 +1186,12 @@ const remediateFindingsTool: ToolDefinition = {
     additionalProperties: false,
   },
   async handler(args): Promise<ToolResult> {
-    if (!Array.isArray(args.findings)) {
-      return errorResult("remediate_findings requires a 'findings' array.");
+    if (!Array.isArray(args.findings) || !areFindings(args.findings)) {
+      return errorResult(
+        "remediate_findings requires a 'findings' array of scan findings (each with a string ruleId and location.file).",
+      );
     }
-    const findings = args.findings as Finding[];
+    const findings = args.findings;
     const request = buildRemediateRequest(findings, "metadata");
     const items = findings.map((f, i) => ({
       fingerprint: fingerprintFinding(f),

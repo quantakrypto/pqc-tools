@@ -218,3 +218,20 @@ test("multi-family remediation de-dupes by target: ML-DSA / ML-KEM named once ea
   assert.equal(rem.match(/ML-DSA/g)?.length, 1, `ML-DSA should appear once: "${rem}"`);
   assert.equal(rem.match(/ML-KEM/g)?.length, 1, `ML-KEM should appear once: "${rem}"`);
 });
+
+test("HNDL override: signing-only deps are not HNDL, but encryption libs are (audit: crypto #1)", () => {
+  const jwt = scanManifest(
+    "package.json",
+    JSON.stringify({ dependencies: { jsonwebtoken: "9" } }),
+  )[0];
+  assert.equal(jwt.hndl, false, "jsonwebtoken is JWS/signing-only → not HNDL");
+  const jose = scanManifest("package.json", JSON.stringify({ dependencies: { jose: "5" } }))[0];
+  assert.equal(jose.hndl, true, "jose does JWE/ECDH-ES encryption → HNDL");
+  for (const name of ["jws", "pyjwt", "paseto", "http-signature"]) {
+    const eco = name === "pyjwt" ? "requirements.txt" : "package.json";
+    const content =
+      name === "pyjwt" ? "pyjwt==2.8.0\n" : JSON.stringify({ dependencies: { [name]: "1" } });
+    const f = scanManifest(eco, content)[0];
+    assert.equal(f?.hndl, false, `${name} is signing-only → not HNDL`);
+  }
+});

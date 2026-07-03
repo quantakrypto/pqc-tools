@@ -13,258 +13,681 @@
   "positive/rsa-keygen-sign.ts": {
     "category": "rsa",
     "expected": [
-      { "ruleId": "node-crypto-keygen", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "node-crypto-sign", "algorithm": "unknown", "hndl": false }
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "node-crypto-sign",
+        "algorithm": "unknown",
+        "hndl": false
+      }
     ]
   },
   "positive/rsa-oneshot-sign.mjs": {
     "category": "signature-oneshot",
     "expected": [
-      { "ruleId": "node-crypto-sign-oneshot", "algorithm": "unknown", "hndl": false },
-      { "ruleId": "node-crypto-sign-oneshot", "algorithm": "unknown", "hndl": false }
+      {
+        "ruleId": "node-crypto-sign-oneshot",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "node-crypto-sign-oneshot",
+        "algorithm": "unknown",
+        "hndl": false
+      }
     ]
   },
   "positive/rsa-encrypt.js": {
     "category": "rsa",
-    "expected": [{ "ruleId": "node-crypto-rsa-encrypt", "algorithm": "RSA", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-rsa-encrypt",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
   },
   "positive/ecdh-createecdh.ts": {
     "category": "ecdh",
-    "expected": [{ "ruleId": "node-crypto-ecdh", "algorithm": "ECDH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
   },
   "positive/ec-keygen.ts": {
     "category": "ec-keygen",
-    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "ECDH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
   },
   "positive/ecdsa-webcrypto.ts": {
     "category": "ecdsa",
-    "expected": [{ "ruleId": "webcrypto-classical", "algorithm": "ECDSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "webcrypto-classical",
+        "algorithm": "ECDSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/ecdh-webcrypto-derivekey.ts": {
     "category": "ecdh",
-    "expected": [{ "ruleId": "webcrypto-classical", "algorithm": "ECDH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "webcrypto-classical",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
   },
   "positive/dh-creatediffiehellman.js": {
     "category": "dh",
-    "expected": [{ "ruleId": "node-crypto-dh", "algorithm": "DH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-dh",
+        "algorithm": "DH",
+        "hndl": true
+      }
+    ]
   },
   "positive/dh-modp-group.ts": {
     "category": "dh",
-    "expected": [{ "ruleId": "node-crypto-dh-modp", "algorithm": "DH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-dh-modp",
+        "algorithm": "DH",
+        "hndl": true
+      }
+    ]
   },
   "positive/dsa-keygen.ts": {
     "category": "dsa",
-    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "DSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "DSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/ed25519-keygen.ts": {
     "category": "eddsa",
-    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "EdDSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/x25519-keygen.mjs": {
     "category": "x25519",
-    "expected": [{ "ruleId": "node-crypto-keygen", "algorithm": "X25519", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "X25519",
+        "hndl": true
+      }
+    ]
   },
   "positive/jwt-rs256.ts": {
     "category": "jwt-jose",
-    "expected": [{ "ruleId": "jwt-classical-alg", "algorithm": "RSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "jwt-classical-alg",
+        "algorithm": "RSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/jwt-es256.js": {
     "category": "jwt-jose",
-    "expected": [{ "ruleId": "jwt-classical-alg", "algorithm": "ECDSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "jwt-classical-alg",
+        "algorithm": "ECDSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/jose-ecdh-es.ts": {
     "category": "jwt-jose",
-    "expected": [{ "ruleId": "jose-ecdh-es", "algorithm": "ECDH", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "jose-ecdh-es",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
   },
   "positive/forge-rsa.js": {
     "category": "library",
-    "expected": [{ "ruleId": "forge-rsa-keygen", "algorithm": "RSA", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "forge-rsa-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
   },
   "positive/elliptic-ec.ts": {
     "category": "library",
-    "expected": [{ "ruleId": "elliptic-ec", "algorithm": "ECDSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "elliptic-ec",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
   },
   "positive/secp256k1-usage.ts": {
     "category": "library",
-    "expected": [{ "ruleId": "secp256k1-usage", "algorithm": "ECDSA", "hndl": false }]
+    "expected": [
+      {
+        "ruleId": "secp256k1-usage",
+        "algorithm": "ECDSA",
+        "hndl": false
+      }
+    ]
   },
   "positive/jsrsasign-usage.js": {
     "category": "library",
     "expected": [
-      { "ruleId": "jsrsasign-keygen", "algorithm": "unknown", "hndl": false },
-      { "ruleId": "jsrsasign-sign", "algorithm": "unknown", "hndl": false }
+      {
+        "ruleId": "jsrsasign-keygen",
+        "algorithm": "unknown",
+        "hndl": true
+      },
+      {
+        "ruleId": "jsrsasign-sign",
+        "algorithm": "unknown",
+        "hndl": false
+      }
     ]
   },
   "positive/node-rsa-usage.mjs": {
     "category": "library",
-    "expected": [{ "ruleId": "node-rsa", "algorithm": "RSA", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "node-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
   },
   "positive/package.json": {
     "category": "dependency",
     "expected": [
-      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true }
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": true
+      }
     ]
   },
   "positive/rsa-private-key.pem": {
     "category": "pem",
-    "expected": [{ "ruleId": "pem-rsa-private-key", "algorithm": "RSA", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "pem-rsa-private-key",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
   },
   "positive/ec-private-key.pem": {
     "category": "pem",
-    "expected": [{ "ruleId": "pem-ec-private-key", "algorithm": "ECDSA", "hndl": true }]
+    "expected": [
+      {
+        "ruleId": "pem-ec-private-key",
+        "algorithm": "ECDSA",
+        "hndl": true
+      }
+    ]
   },
   "positive/authorized_keys": {
     "category": "ssh",
     "expected": [
-      { "ruleId": "ssh-public-key", "algorithm": "RSA", "hndl": false },
-      { "ruleId": "ssh-public-key", "algorithm": "EdDSA", "hndl": false }
+      {
+        "ruleId": "ssh-public-key",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "ssh-public-key",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
     ]
   },
   "positive/tls-legacy-config.ts": {
     "category": "tls",
     "expected": [
-      { "ruleId": "tls-legacy-version", "algorithm": null, "hndl": false },
-      { "ruleId": "tls-reject-unauthorized", "algorithm": null, "hndl": false }
+      {
+        "ruleId": "tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "tls-reject-unauthorized",
+        "algorithm": null,
+        "hndl": false
+      }
     ]
   },
   "positive/js-modern-curves.ts": {
     "category": "signature",
     "expected": [
-      { "ruleId": "node-crypto-keygen", "algorithm": "RSA", "hndl": false },
-      { "ruleId": "webcrypto-classical", "algorithm": "EdDSA", "hndl": false },
-      { "ruleId": "webcrypto-classical", "algorithm": "X25519", "hndl": true }
+      {
+        "ruleId": "node-crypto-keygen",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "webcrypto-classical",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "webcrypto-classical",
+        "algorithm": "X25519",
+        "hndl": true
+      }
     ]
   },
   "positive/requirements.txt": {
     "category": "dependency",
     "expected": [
-      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true }
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": true
+      }
     ]
   },
   "positive/python-cryptography.py": {
     "category": "python",
     "expected": [
-      { "ruleId": "python-rsa-keygen", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "python-ec-keygen", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "python-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "python-dh", "algorithm": "DH", "hndl": true }
+      {
+        "ruleId": "python-rsa-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-ec-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "python-dh",
+        "algorithm": "DH",
+        "hndl": true
+      }
     ]
   },
   "positive/python-pycryptodome.py": {
     "category": "python",
     "expected": [
-      { "ruleId": "python-rsa-keygen", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "python-ec-keygen", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "python-dsa", "algorithm": "DSA", "hndl": false },
-      { "ruleId": "python-rsa-encrypt", "algorithm": "RSA", "hndl": true }
+      {
+        "ruleId": "python-rsa-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-ec-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "python-rsa-encrypt",
+        "algorithm": "RSA",
+        "hndl": true
+      }
     ]
   },
   "positive/python-curves.py": {
     "category": "python",
     "expected": [
-      { "ruleId": "python-x25519", "algorithm": "X25519", "hndl": true },
-      { "ruleId": "python-x448", "algorithm": "X448", "hndl": true },
-      { "ruleId": "python-eddsa", "algorithm": "EdDSA", "hndl": false }
+      {
+        "ruleId": "python-x25519",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-x448",
+        "algorithm": "X448",
+        "hndl": true
+      },
+      {
+        "ruleId": "python-eddsa",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
     ]
   },
   "positive/python-jwt.py": {
     "category": "python",
     "expected": [
-      { "ruleId": "jwt-classical-alg", "algorithm": "RSA", "hndl": false },
-      { "ruleId": "jwt-classical-alg", "algorithm": "ECDSA", "hndl": false }
+      {
+        "ruleId": "jwt-classical-alg",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "jwt-classical-alg",
+        "algorithm": "ECDSA",
+        "hndl": false
+      }
     ]
   },
   "positive/go-crypto.go": {
     "category": "go",
     "expected": [
-      { "ruleId": "go-rsa-keygen", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "go-rsa-encrypt", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "go-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "go-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "go-ecdh", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "go-ed25519", "algorithm": "EdDSA", "hndl": false }
+      {
+        "ruleId": "go-rsa-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "go-rsa-encrypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "go-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "go-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "go-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "go-ed25519",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
     ]
   },
   "positive/java-jca.java": {
     "category": "java",
     "expected": [
-      { "ruleId": "java-rsa", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "java-rsa", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "java-ec-keygen", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "java-ecdsa-sign", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "java-ecdh", "algorithm": "ECDH", "hndl": true }
+      {
+        "ruleId": "java-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-ec-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-ecdsa-sign",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
     ]
   },
   "positive/java-bc.java": {
     "category": "java",
     "expected": [
-      { "ruleId": "java-ecdsa-sign", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "java-xdh", "algorithm": "X25519", "hndl": true },
-      { "ruleId": "java-dsa", "algorithm": "DSA", "hndl": false },
-      { "ruleId": "java-dh", "algorithm": "DH", "hndl": true }
+      {
+        "ruleId": "java-ecdsa-sign",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-xdh",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-dh",
+        "algorithm": "DH",
+        "hndl": true
+      }
     ]
   },
   "positive/java-kotlin.kt": {
     "category": "java",
     "expected": [
-      { "ruleId": "java-rsa-sign", "algorithm": "RSA", "hndl": false },
-      { "ruleId": "java-eddsa", "algorithm": "EdDSA", "hndl": false },
-      { "ruleId": "java-xdh", "algorithm": "X25519", "hndl": true }
+      {
+        "ruleId": "java-rsa-sign",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-eddsa",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-xdh",
+        "algorithm": "X25519",
+        "hndl": true
+      }
     ]
   },
   "positive/csharp-crypto.cs": {
     "category": "csharp",
     "expected": [
-      { "ruleId": "csharp-rsa", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "csharp-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "csharp-ecdh", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "csharp-dsa", "algorithm": "DSA", "hndl": false }
+      {
+        "ruleId": "csharp-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "csharp-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "csharp-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "csharp-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      }
     ]
   },
   "positive/rust-crypto.rs": {
     "category": "rust",
     "expected": [
-      { "ruleId": "rust-rsa", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "rust-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "rust-ecdh", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "rust-ed25519", "algorithm": "EdDSA", "hndl": false },
-      { "ruleId": "rust-x25519", "algorithm": "X25519", "hndl": true }
+      {
+        "ruleId": "rust-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "rust-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-ed25519",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "rust-x25519",
+        "algorithm": "X25519",
+        "hndl": true
+      }
     ]
   },
   "positive/ruby-crypto.rb": {
     "category": "ruby",
     "expected": [
-      { "ruleId": "ruby-rsa", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "ruby-ec", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "ruby-dsa", "algorithm": "DSA", "hndl": false },
-      { "ruleId": "ruby-dh", "algorithm": "DH", "hndl": true }
+      {
+        "ruleId": "ruby-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "ruby-ec",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "ruby-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "ruby-dh",
+        "algorithm": "DH",
+        "hndl": true
+      }
     ]
   },
   "positive/c-openssl.c": {
     "category": "c",
     "expected": [
-      { "ruleId": "c-rsa-keygen", "algorithm": "RSA", "hndl": true },
-      { "ruleId": "c-ec-keygen", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "c-ec-keygen", "algorithm": "ECDH", "hndl": true },
-      { "ruleId": "c-ecdsa", "algorithm": "ECDSA", "hndl": false },
-      { "ruleId": "c-dh", "algorithm": "DH", "hndl": true }
+      {
+        "ruleId": "c-rsa-keygen",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-ec-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-ec-keygen",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "c-dh",
+        "algorithm": "DH",
+        "hndl": true
+      }
     ]
   },
-  "negative/python-clean.py": { "category": "negative", "expected": [] },
-  "negative/go-clean.go": { "category": "negative", "expected": [] },
-  "negative/java-clean.java": { "category": "negative", "expected": [] },
-  "negative/csharp-clean.cs": { "category": "negative", "expected": [] },
-  "negative/rust-clean.rs": { "category": "negative", "expected": [] },
-  "negative/ruby-clean.rb": { "category": "negative", "expected": [] },
-  "negative/c-clean.c": { "category": "negative", "expected": [] },
-  "negative/password-hashing.ts": { "category": "negative", "expected": [] },
-  "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
-  "negative/hashing-hmac.js": { "category": "negative", "expected": [] },
-  "negative/noble-hashes.mjs": { "category": "negative", "expected": [] },
-  "negative/random-base64.txt": { "category": "negative", "expected": [] },
-  "negative/comments-and-names.ts": { "category": "negative", "expected": [] },
-  "negative/safe-package.json": { "category": "negative", "expected": [] },
-  "negative/crypto-words-in-comment.ts": { "category": "negative", "expected": [] }
+  "negative/python-clean.py": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/go-clean.go": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/java-clean.java": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/csharp-clean.cs": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/rust-clean.rs": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/ruby-clean.rb": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/c-clean.c": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/password-hashing.ts": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/symmetric-aead.ts": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/hashing-hmac.js": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/noble-hashes.mjs": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/random-base64.txt": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/comments-and-names.ts": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/safe-package.json": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/crypto-words-in-comment.ts": {
+    "category": "negative",
+    "expected": []
+  }
 }

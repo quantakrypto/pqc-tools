@@ -12,20 +12,96 @@ import type { ContextLevel, RedactedContext } from "./agent-types.js";
 /** Lines of context on each side of the match at `snippet` level. */
 const SNIPPET_RADIUS = 8;
 
-/**
- * PEM blocks and long unbroken base64 runs (≥120 chars) are treated as secret
- * material and masked, even inside otherwise-shareable code.
- */
-const SECRET_RE =
-  /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----|[A-Za-z0-9+/]{120,}={0,2}/g;
+/** The placeholder that replaces any redacted secret. */
+const REDACTED = "«redacted-secret»";
 
-function stripSecrets(text: string): { text: string; redacted: boolean } {
+/**
+ * Text longer than this is not scanned pattern-by-pattern — we fail CLOSED
+ * (redact the whole thing). Bounds worst-case work and sidesteps any engine
+ * limit on pathological single-token runs.
+ */
+const MAX_SECRET_SCAN = 2_000_000;
+
+/**
+ * High-signal secret shapes. EVERY quantifier has an explicit upper bound so
+ * matching stays linear — no catastrophic backtracking and no regex-engine
+ * stack overflow on multi-megabyte runs (both were real DoS vectors with the
+ * old unbounded `{120,}` / `[\s\S]*?` patterns). Private-key BLOCKS are handled
+ * separately, line-by-line, so a truncated key (missing `-----END-----`) is
+ * still caught.
+ */
+const TOKEN_PATTERNS: readonly RegExp[] = [
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, // AWS access key id
+  /\bgh[posru]_[A-Za-z0-9]{20,255}\b/g, // GitHub token
+  /\bgithub_pat_[A-Za-z0-9_]{20,255}\b/g, // GitHub fine-grained PAT
+  /\bxox[baprs]-[A-Za-z0-9-]{10,255}\b/g, // Slack
+  /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,255}\b/g, // OpenAI
+  /\b[rs]k_live_[A-Za-z0-9]{20,255}\b/g, // Stripe
+  /\bAIza[A-Za-z0-9_-]{35}\b/g, // Google API key
+  /\bglpat-[A-Za-z0-9_-]{20,255}\b/g, // GitLab PAT
+  /\beyJ[A-Za-z0-9_-]{8,4096}\.[A-Za-z0-9_-]{8,4096}\.[A-Za-z0-9_-]{6,4096}\b/g, // JWT
+  // Assignment of a secret-looking key (.env / config lines).
+  /(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)["'`]?\s*[:=]\s*["'`]?[^\s"'`,;]{6,4096}/gi,
+  /\b[0-9a-fA-F]{40,4096}\b/g, // long hex run (≥20 bytes)
+  /[A-Za-z0-9+/]{44,4096}={0,2}/g, // long base64 run (≥32 bytes)
+];
+
+/** Redact PEM/OpenSSH/PGP private-key blocks line-by-line (linear; tolerant of
+ * a missing END marker — a truncated key is still fully redacted). */
+function redactPrivateKeyBlocks(text: string): { text: string; redacted: boolean } {
+  const begin =
+    /-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|OPENSSH PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----/;
+  const end = /-----END /;
   let redacted = false;
-  const out = text.replace(SECRET_RE, () => {
-    redacted = true;
-    return "«redacted-secret»";
-  });
-  return { text: out, redacted };
+  let inKey = false;
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (!inKey && begin.test(line)) {
+      inKey = true;
+      redacted = true;
+      out.push(REDACTED);
+      continue;
+    }
+    if (inKey) {
+      if (end.test(line)) inKey = false;
+      continue; // drop key-body / END lines
+    }
+    out.push(line);
+  }
+  return { text: out.join("\n"), redacted };
+}
+
+// Single-entry memo: same-file findings re-request the identical file content;
+// this makes the whole-file redaction O(n) across all of them instead of O(n·k).
+let memoInput: string | undefined;
+let memoResult: { text: string; redacted: boolean } | undefined;
+
+/** Replace every secret-looking token/block in `text` with {@link REDACTED}.
+ * Fails CLOSED: on oversized input or any error, the whole text is redacted. */
+function stripSecrets(text: string): { text: string; redacted: boolean } {
+  if (memoInput === text && memoResult) return memoResult;
+  let result: { text: string; redacted: boolean };
+  if (text.length > MAX_SECRET_SCAN) {
+    result = { text: REDACTED, redacted: true };
+  } else {
+    try {
+      const pem = redactPrivateKeyBlocks(text);
+      let out = pem.text;
+      let redacted = pem.redacted;
+      for (const re of TOKEN_PATTERNS) {
+        out = out.replace(re, () => {
+          redacted = true;
+          return REDACTED;
+        });
+      }
+      result = { text: out, redacted };
+    } catch {
+      result = { text: REDACTED, redacted: true };
+    }
+  }
+  memoInput = text;
+  memoResult = result;
+  return result;
 }
 
 /** Best-effort enclosing brace/colon block around a 0-based line index. */

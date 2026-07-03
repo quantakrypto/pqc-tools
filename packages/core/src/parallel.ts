@@ -312,9 +312,14 @@ function runPool(
       signal.addEventListener("abort", onAbort, { once: true });
     }
 
+    // Workers we intentionally terminate (no more chunks / on cleanup). Their
+    // `exit` event is expected and must NOT be treated as a crash.
+    const retired = new WeakSet<NodeWorker>();
+
     const dispatch = (w: NodeWorker): void => {
       if (failed) return;
       if (next >= chunks.length) {
+        retired.add(w);
         void w.terminate();
         return;
       }
@@ -357,6 +362,16 @@ function runPool(
           cleanup();
           reject(err);
         }
+      });
+      // A worker that dies WITHOUT an `error` or `message` (e.g. a `process.exit`
+      // in loaded code) would otherwise leave the pool pending forever. Reject so
+      // scanParallel falls back to the serial path (audit: arch #5). Expected
+      // exits (retired workers, post-completion cleanup) are ignored.
+      w.on("exit", (code) => {
+        if (failed || retired.has(w) || done === chunks.length) return;
+        failed = true;
+        cleanup();
+        reject(new Error(`scan worker exited early (code ${code}) before completing its chunk`));
       });
       return w;
     };

@@ -21,7 +21,8 @@ test("library rules resolve to the crypto-libs detector with an algorithm", () =
 
   const elliptic = resolveRule("elliptic-ec");
   assert.equal(elliptic.detector?.id, "crypto-libs");
-  assert.equal(elliptic.algorithm, "ECDSA");
+  // `new EC(...)` is dual-use → classified ECDH/key-agreement (audit: crypto #8).
+  assert.equal(elliptic.algorithm, "ECDH");
 
   const nodeRsa = resolveRule("node-rsa");
   assert.equal(nodeRsa.detector?.id, "crypto-libs");

@@ -23,6 +23,7 @@
 
 import * as path from "node:path";
 import process from "node:process";
+import { realpath } from "node:fs/promises";
 
 /** Minimal env shape so the resolver stays pure and testable. */
 export type FsEnv = Record<string, string | undefined>;
@@ -101,6 +102,21 @@ function isInsideRoot(child: string, root: string): boolean {
   const rel = path.relative(root, child);
   // `rel` starting with ".." (or being absolute) means `child` escapes `root`.
   return rel.length > 0 && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/**
+ * Re-verify containment against the REAL (symlink-resolved) paths. The lexical
+ * check in {@link resolveScanPath} trusts path strings, but a symlink planted
+ * inside an allowed root can point outside it (`<root>/link -> /etc`), and the
+ * walker `stat`s through symlinks. Resolving both the target and the roots with
+ * `realpath` closes that escape (audit: mcp #1). Falls back to the lexical path
+ * when `realpath` fails (e.g. the path doesn't exist yet) — the scan then fails
+ * with ENOENT as before, never reads out of root.
+ */
+export async function realpathInsideRoots(resolved: string, config: FsConfig): Promise<boolean> {
+  const real = await realpath(resolved).catch(() => resolved);
+  const realRoots = await Promise.all(config.roots.map((r) => realpath(r).catch(() => r)));
+  return realRoots.some((root) => isInsideRoot(real, root));
 }
 
 /**

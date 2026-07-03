@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 
-import { detectors, defaultRegistry, scan } from "../src/index.js";
+import { detectors, defaultRegistry, detectFile, scan } from "../src/index.js";
 import type { Finding } from "../src/index.js";
 
 /** Run every applicable detector over a fixture and flatten the findings. */
@@ -306,9 +306,10 @@ test("elliptic instantiation (requires a curve-like arg)", () => {
       `curve ${curve}`,
     );
   }
+  // `new EC(...)` is dual-use (ECDSA + ECDH) → classified key-agreement/HNDL.
   assert.equal(
     byRule(run("a.js", "const ec = new EC('secp256k1');"), "elliptic-ec")?.algorithm,
-    "ECDSA",
+    "ECDH",
   );
   // A non-crypto `EC` class with a non-curve argument is NOT flagged.
   assert.equal(
@@ -412,4 +413,27 @@ test("every source finding carries a remediation string", () => {
   for (const f of run("a.ts", src)) {
     assert.ok(f.remediation && f.remediation.length > 0, `${f.ruleId} has remediation`);
   }
+});
+
+test("tls-weak-cipher ignores OpenSSL exclusion syntax but flags enabled weak ciphers (audit: crypto #7)", () => {
+  const hardened = detectFile(
+    "srv.ts",
+    `const o = { ciphers: "ECDHE-RSA-AES128-GCM-SHA256:!aNULL:!MD5:!RC4" };\n`,
+    detectors,
+    { source: true, config: true, deps: true },
+  );
+  assert.ok(
+    !hardened.some((f) => f.ruleId === "tls-weak-cipher"),
+    "hardened !-exclusions not flagged",
+  );
+
+  const weak = detectFile("srv.ts", `const o = { ciphers: "AES128:RC4:!MD5" };\n`, detectors, {
+    source: true,
+    config: true,
+    deps: true,
+  });
+  assert.ok(
+    weak.some((f) => f.ruleId === "tls-weak-cipher"),
+    "an actually-enabled RC4 is still flagged",
+  );
 });

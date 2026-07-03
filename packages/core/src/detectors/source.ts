@@ -95,8 +95,11 @@ const RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
 // Hardened cipher regex: bounded spans (no unbounded `[^'"`]*` straddling the
 // alternation), single-quote-style anchoring removed in favour of {0,256} bounds
 // so worst-case backtracking is linear in the bound, not the file (P0-6).
+// The `(?<![!-])` lookbehind skips OpenSSL EXCLUSION syntax — `!MD5` / `-RC4`
+// DISABLE those ciphers, so a hardened list like `...:!aNULL:!MD5:!RC4` must not
+// be flagged as weak (audit: crypto #7). A genuinely-enabled `RC4` still matches.
 const RE_TLS_WEAK_CIPHER =
-  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![!-])(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
 
 /* -------------------------------------------------------------------------- */
 /* Node.js `crypto` module                                                    */
@@ -511,11 +514,14 @@ const RULE_ELLIPTIC_EC: RuleMeta = {
   id: "elliptic-ec",
   title: "elliptic curve instantiation",
   description: "the `elliptic` library — new EC(...)",
-  category: "signature",
+  // `new EC(...)` is a dual-use curve context (ECDSA sign AND ECDH `key.derive()`).
+  // Per this scanner's own EC-ambiguity policy, ambiguous EC is treated as
+  // key-agreement-capable and HNDL-exposed (audit: crypto #8).
+  category: "key-exchange",
   severity: "high",
   confidence: "high",
-  algorithm: "ECDSA",
-  hndl: false,
+  algorithm: "ECDH",
+  hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message:
     "The `elliptic` library implements classical ECDSA/ECDH, both broken by Shor's algorithm.",
@@ -538,11 +544,13 @@ const RULE_JSRSASIGN_KEYGEN: RuleMeta = {
   id: "jsrsasign-keygen",
   title: "jsrsasign key generation",
   description: "jsrsasign KEYUTIL.generateKeypair",
-  category: "signature",
+  // KEYUTIL.generateKeypair("RSA"|"EC") makes keys usable for RSA-OAEP encryption
+  // and ECDH — HNDL-exposed, like Node's generateKeyPair (audit: crypto #13).
+  category: "key-exchange",
   severity: "high",
   confidence: "high",
   algorithm: "unknown",
-  hndl: false,
+  hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message: "jsrsasign generates classical RSA/EC key pairs, which are not quantum-safe.",
   remediation: "ML-KEM-768 (FIPS 203) / ML-DSA-65 (FIPS 204)",
