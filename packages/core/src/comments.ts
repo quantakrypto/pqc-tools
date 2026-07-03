@@ -124,6 +124,33 @@ export function offsetInSpans(spans: ReadonlyArray<[number, number]>, offset: nu
 }
 
 /**
+ * Line numbers (1-based) suppressed by an inline ignore directive:
+ *   - `qscan-ignore-line` on a line suppresses findings on THAT line.
+ *   - `qscan-ignore-next-line` on a line suppresses findings on the NEXT line.
+ * The directive text is matched anywhere on the line (usually in a comment), so
+ * it is language-agnostic. `qscan-ignore-line` is not a substring of
+ * `qscan-ignore-next-line`, so the two never collide.
+ */
+export function ignoredLines(content: string): Set<number> {
+  const ignored = new Set<number>();
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes("qscan-ignore-next-line")) ignored.add(i + 2);
+    else if (line.includes("qscan-ignore-line")) ignored.add(i + 1);
+  }
+  return ignored;
+}
+
+/** Drop findings on lines suppressed by an inline `qscan-ignore` directive. */
+export function stripIgnoredFindings(findings: Finding[], content: string): Finding[] {
+  if (findings.length === 0 || !content.includes("qscan-ignore")) return findings;
+  const ignored = ignoredLines(content);
+  if (ignored.size === 0) return findings;
+  return findings.filter((f) => !ignored.has(f.location.line));
+}
+
+/**
  * Drop findings whose match starts inside a comment. No-op when the file's
  * language has no comment style we handle, or when it has no comments.
  */

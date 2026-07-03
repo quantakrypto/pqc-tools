@@ -70,3 +70,38 @@ test("comment filtering does not touch dependency findings (manifests have no co
   const pkg = JSON.stringify({ dependencies: { "node-forge": "^1.0.0" } });
   assert.equal(has(scan1("package.json", pkg), "dep-vulnerable"), true);
 });
+
+test("inline qscan-ignore-line suppresses a finding on the same line", () => {
+  assert.equal(
+    has(
+      scan1("a.ts", "const e = crypto.createECDH('p256'); // qscan-ignore-line"),
+      "node-crypto-ecdh",
+    ),
+    false,
+  );
+});
+
+test("inline qscan-ignore-next-line suppresses the following line only", () => {
+  assert.equal(
+    has(scan1("a.ts", "// qscan-ignore-next-line\ncrypto.createECDH('p256');"), "node-crypto-ecdh"),
+    false,
+  );
+  // The directive only reaches the immediately-following line.
+  assert.equal(
+    has(
+      scan1("a.ts", "// qscan-ignore-next-line\nconst ok = 1;\ncrypto.createECDH('p256');"),
+      "node-crypto-ecdh",
+    ),
+    true,
+  );
+});
+
+test("qscan-ignore is language-agnostic (works with # comments)", () => {
+  assert.equal(
+    has(
+      scan1("a.py", "key = rsa.generate_private_key(key_size=2048)  # qscan-ignore-line"),
+      "python-rsa-keygen",
+    ),
+    false,
+  );
+});

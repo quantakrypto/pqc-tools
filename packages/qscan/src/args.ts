@@ -75,6 +75,8 @@ export interface QscanOptions {
   writeBaseline?: string;
   /** Suppress the human summary banner (still writes reports/output files). */
   quiet: boolean;
+  /** How many findings the human report lists (`--top N`). Default: 5. */
+  topN?: number;
   /**
    * Omit code snippets from the JSON/SARIF report (`--no-snippets`). Passed to
    * core's reporters as `{ redactSnippets: true }`. Snippets of `sensitive`
@@ -245,6 +247,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--max-file-size":
         options.maxFileSize = asInt(takeValue(), "--max-file-size");
         explicit.add("maxFileSize");
+        break;
+      case "--top":
+        options.topN = asInt(takeValue(), "--top");
         break;
       case "--no-default-ignores":
         rejectInlineValue();

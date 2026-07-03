@@ -63,6 +63,30 @@ test("changedFiles lists untracked + modified files in a git repo", async (t) =>
   }
 });
 
+test("changedFiles throws on an unknown --since ref (fails loudly, not silently)", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-badsince-"));
+  try {
+    const run = (args: string[]) => execFileAsync("git", args, { cwd: dir, windowsHide: true });
+    await run(["init"]);
+    await run(["config", "user.email", "t@example.com"]);
+    await run(["config", "user.name", "t"]);
+    await writeFile(path.join(dir, "a.ts"), "const a = 1;\n");
+    await run(["add", "."]);
+    await run(["commit", "-m", "init"]);
+
+    // A valid ref works…
+    await assert.doesNotReject(changedFiles(dir, "HEAD"));
+    // …a typo'd ref must reject rather than silently scanning only local edits.
+    await assert.rejects(changedFiles(dir, "no-such-ref-xyz"), /since/i);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("changedFiles on a subdirectory returns paths relative to that subdir", async (t) => {
   if (!(await gitAvailable())) {
     t.skip("git not available");

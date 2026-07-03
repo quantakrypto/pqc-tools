@@ -53,11 +53,20 @@ export async function changedFiles(root: string, since?: string): Promise<string
   // than repo-root-relative, so `scan()` can join them against a sub-directory
   // root. Without it, a `--changed` scan of a subdirectory resolves nothing.
   if (since) {
-    for (const f of toLines(
-      await git(root, ["diff", "--name-only", "--relative", "--diff-filter=ACMR", since]),
-    )) {
-      out.add(f);
+    // A `git diff` against `since` returns null ONLY when the command failed —
+    // almost always an unknown ref/range (a typo like `--since maiin`). Surface
+    // it instead of silently scanning just the uncommitted files and passing CI.
+    const diff = await git(root, [
+      "diff",
+      "--name-only",
+      "--relative",
+      "--diff-filter=ACMR",
+      since,
+    ]);
+    if (diff === null) {
+      throw new Error(`--since: git could not diff against "${since}" (unknown ref or range).`);
     }
+    for (const f of toLines(diff)) out.add(f);
   }
 
   // Always include local uncommitted edits (staged + unstaged), filtered to ACMR.

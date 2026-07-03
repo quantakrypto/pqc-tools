@@ -23,6 +23,12 @@ function runOptions(args: string[]) {
   return parsed.options;
 }
 
+test("--top parses a finding count (and defaults to undefined)", () => {
+  assert.equal(runOptions([]).topN, undefined);
+  assert.equal(runOptions(["--top", "25"]).topN, 25);
+  assert.equal(runOptions(["--top=3"]).topN, 3);
+});
+
 test("defaults are applied when no args are given", () => {
   const parsed = parseArgs([]);
   assert.equal(parsed.kind, "run");

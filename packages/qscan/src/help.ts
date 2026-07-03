@@ -40,6 +40,7 @@ OPTIONS
   --parallel                    Scan using a worker-thread pool when worthwhile
   --concurrency <n>             Worker count for --parallel (implies --parallel);
                                 0 forces the in-process serial path
+  --top <n>                     List <n> findings in the human report (default: 5)
   --baseline <file>             Suppress findings listed in a baseline file
   --write-baseline <file>       Write current findings as a baseline, then exit 0
   --quiet                       Suppress the human summary banner

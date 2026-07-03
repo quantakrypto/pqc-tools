@@ -199,6 +199,7 @@ export async function runQscan(
     report: renderReport(result, options.format, {
       color: hooks.color ?? false,
       redactSnippets: options.noSnippets,
+      topN: options.topN,
     }),
     exitCode,
   };
@@ -210,6 +211,8 @@ export interface RenderReportOptions {
   color?: boolean;
   /** Omit code snippets from the JSON/SARIF report (`--no-snippets`). */
   redactSnippets?: boolean;
+  /** How many findings the human report lists (`--top N`). */
+  topN?: number;
 }
 
 /** Render a scan result in the requested format. */
@@ -219,8 +222,11 @@ export function renderReport(
   opts: RenderReportOptions | boolean = {},
 ): string {
   // Back-compat: `renderReport(result, format, true)` used to mean "color on".
-  const { color = false, redactSnippets = false } =
-    typeof opts === "boolean" ? { color: opts } : opts;
+  const {
+    color = false,
+    redactSnippets = false,
+    topN = undefined,
+  } = typeof opts === "boolean" ? { color: opts } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
@@ -230,7 +236,7 @@ export function renderReport(
       return renderCbom(result);
     case "human":
     default:
-      return renderHuman(result, { color });
+      return renderHuman(result, { color, topN });
   }
 }
 

@@ -15,7 +15,7 @@ import * as path from "node:path";
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
 import { walkFiles, toPosix, isBinaryPath, looksMinified } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
-import { stripCommentFindings } from "./comments.js";
+import { stripCommentFindings, stripIgnoredFindings } from "./comments.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
@@ -83,9 +83,11 @@ export function detectFile(
   }
 
   // Drop lexical false positives that land inside comments (`// migrated off
-  // createECDH()`). No-op for manifests (JSON has no comments) so it runs before
-  // the dependency scan appends its findings.
+  // createECDH()`), then honour inline `// qscan-ignore-line` /
+  // `qscan-ignore-next-line` directives. Both run before the dependency scan
+  // appends its findings (manifests carry neither).
   out = stripCommentFindings(out, content, file);
+  out = stripIgnoredFindings(out, content);
 
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));

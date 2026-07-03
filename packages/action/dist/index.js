@@ -1171,6 +1171,26 @@ function offsetInSpans(spans, offset) {
   }
   return false;
 }
+function ignoredLines(content) {
+  const ignored = /* @__PURE__ */ new Set();
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes("qscan-ignore-next-line"))
+      ignored.add(i + 2);
+    else if (line.includes("qscan-ignore-line"))
+      ignored.add(i + 1);
+  }
+  return ignored;
+}
+function stripIgnoredFindings(findings, content) {
+  if (findings.length === 0 || !content.includes("qscan-ignore"))
+    return findings;
+  const ignored = ignoredLines(content);
+  if (ignored.size === 0)
+    return findings;
+  return findings.filter((f) => !ignored.has(f.location.line));
+}
 function stripCommentFindings(findings, content, file) {
   if (findings.length === 0)
     return findings;
@@ -2953,6 +2973,7 @@ function detectFile(file, content, dets, toggles, disabledRules) {
     out.push(...det.detect({ file, content }));
   }
   out = stripCommentFindings(out, content, file);
+  out = stripIgnoredFindings(out, content);
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));
   }
@@ -3378,9 +3399,18 @@ async function changedFiles(root, since) {
     return [];
   const out = /* @__PURE__ */ new Set();
   if (since) {
-    for (const f of toLines(await git(root, ["diff", "--name-only", "--relative", "--diff-filter=ACMR", since]))) {
-      out.add(f);
+    const diff = await git(root, [
+      "diff",
+      "--name-only",
+      "--relative",
+      "--diff-filter=ACMR",
+      since
+    ]);
+    if (diff === null) {
+      throw new Error(`--since: git could not diff against "${since}" (unknown ref or range).`);
     }
+    for (const f of toLines(diff))
+      out.add(f);
   }
   for (const f of toLines(await git(root, ["diff", "--name-only", "--relative", "--diff-filter=ACMR"]))) {
     out.add(f);
@@ -3950,13 +3980,14 @@ async function runQscan(opts, hooks = {}) {
     suppressed,
     report: renderReport(result, options.format, {
       color: hooks.color ?? false,
-      redactSnippets: options.noSnippets
+      redactSnippets: options.noSnippets,
+      topN: options.topN
     }),
     exitCode
   };
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false } = typeof opts === "boolean" ? { color: opts } : opts;
+  const { color = false, redactSnippets = false, topN = void 0 } = typeof opts === "boolean" ? { color: opts } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
@@ -3966,7 +3997,7 @@ function renderReport(result, format, opts = {}) {
       return renderCbom(result);
     case "human":
     default:
-      return renderHuman(result, { color });
+      return renderHuman(result, { color, topN });
   }
 }
 
