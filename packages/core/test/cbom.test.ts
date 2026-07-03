@@ -50,6 +50,23 @@ test("toCbom emits a CycloneDX 1.6 cryptographic BOM", () => {
   );
 });
 
+test("toCbom reports a per-family classical security level (quantum level stays 0)", () => {
+  const levelOf = (findings: Finding[]) => {
+    const props = (
+      toCbom(result(findings)).components[0].cryptoProperties as {
+        algorithmProperties: { classicalSecurityLevel: number; nistQuantumSecurityLevel: number };
+      }
+    ).algorithmProperties;
+    return props;
+  };
+  // ECDH (P-256 class) ≈ 128-bit classical, RSA-2048 ≈ 112-bit; quantum = 0 for both.
+  const ecdh = levelOf([f({})]);
+  assert.equal(ecdh.classicalSecurityLevel, 128);
+  assert.equal(ecdh.nistQuantumSecurityLevel, 0);
+  const rsa = levelOf([f({ ruleId: "node-crypto-keygen", category: "kem", algorithm: "RSA" })]);
+  assert.equal(rsa.classicalSecurityLevel, 112);
+});
+
 test("toCbom groups by algorithm + primitive and records occurrences", () => {
   const bom = toCbom(
     result([

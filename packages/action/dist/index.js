@@ -1225,7 +1225,7 @@ var RE_WEBCRYPTO_ALGO = /\b(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDH|ECDSA|Ed2551
 var RE_SUBTLE_CALL = /subtle\s*\.\s*(generateKey|importKey|exportKey|deriveKey|deriveBits|sign|verify|encrypt|decrypt|wrapKey|unwrapKey)\s*\(/g;
 var RE_FORGE_RSA = /pki\.rsa\.generateKeyPair\s*\(/g;
 var RE_FORGE_ED25519 = /forge\.ed25519\b/g;
-var RE_ELLIPTIC_EC = /new\s+(?:elliptic\.)?ec\s*\(/gi;
+var RE_ELLIPTIC_EC = /new\s+(?:elliptic\.)?ec\s*\(\s*['"`](?:sec[pt]|prime|nistp|curve|ed25519|ed448|brainpool|p-?(?:192|224|256|384|521)|x25519|x448)/gi;
 var RE_JSRSASIGN_KEYGEN = /KEYUTIL\.generateKeypair\s*\(/g;
 var RE_JSRSASIGN_SIGN = /KJUR\.crypto\.(?:Signature|ECDSA)\b/g;
 var RE_NODE_RSA = /new\s+NodeRSA\s*\(/g;
@@ -3676,6 +3676,24 @@ function primitiveFor(category) {
 function isQuantumVulnerable(algorithm) {
   return algorithm !== "unknown";
 }
+function classicalSecurityLevelFor(algorithm) {
+  switch (algorithm) {
+    case "RSA":
+    case "DH":
+    case "DSA":
+      return 112;
+    case "ECDH":
+    case "ECDSA":
+    case "EdDSA":
+    case "X25519":
+    case "ECIES":
+      return 128;
+    case "X448":
+      return 224;
+    default:
+      return 0;
+  }
+}
 function bomRef(key) {
   return `crypto:${createHash2("sha256").update(key, "utf8").digest("hex").slice(0, 16)}`;
 }
@@ -3708,7 +3726,7 @@ function toCbom(result) {
           primitive: g.primitive,
           parameterSetIdentifier: g.algorithm,
           executionEnvironment: "software-plain-ram",
-          classicalSecurityLevel: 0,
+          classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
           nistQuantumSecurityLevel: 0,
           cryptoFunctions: g.primitive === "signature" ? ["sign", "verify"] : g.primitive === "kem" ? ["encapsulate", "decapsulate"] : g.primitive === "key-agree" ? ["keyagree"] : ["other"]
         },

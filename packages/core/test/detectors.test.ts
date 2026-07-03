@@ -299,10 +299,23 @@ test("node-forge RSA key generation", () => {
   assert.equal(f.algorithm, "RSA");
 });
 
-test("elliptic instantiation", () => {
-  const f = byRule(run("a.js", "const ec = new EC('secp256k1');"), "elliptic-ec");
-  assert.ok(f);
-  assert.equal(f.algorithm, "ECDSA");
+test("elliptic instantiation (requires a curve-like arg)", () => {
+  for (const curve of ["secp256k1", "p256", "prime256v1", "curve25519", "ed25519"]) {
+    assert.ok(
+      byRule(run("a.js", `const ec = new EC('${curve}');`), "elliptic-ec"),
+      `curve ${curve}`,
+    );
+  }
+  assert.equal(
+    byRule(run("a.js", "const ec = new EC('secp256k1');"), "elliptic-ec")?.algorithm,
+    "ECDSA",
+  );
+  // A non-crypto `EC` class with a non-curve argument is NOT flagged.
+  assert.equal(
+    byRule(run("a.js", "const ec = new EC('request-scope');"), "elliptic-ec"),
+    undefined,
+  );
+  assert.equal(byRule(run("a.js", "const ec = new EC();"), "elliptic-ec"), undefined);
 });
 
 test("node-rsa instantiation", () => {

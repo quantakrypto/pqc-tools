@@ -56,6 +56,32 @@ function isQuantumVulnerable(algorithm: AlgorithmFamily): boolean {
   return algorithm !== "unknown";
 }
 
+/**
+ * Approximate CLASSICAL security strength (bits) of the common parameterisation
+ * of a classical family — RSA-2048 / DH-2048 ≈ 112-bit, 256-bit curves ≈ 128-bit,
+ * X448 ≈ 224-bit. (The QUANTUM level is 0 for all of these: Shor breaks them.)
+ * 0 when the family is unknown. Reported so a CBOM doesn't imply these primitives
+ * have zero classical strength today.
+ */
+function classicalSecurityLevelFor(algorithm: AlgorithmFamily): number {
+  switch (algorithm) {
+    case "RSA":
+    case "DH":
+    case "DSA":
+      return 112;
+    case "ECDH":
+    case "ECDSA":
+    case "EdDSA":
+    case "X25519":
+    case "ECIES":
+      return 128;
+    case "X448":
+      return 224;
+    default:
+      return 0;
+  }
+}
+
 /** Deterministic bom-ref for a (algorithm, primitive) asset key. */
 function bomRef(key: string): string {
   return `crypto:${createHash("sha256").update(key, "utf8").digest("hex").slice(0, 16)}`;
@@ -107,7 +133,7 @@ export function toCbom(result: ScanResult): CycloneDxBom {
             primitive: g.primitive,
             parameterSetIdentifier: g.algorithm,
             executionEnvironment: "software-plain-ram",
-            classicalSecurityLevel: 0,
+            classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
             nistQuantumSecurityLevel: 0,
             cryptoFunctions:
               g.primitive === "signature"

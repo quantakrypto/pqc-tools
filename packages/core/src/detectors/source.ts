@@ -71,7 +71,11 @@ const RE_SUBTLE_CALL =
 // Libraries.
 const RE_FORGE_RSA = /pki\.rsa\.generateKeyPair\s*\(/g;
 const RE_FORGE_ED25519 = /forge\.ed25519\b/g;
-const RE_ELLIPTIC_EC = /new\s+(?:elliptic\.)?ec\s*\(/gi;
+// Require a curve-like first argument so `new EC("request-scope")` (a non-crypto
+// `EC` class) is not flagged; the elliptic library is always constructed with a
+// named curve (`new EC('secp256k1')`, `new EC('p256')`, …).
+const RE_ELLIPTIC_EC =
+  /new\s+(?:elliptic\.)?ec\s*\(\s*['"`](?:sec[pt]|prime|nistp|curve|ed25519|ed448|brainpool|p-?(?:192|224|256|384|521)|x25519|x448)/gi;
 const RE_JSRSASIGN_KEYGEN = /KEYUTIL\.generateKeypair\s*\(/g;
 const RE_JSRSASIGN_SIGN = /KJUR\.crypto\.(?:Signature|ECDSA)\b/g;
 const RE_NODE_RSA = /new\s+NodeRSA\s*\(/g;
