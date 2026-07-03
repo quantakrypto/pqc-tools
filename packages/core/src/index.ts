@@ -22,6 +22,16 @@ export { scan, detectors, detectFile, compareFindings } from "./scan.js";
 export { verifyFix, languageToExtension } from "./verify.js";
 export type { VerifyResult } from "./verify.js";
 
+// Agent-plane shared types + the context redactor (offline; reused by MCP).
+export type {
+  ContextLevel,
+  RedactedContext,
+  TriageVerdict,
+  Patch,
+  FixProposal,
+} from "./agent-types.js";
+export { buildContext, renderPreflight } from "./redact.js";
+
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
 
