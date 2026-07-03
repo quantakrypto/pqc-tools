@@ -15,12 +15,13 @@ import {
   AbortError,
   BudgetExceededError,
   buildInventory,
-  detectFile,
   detectors,
+  languageToExtension,
   remediationFor,
   scan,
   SEVERITY_ORDER,
   toCbom,
+  verifyFix,
   vulnerableDependencies,
 } from "@quantakrypto/core";
 import type {
@@ -30,6 +31,7 @@ import type {
   Remediation,
   ScanOptions,
   ScanResult,
+  VerifyResult,
   VulnerableDependency,
 } from "@quantakrypto/core";
 
@@ -523,42 +525,8 @@ const generateCbomTool: ToolDefinition = {
 // actually gone; check_dependency and score_delta quantify the work.
 // ---------------------------------------------------------------------------
 
-/** Map a language name (or a filename's extension) to a source extension the detectors gate on. */
-function languageToExtension(language: string): string | null {
-  const l = language.trim().toLowerCase().replace(/^\./, "");
-  const map: Record<string, string> = {
-    js: ".js",
-    javascript: ".js",
-    jsx: ".jsx",
-    ts: ".ts",
-    typescript: ".ts",
-    tsx: ".tsx",
-    mjs: ".mjs",
-    cjs: ".cjs",
-    py: ".py",
-    python: ".py",
-    go: ".go",
-    golang: ".go",
-    java: ".java",
-    kotlin: ".kt",
-    kt: ".kt",
-    cs: ".cs",
-    csharp: ".cs",
-    "c#": ".cs",
-    dotnet: ".cs",
-    rs: ".rs",
-    rust: ".rs",
-    rb: ".rb",
-    ruby: ".rb",
-    c: ".c",
-    "c++": ".cpp",
-    cpp: ".cpp",
-    cc: ".cc",
-    h: ".h",
-    hpp: ".hpp",
-  };
-  return map[l] ?? null;
-}
+// `languageToExtension` + `verifyFix` now live in @quantakrypto/core so this tool and
+// the remediation pipeline share one definition of "the fix is verified".
 
 /** Before/after migration snippets per classical family. Static + deterministic. */
 const FIX_EXAMPLES: Partial<
@@ -868,31 +836,23 @@ const verifyFixTool: ToolDefinition = {
     const filename = typeof args.filename === "string" ? args.filename.trim() : "";
     const language = typeof args.language === "string" ? args.language.trim() : "";
 
-    let name: string;
-    if (filename) {
-      name = filename;
-    } else if (language) {
-      const ext = languageToExtension(language);
-      if (!ext) {
-        return errorResult(
-          `verify_fix: unknown language "${language}". Supported: js/ts, python, go, java, kotlin, csharp, rust, ruby, c/c++ — or pass a 'filename'.`,
-        );
-      }
-      name = `snippet${ext}`;
-    } else {
+    if (!filename && !language) {
       return errorResult(
         "verify_fix requires a 'language' or a 'filename' to know which detectors to run.",
       );
     }
+    if (!filename && languageToExtension(language) === null) {
+      return errorResult(
+        `verify_fix: unknown language "${language}". Supported: js/ts, python, go, java, kotlin, csharp, rust, ruby, c/c++ — or pass a 'filename'.`,
+      );
+    }
 
-    const found = await safe<Finding[]>("detectFile", () =>
-      detectFile(name, code, detectors, { source: true, config: true, deps: true }),
+    const res = await safe<VerifyResult>("verifyFix", () =>
+      verifyFix(code, { filename, language }),
     );
-    if (!found.ok) return found.result;
-    const findings = found.value;
+    if (!res.ok) return res.result;
+    const { supported, findings } = res.value;
     if (findings.length === 0) {
-      const supported =
-        languageToExtension(language || filename.replace(/^.*(\.[^.]+)$/, "$1")) !== null;
       const caveat = supported
         ? "Fix verified: no classical asymmetric cryptography detected in this snippet."
         : "No classical crypto detected — but this language is NOT one the scanner analyzes, so this is not a verification. Use a supported language.";

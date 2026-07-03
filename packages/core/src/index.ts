@@ -18,6 +18,10 @@ export type { SarifLog } from "./report.js";
 // Core orchestration + built-in detector set.
 export { scan, detectors, detectFile, compareFindings } from "./scan.js";
 
+// Snippet-level fix verification (shared by MCP verify_fix + remediation).
+export { verifyFix, languageToExtension } from "./verify.js";
+export type { VerifyResult } from "./verify.js";
+
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
 
