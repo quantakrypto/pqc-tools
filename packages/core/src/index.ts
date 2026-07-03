@@ -35,6 +35,7 @@ export { TRIAGE_RUBRIC, TRIAGE_VERDICT_SCHEMA, buildTriageRequest } from "./tria
 export type { TriageRequest } from "./triage.js";
 export { checkPatchPolicy } from "./patch-policy.js";
 export type { PolicyContext, PolicyDecision } from "./patch-policy.js";
+export { withWorktree } from "./worktree.js";
 
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
