@@ -1,7 +1,7 @@
 # BYOK Agent Tools — Design Spec
 
 - **Date:** 2026-07-03
-- **Status:** Approved design; ready for implementation planning.
+- **Status:** ✅ Implemented (all 3 phases, CI-green on `main`, unpublished). See `docs/superpowers/plans/2026-07-03-byok-agent-tools.md`.
 - **Scope:** All three LLM-agent layers (triage, deterministic remediation, BYOK LLM remediation) + CI plan-comments, delivered as one spec built in three phases.
 - **Repo:** `quantakrypto/pqc-tools` (monorepo: `@quantakrypto/{core,qscan,mcp,sieve}` + `@quantakrypto/action`), currently `0.4.0` unpublished on `main`.
 
