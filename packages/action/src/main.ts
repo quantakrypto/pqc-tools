@@ -22,9 +22,10 @@ import {
   fingerprintFinding,
   loadBaseline,
   meetsThreshold,
+  remediationFor,
   SEVERITY_ORDER,
 } from "@quantakrypto/core";
-import type { Baseline, Finding, ScanResult, Severity } from "@quantakrypto/core";
+import type { AlgorithmFamily, Baseline, Finding, ScanResult, Severity } from "@quantakrypto/core";
 import { renderReport, runQscan } from "@quantakrypto/qscan";
 
 import {
@@ -53,6 +54,9 @@ export interface ActionInputs {
   commentPr: boolean;
   githubToken?: string;
   redactSnippets: boolean;
+  /** `scan` (default) writes a report + gates the build; `comment-plan` posts a
+   * deterministic migration plan as a PR comment and never fails the build. */
+  mode: "scan" | "comment-plan";
 }
 
 /** Parse + validate the action's inputs from the environment. Pure given `env`. */
@@ -69,6 +73,10 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
   }
   const baseline = getInput("baseline", env);
   const githubToken = getInput("github-token", env);
+  const mode = (getInput("mode", env) || "scan") as "scan" | "comment-plan";
+  if (mode !== "scan" && mode !== "comment-plan") {
+    throw new TypeError(`Invalid mode "${mode}"; expected "scan" or "comment-plan"`);
+  }
   return {
     path: getInput("path", env) || ".",
     severityThreshold,
@@ -79,6 +87,7 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
     commentPr: getBooleanInput("comment-pr", false, env),
     githubToken: githubToken || undefined,
     redactSnippets: getBooleanInput("redact-snippets", false, env),
+    mode,
   };
 }
 
@@ -173,6 +182,78 @@ export function buildSummary(
   if (blocking.length > 50) lines.push(`| … | | | _${blocking.length - 50} more_ |`);
   lines.push("");
   lines.push("<sub>Reported by [quantakrypto](https://quantakrypto.com/tools).</sub>");
+  return lines.join("\n");
+}
+
+/**
+ * Build a deterministic, HNDL-first PQC migration plan for a PR comment. Pure
+ * and model-free: findings are grouped by algorithm family and ordered so
+ * harvest-now-decrypt-later (confidentiality) families come first, each with the
+ * canonical post-quantum replacement.
+ */
+export function buildPlanComment(result: ScanResult): string {
+  const findings = result.findings;
+  const lines: string[] = ["## quantakrypto — PQC Migration Plan", ""];
+  lines.push(
+    `**Readiness score:** ${result.inventory.readinessScore}/100 · **HNDL-exposed findings:** ${result.inventory.hndlCount}`,
+  );
+  lines.push("");
+  if (findings.length === 0) {
+    lines.push("No quantum-vulnerable cryptography detected. Nothing to migrate. ✅");
+    lines.push("");
+    lines.push(
+      "<sub>Deterministic, model-free plan from [quantakrypto](https://quantakrypto.com/tools).</sub>",
+    );
+    return lines.join("\n");
+  }
+
+  const byAlgo = new Map<string, Finding[]>();
+  for (const f of findings) {
+    const a = f.algorithm ?? "unknown";
+    const list = byAlgo.get(a);
+    if (list) list.push(f);
+    else byAlgo.set(a, [f]);
+  }
+  // HNDL / confidentiality families first, then signatures, then unknown.
+  const PRIORITY = [
+    "RSA",
+    "ECDH",
+    "DH",
+    "X25519",
+    "X448",
+    "ECIES",
+    "ECDSA",
+    "EdDSA",
+    "DSA",
+    "unknown",
+  ];
+  const rank = (a: string) => {
+    const i = PRIORITY.indexOf(a);
+    return i === -1 ? PRIORITY.length : i;
+  };
+  const algos = [...byAlgo.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+
+  lines.push("Migrate in this order (harvest-now-decrypt-later exposure first):");
+  lines.push("");
+  let step = 1;
+  for (const algo of algos) {
+    const group = byAlgo.get(algo) ?? [];
+    const hndlCount = group.filter((f) => f.hndl).length;
+    const rec =
+      remediationFor(algo as AlgorithmFamily)?.recommendation ?? "review for PQC migration";
+    const uniqueFiles = [...new Set(group.map((f) => f.location.file))];
+    const shown = uniqueFiles.slice(0, 5).map(mdCell).join(", ");
+    const more = uniqueFiles.length > 5 ? ` (+${uniqueFiles.length - 5} more)` : "";
+    lines.push(
+      `${step}. **${mdCell(algo)}** — ${group.length} finding(s)${hndlCount ? `, ${hndlCount} HNDL` : ""}. Migrate to ${mdCell(rec)}.`,
+    );
+    lines.push(`   _Files:_ ${shown}${more}`);
+    step++;
+  }
+  lines.push("");
+  lines.push(
+    "<sub>Deterministic, model-free plan from [quantakrypto](https://quantakrypto.com/tools).</sub>",
+  );
   return lines.join("\n");
 }
 
@@ -322,6 +403,27 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
 
   const scanRoot = resolveInWorkspace(inputs.path, env);
   info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
+
+  // comment-plan mode: post a deterministic migration plan as a PR comment and
+  // stop. It never writes a report, sets outputs, or fails the build.
+  if (inputs.mode === "comment-plan") {
+    const { result: planResult } = await runQscan({ path: scanRoot });
+    setOutput("readiness-score", String(planResult.inventory.readinessScore), env);
+    if (inputs.githubToken) {
+      const ctx = await readPullRequestContext(env);
+      if (ctx) {
+        await commentOnPullRequest(ctx, inputs.githubToken, buildPlanComment(planResult));
+        info(`quantakrypto: posted migration plan to PR #${ctx.prNumber}.`);
+      } else {
+        info(
+          "quantakrypto: comment-plan mode but no pull-request context found; skipping comment.",
+        );
+      }
+    } else {
+      info("quantakrypto: comment-plan mode needs github-token to post a comment; skipping.");
+    }
+    return;
+  }
 
   // One code path with the CLI: qScan runs the scan and renders the report.
   // We deliberately do NOT hand the baseline to runQscan — the report (SARIF

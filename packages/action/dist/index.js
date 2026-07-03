@@ -31,6 +31,9 @@ var init_version = __esm({
 });
 
 // ../core/dist/remediation.js
+function remediationFor(algorithm) {
+  return REMEDIATIONS[algorithm];
+}
 function remediationText(algorithm) {
   return REMEDIATIONS[algorithm].recommendation;
 }
@@ -3509,6 +3512,25 @@ var init_triage = __esm({
   }
 });
 
+// ../core/dist/remediate-request.js
+var REMEDIATE_RUBRIC, FIX_REQUEST_SCHEMA;
+var init_remediate_request = __esm({
+  "../core/dist/remediate-request.js"() {
+    "use strict";
+    init_redact();
+    REMEDIATE_RUBRIC = "You are a post-quantum cryptography migration engineer. Given the FULL content of one source file plus a finding describing classical (quantum-vulnerable) cryptography in it, return the FULL corrected file content that removes the flagged usage, migrating to a post-quantum or hybrid construction (ML-KEM-768 / ML-DSA-65, hybrid X25519MLKEM768) where a safe replacement exists. Change as little as possible; preserve all other code and formatting exactly. If you cannot safely fix it, return newContent identical to the input. NEVER invent or alter secrets/keys. After proposing, VERIFY with the verify_fix tool and keep only fixes that clear the finding.";
+    FIX_REQUEST_SCHEMA = {
+      type: "object",
+      required: ["path", "newContent", "explanation"],
+      properties: {
+        path: { type: "string" },
+        newContent: { type: "string" },
+        explanation: { type: "string" }
+      }
+    };
+  }
+});
+
 // ../core/dist/patch-policy.js
 var init_patch_policy = __esm({
   "../core/dist/patch-policy.js"() {
@@ -4285,6 +4307,7 @@ var init_dist = __esm({
     init_verify();
     init_redact();
     init_triage();
+    init_remediate_request();
     init_patch_policy();
     init_worktree();
     init_registry2();
@@ -4643,15 +4666,71 @@ var init_triage2 = __esm({
   }
 });
 
+// ../agent/dist/remediate.js
+function fixUserPrompt(finding, fileCode) {
+  return [
+    `Finding: ${finding.ruleId} (${finding.severity})`,
+    `Location: ${finding.location.file}:${finding.location.line}`,
+    `Detector message: ${finding.message}`,
+    finding.remediation ? `Suggested direction: ${finding.remediation}` : "",
+    "",
+    "Full file content:",
+    "```",
+    fileCode,
+    "```"
+  ].filter(Boolean).join("\n");
+}
+async function proposeFix(finding, opts) {
+  let content;
+  try {
+    content = await opts.readFile(finding.location.file);
+  } catch {
+    return null;
+  }
+  if (!content)
+    return null;
+  const ctx = buildContext(finding, "file", content);
+  if (ctx.code === null || ctx.redactedSecret)
+    return null;
+  const raw = await opts.client.complete({
+    system: FIX_SYSTEM,
+    user: fixUserPrompt(finding, ctx.code),
+    schema: FIX_SCHEMA,
+    maxTokens: 8192
+  });
+  if (!raw.newContent || raw.newContent === content)
+    return null;
+  if (raw.newContent.includes("\xABredacted-secret\xBB"))
+    return null;
+  return {
+    fingerprint: opts.fingerprint(finding),
+    path: finding.location.file,
+    newContent: raw.newContent,
+    explanation: raw.explanation
+  };
+}
+var FIX_PROMPT_VERSION, FIX_SYSTEM, FIX_SCHEMA;
+var init_remediate = __esm({
+  "../agent/dist/remediate.js"() {
+    "use strict";
+    init_dist();
+    FIX_PROMPT_VERSION = "fix-1";
+    FIX_SYSTEM = REMEDIATE_RUBRIC;
+    FIX_SCHEMA = FIX_REQUEST_SCHEMA;
+  }
+});
+
 // ../agent/dist/index.js
 var dist_exports = {};
 __export(dist_exports, {
   AGENT_PACKAGE: () => AGENT_PACKAGE,
+  FIX_PROMPT_VERSION: () => FIX_PROMPT_VERSION,
   TRIAGE_PROMPT_VERSION: () => TRIAGE_PROMPT_VERSION,
   anthropicClient: () => anthropicClient,
   cacheKey: () => cacheKey,
   loadResponseCache: () => loadResponseCache,
   openAiCompatibleClient: () => openAiCompatibleClient,
+  proposeFix: () => proposeFix,
   resolveClient: () => resolveClient,
   saveResponseCache: () => saveResponseCache,
   triageFindings: () => triageFindings,
@@ -4666,6 +4745,7 @@ var init_dist2 = __esm({
     init_openai();
     init_validate();
     init_triage2();
+    init_remediate();
     init_prompt();
     init_response_cache();
     AGENT_PACKAGE = "@quantakrypto/agent";
@@ -4954,7 +5034,10 @@ function severityColor(severity, c) {
 init_dist();
 
 // ../qscan/dist/remediate-cli.js
+import { execFile as execFile3 } from "node:child_process";
+import { promisify as promisify3 } from "node:util";
 init_dist();
+var exec2 = promisify3(execFile3);
 
 // ../qscan/dist/config.js
 init_dist();
@@ -5159,6 +5242,10 @@ function readInputs(env = process.env) {
   }
   const baseline = getInput("baseline", env);
   const githubToken = getInput("github-token", env);
+  const mode = getInput("mode", env) || "scan";
+  if (mode !== "scan" && mode !== "comment-plan") {
+    throw new TypeError(`Invalid mode "${mode}"; expected "scan" or "comment-plan"`);
+  }
   return {
     path: getInput("path", env) || ".",
     severityThreshold,
@@ -5168,7 +5255,8 @@ function readInputs(env = process.env) {
     baseline: baseline || void 0,
     commentPr: getBooleanInput("comment-pr", false, env),
     githubToken: githubToken || void 0,
-    redactSnippets: getBooleanInput("redact-snippets", false, env)
+    redactSnippets: getBooleanInput("redact-snippets", false, env),
+    mode
   };
 }
 function shouldFail(blockingCount, failOnFindings) {
@@ -5221,6 +5309,67 @@ function buildSummary(result, newFindings, threshold) {
   if (blocking.length > 50) lines.push(`| \u2026 | | | _${blocking.length - 50} more_ |`);
   lines.push("");
   lines.push("<sub>Reported by [quantakrypto](https://quantakrypto.com/tools).</sub>");
+  return lines.join("\n");
+}
+function buildPlanComment(result) {
+  const findings = result.findings;
+  const lines = ["## quantakrypto \u2014 PQC Migration Plan", ""];
+  lines.push(
+    `**Readiness score:** ${result.inventory.readinessScore}/100 \xB7 **HNDL-exposed findings:** ${result.inventory.hndlCount}`
+  );
+  lines.push("");
+  if (findings.length === 0) {
+    lines.push("No quantum-vulnerable cryptography detected. Nothing to migrate. \u2705");
+    lines.push("");
+    lines.push(
+      "<sub>Deterministic, model-free plan from [quantakrypto](https://quantakrypto.com/tools).</sub>"
+    );
+    return lines.join("\n");
+  }
+  const byAlgo = /* @__PURE__ */ new Map();
+  for (const f of findings) {
+    const a = f.algorithm ?? "unknown";
+    const list = byAlgo.get(a);
+    if (list) list.push(f);
+    else byAlgo.set(a, [f]);
+  }
+  const PRIORITY = [
+    "RSA",
+    "ECDH",
+    "DH",
+    "X25519",
+    "X448",
+    "ECIES",
+    "ECDSA",
+    "EdDSA",
+    "DSA",
+    "unknown"
+  ];
+  const rank = (a) => {
+    const i = PRIORITY.indexOf(a);
+    return i === -1 ? PRIORITY.length : i;
+  };
+  const algos = [...byAlgo.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  lines.push("Migrate in this order (harvest-now-decrypt-later exposure first):");
+  lines.push("");
+  let step = 1;
+  for (const algo of algos) {
+    const group = byAlgo.get(algo) ?? [];
+    const hndlCount = group.filter((f) => f.hndl).length;
+    const rec = remediationFor(algo)?.recommendation ?? "review for PQC migration";
+    const uniqueFiles = [...new Set(group.map((f) => f.location.file))];
+    const shown = uniqueFiles.slice(0, 5).map(mdCell).join(", ");
+    const more = uniqueFiles.length > 5 ? ` (+${uniqueFiles.length - 5} more)` : "";
+    lines.push(
+      `${step}. **${mdCell(algo)}** \u2014 ${group.length} finding(s)${hndlCount ? `, ${hndlCount} HNDL` : ""}. Migrate to ${mdCell(rec)}.`
+    );
+    lines.push(`   _Files:_ ${shown}${more}`);
+    step++;
+  }
+  lines.push("");
+  lines.push(
+    "<sub>Deterministic, model-free plan from [quantakrypto](https://quantakrypto.com/tools).</sub>"
+  );
   return lines.join("\n");
 }
 async function readPullRequestContext(env = process.env) {
@@ -5308,6 +5457,24 @@ async function run(env = process.env) {
   const inputs = readInputs(env);
   const scanRoot = resolveInWorkspace(inputs.path, env);
   info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
+  if (inputs.mode === "comment-plan") {
+    const { result: planResult } = await runQscan({ path: scanRoot });
+    setOutput("readiness-score", String(planResult.inventory.readinessScore), env);
+    if (inputs.githubToken) {
+      const ctx = await readPullRequestContext(env);
+      if (ctx) {
+        await commentOnPullRequest(ctx, inputs.githubToken, buildPlanComment(planResult));
+        info(`quantakrypto: posted migration plan to PR #${ctx.prNumber}.`);
+      } else {
+        info(
+          "quantakrypto: comment-plan mode but no pull-request context found; skipping comment."
+        );
+      }
+    } else {
+      info("quantakrypto: comment-plan mode needs github-token to post a comment; skipping.");
+    }
+    return;
+  }
   const { result } = await runQscan({
     path: scanRoot,
     format: inputs.format,
@@ -5356,6 +5523,7 @@ if (invokedDirectly) {
 }
 export {
   annotateFindings,
+  buildPlanComment,
   buildSummary,
   commentOnPullRequest,
   fingerprintFinding as fingerprint,

@@ -9,6 +9,7 @@ import type { Baseline, Finding, ScanResult } from "@quantakrypto/core";
 
 import {
   annotateFindings,
+  buildPlanComment,
   buildSummary,
   fingerprint,
   meetsThreshold,
@@ -385,4 +386,35 @@ test("run honors redact-snippets: snippet text is omitted from the written repor
   await run(redactedEnv);
   const redacted = readFileSync(join(ws, "redacted.sarif.json"), "utf8");
   assert.ok(!redacted.includes(marker), "expected the snippet text to be redacted out");
+});
+
+test("buildPlanComment orders HNDL/confidentiality families before signatures", () => {
+  const rsa = makeFinding({
+    ruleId: "rsa-keygen",
+    algorithm: "RSA",
+    hndl: true,
+    location: { file: "a.ts", line: 1 },
+  });
+  const ecdsa = makeFinding({
+    ruleId: "ecdsa-usage",
+    algorithm: "ECDSA",
+    hndl: false,
+    location: { file: "b.ts", line: 2 },
+  });
+  const md = buildPlanComment(makeResult([ecdsa, rsa]));
+  assert.match(md, /PQC Migration Plan/);
+  // RSA (HNDL) must appear before ECDSA (signature) in the ordered plan.
+  assert.ok(md.indexOf("**RSA**") < md.indexOf("**ECDSA**"), "HNDL family listed first");
+  assert.match(md, /ML-KEM|ML-DSA/);
+});
+
+test("buildPlanComment reports a clean tree when there are no findings", () => {
+  const md = buildPlanComment(makeResult([], 100));
+  assert.match(md, /Nothing to migrate/);
+});
+
+test("readInputs parses mode and rejects an invalid one", () => {
+  assert.equal(readInputs({ INPUT_MODE: "comment-plan" }).mode, "comment-plan");
+  assert.equal(readInputs({}).mode, "scan");
+  assert.throws(() => readInputs({ INPUT_MODE: "bogus" }), /Invalid mode/);
 });

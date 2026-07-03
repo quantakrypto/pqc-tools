@@ -9,6 +9,12 @@ branding:
   color: "green"
 
 inputs:
+  mode:
+    description: >-
+      "scan" (default) writes a report and gates the build; "comment-plan" posts
+      a deterministic PQC migration plan as a PR comment and never fails the build.
+    required: false
+    default: "scan"
   path:
     description: "Directory (or file) to scan, relative to the repository root."
     required: false
