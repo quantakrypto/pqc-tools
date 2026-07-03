@@ -137,3 +137,74 @@ test("plan_migration produces a phased, prioritized plan", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/* --------------------------- triage_findings / apply_triage --------------------------- */
+
+const twoFindings = [
+  {
+    ruleId: "a-rule",
+    title: "A",
+    category: "signature",
+    severity: "high",
+    confidence: "high",
+    hndl: false,
+    message: "classical A",
+    location: { file: "a.ts", line: 1 },
+  },
+  {
+    ruleId: "b-rule",
+    title: "B",
+    category: "key-exchange",
+    severity: "high",
+    confidence: "high",
+    hndl: true,
+    message: "classical B",
+    location: { file: "b.ts", line: 2 },
+  },
+];
+
+test("triage_findings emits an offline request bundle (rubric + schema + fingerprints, no code)", async () => {
+  const r = await callTool("triage_findings", { findings: twoFindings });
+  const bundle = JSON.parse(r.content[1].text) as {
+    rubric: string;
+    schema: unknown;
+    items: { fingerprint: string; context: { code: string | null } }[];
+  };
+  assert.match(bundle.rubric, /exposure/i);
+  assert.equal(bundle.items.length, 2);
+  assert.ok(
+    bundle.items.every((i) => typeof i.fingerprint === "string" && i.fingerprint.length > 0),
+  );
+  // metadata level → no source code leaves.
+  assert.ok(bundle.items.every((i) => i.context.code === null));
+});
+
+test("apply_triage attaches verdicts, re-sorts by exposure, and never drops a finding", async () => {
+  const bundle = JSON.parse(
+    (await callTool("triage_findings", { findings: twoFindings })).content[1].text,
+  ) as {
+    items: { fingerprint: string }[];
+  };
+  const [fpA, fpB] = bundle.items.map((i) => i.fingerprint);
+  const verdicts = [
+    { fingerprint: fpA, exposureScore: 10, priority: "later", rationale: "local" },
+    { fingerprint: fpB, exposureScore: 95, priority: "now", rationale: "HNDL over the wire" },
+  ];
+  const r = await callTool("apply_triage", { findings: twoFindings, verdicts });
+  const sorted = JSON.parse(r.content[1].text) as {
+    ruleId: string;
+    triage?: { exposureScore: number };
+  }[];
+  assert.equal(sorted.length, 2, "never drops a finding");
+  assert.equal(sorted[0].ruleId, "b-rule", "highest exposure first");
+  assert.equal(sorted[0].triage?.exposureScore, 95);
+});
+
+test("apply_triage ignores malformed verdicts rather than throwing", async () => {
+  const r = await callTool("apply_triage", {
+    findings: twoFindings,
+    verdicts: [{ fingerprint: "x", exposureScore: 999, priority: "nope", rationale: 5 }],
+  });
+  assert.equal(r.isError ?? false, false);
+  assert.match(textOf(r), /malformed verdict/);
+});

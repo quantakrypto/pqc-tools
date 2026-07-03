@@ -31,6 +31,8 @@ export type {
   FixProposal,
 } from "./agent-types.js";
 export { buildContext, renderPreflight } from "./redact.js";
+export { TRIAGE_RUBRIC, TRIAGE_VERDICT_SCHEMA, buildTriageRequest } from "./triage.js";
+export type { TriageRequest } from "./triage.js";
 
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";

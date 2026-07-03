@@ -15,7 +15,10 @@ import {
   AbortError,
   BudgetExceededError,
   buildInventory,
+  buildTriageRequest,
+  compareFindings,
   detectors,
+  fingerprintFinding,
   languageToExtension,
   remediationFor,
   scan,
@@ -1002,6 +1005,125 @@ const scoreDeltaTool: ToolDefinition = {
   },
 };
 
+const triageFindingsTool: ToolDefinition = {
+  name: "triage_findings",
+  description:
+    "Produce a deterministic triage REQUEST bundle (rubric + verdict schema + " +
+    "per-finding metadata) for YOU (the host agent) to reason over. This tool does " +
+    "NOT call any model and needs no API key. Assess each finding's real-world " +
+    "exposure, then call apply_triage with your verdicts. Pass 'findings' as an " +
+    "array from scan_path --format json.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      findings: { type: "array", description: "Findings from a scan's JSON output." },
+    },
+    required: ["findings"],
+    additionalProperties: false,
+  },
+  async handler(args): Promise<ToolResult> {
+    if (!Array.isArray(args.findings)) {
+      return errorResult("triage_findings requires a 'findings' array.");
+    }
+    const findings = args.findings as Finding[];
+    const request = buildTriageRequest(findings, "metadata");
+    // Pair each context with the finding fingerprint the verdict must echo back.
+    const items = findings.map((f, i) => ({
+      fingerprint: fingerprintFinding(f),
+      context: request.contexts[i],
+    }));
+    const bundle = { rubric: request.rubric, schema: request.schema, items };
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            "Triage request. For each item, decide {exposureScore 0-100, priority, rationale} " +
+            "per the rubric, then call apply_triage with the same 'findings' and a 'verdicts' " +
+            "array (each carrying the item's 'fingerprint'). You never suppress a finding.",
+        },
+        { type: "text", text: JSON.stringify(bundle, null, 2) },
+      ],
+    };
+  },
+};
+
+/** Validate one caller-supplied triage verdict. Returns null when malformed. */
+function parseVerdict(
+  v: unknown,
+): { fingerprint: string; exposureScore: number; priority: string; rationale: string } | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const fingerprint = o.fingerprint;
+  const exposureScore = o.exposureScore;
+  const priority = o.priority;
+  const rationale = o.rationale;
+  if (typeof fingerprint !== "string") return null;
+  if (typeof exposureScore !== "number" || exposureScore < 0 || exposureScore > 100) return null;
+  if (priority !== "now" && priority !== "soon" && priority !== "later") return null;
+  if (typeof rationale !== "string") return null;
+  return { fingerprint, exposureScore, priority, rationale };
+}
+
+const applyTriageTool: ToolDefinition = {
+  name: "apply_triage",
+  description:
+    "Deterministically attach your triage verdicts to their findings and re-sort by " +
+    "exposure (highest first). Never suppresses. Pass the same 'findings' array you " +
+    "triaged plus a 'verdicts' array of { fingerprint, exposureScore, priority, rationale }.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      findings: { type: "array", description: "The findings that were triaged." },
+      verdicts: { type: "array", description: "One verdict per finding, keyed by fingerprint." },
+    },
+    required: ["findings", "verdicts"],
+    additionalProperties: false,
+  },
+  async handler(args): Promise<ToolResult> {
+    if (!Array.isArray(args.findings) || !Array.isArray(args.verdicts)) {
+      return errorResult("apply_triage requires 'findings' and 'verdicts' arrays.");
+    }
+    const findings = args.findings as Finding[];
+    const byFingerprint = new Map<string, ReturnType<typeof parseVerdict>>();
+    let skipped = 0;
+    for (const raw of args.verdicts) {
+      const v = parseVerdict(raw);
+      if (v) byFingerprint.set(v.fingerprint, v);
+      else skipped++;
+    }
+    const annotated = findings.map((f) => {
+      const v = byFingerprint.get(fingerprintFinding(f));
+      return v
+        ? {
+            ...f,
+            triage: {
+              exposureScore: v.exposureScore,
+              priority: v.priority as "now" | "soon" | "later",
+              rationale: v.rationale,
+            },
+          }
+        : f;
+    });
+    annotated.sort((a, b) => {
+      const ea = a.triage?.exposureScore ?? -1;
+      const eb = b.triage?.exposureScore ?? -1;
+      if (eb !== ea) return eb - ea;
+      return compareFindings(a, b);
+    });
+    const applied = annotated.filter((f) => f.triage).length;
+    const head =
+      `Triaged ${applied}/${findings.length} finding(s), re-sorted by exposure.` +
+      (skipped ? ` ${skipped} malformed verdict(s) ignored.` : "");
+    return {
+      content: [
+        { type: "text", text: head },
+        { type: "text", text: JSON.stringify(annotated, null, 2) },
+      ],
+    };
+  },
+};
+
 /**
  * Tools that read arbitrary filesystem paths. Disabled by default on the HTTP
  * transport (see {@link ./http.ts}) because a hosted endpoint must not be an
@@ -1029,6 +1151,9 @@ export const quantakryptoTools: ToolDefinition[] = [
   verifyFixTool,
   checkDependencyTool,
   scoreDeltaTool,
+  // BYOK triage — deterministic request/apply (the host agent reasons; offline).
+  triageFindingsTool,
+  applyTriageTool,
 ];
 
 /** The core version these tools are built against (re-exported for diagnostics). */

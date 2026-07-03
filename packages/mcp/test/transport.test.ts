@@ -58,7 +58,7 @@ test("stdio loop frames responses as newline-delimited JSON", async () => {
   const second = JSON.parse(lines[1]) as { id: number; result: { tools: unknown[] } };
   assert.equal(second.id, 2);
   assert.ok(Array.isArray(second.result.tools));
-  assert.equal(second.result.tools.length, 11);
+  assert.equal(second.result.tools.length, 13);
 });
 
 test("stdio loop replies with a parse error on malformed JSON", async () => {

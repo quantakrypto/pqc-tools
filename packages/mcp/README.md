@@ -162,6 +162,18 @@ fixed that the scanner still flags.
   in the vulnerable-dependency database. No filesystem access.
 - **`score_delta`** — readiness-score / HNDL change between two finding sets
   (`before`, `after` from `scan_path --format json`). No filesystem access.
+- **`triage_findings`** — deterministic, offline, key-free. Emits a triage
+  REQUEST bundle (rubric + verdict schema + per-finding metadata + fingerprints)
+  for the host agent to reason over. It never calls a model. No filesystem access.
+- **`apply_triage`** — deterministically attach the host agent's verdicts to
+  their findings (matched by fingerprint) and re-sort by exposure. Never
+  suppresses; malformed verdicts are ignored. No filesystem access.
+
+> Triage on the MCP plane keeps the "engine disposes" guarantee: the server
+> stays offline and never holds an API key — the host agent (which already has
+> the code open) does the reasoning, and `apply_triage` records it
+> deterministically. The BYOK client that calls a provider directly lives only
+> in `qscan --triage` (for CI, where there is no host agent).
 
 ## Hosted HTTP server (safe-by-default)
 
@@ -181,8 +193,8 @@ is reachable by untrusted peers:
   they are exposed only when `QUANTAKRYPTO_MCP_ALLOW_FS=1`. The knowledge /
   copilot tools that take no path (`explain_finding`, `suggest_hybrid`,
   `list_rules`, `get_fix_examples`, `verify_fix`, `check_dependency`,
-  `score_delta`) are always available. `tools/list` and `tools/call` both
-  reflect the gating.
+  `score_delta`, `triage_findings`, `apply_triage`) are always available.
+  `tools/list` and `tools/call` both reflect the gating.
 - **Filesystem tools are root-confined.** Even with `QUANTAKRYPTO_MCP_ALLOW_FS=1`,
   every scanned path must resolve inside the `QUANTAKRYPTO_MCP_ROOT` allow-list
   (`:`-separated; the process CWD by default). `..` traversal and out-of-root
