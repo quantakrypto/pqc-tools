@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/action",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "quantakrypto Action — fail CI when new quantum-vulnerable cryptography lands. GitHub Action wrapping qScan.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
@@ -25,8 +25,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@quantakrypto/core": "0.4.0",
-    "@quantakrypto/qscan": "0.4.0"
+    "@quantakrypto/core": "0.4.1",
+    "@quantakrypto/qscan": "0.4.1"
   },
   "devDependencies": {
     "esbuild": "0.28.1"

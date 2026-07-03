@@ -53,3 +53,17 @@ test("codemodFor selects config-toggle for TLS findings and nothing for crypto f
 test("apply returns null when nothing changes", () => {
   assert.equal(configToggleCodemod.apply("const x = 1;\n", tlsFinding("tls-legacy-version")), null);
 });
+
+test("a file with BOTH TLS issues is fully fixed by a single patch", () => {
+  const src = "const o = { minVersion: 'TLSv1.1', rejectUnauthorized: false };\n";
+  // Either finding's patch must clear BOTH findings (the pipeline dedupes by file).
+  for (const ruleId of ["tls-legacy-version", "tls-reject-unauthorized"]) {
+    const patch = configToggleCodemod.apply(src, tlsFinding(ruleId));
+    assert.ok(patch, `${ruleId} produces a patch`);
+    const remaining = verifyFix(patch.newContent, { filename: "server.ts" }).findings.map(
+      (f) => f.ruleId,
+    );
+    assert.ok(!remaining.includes("tls-legacy-version"), `${ruleId}: version fixed`);
+    assert.ok(!remaining.includes("tls-reject-unauthorized"), `${ruleId}: reject fixed`);
+  }
+});

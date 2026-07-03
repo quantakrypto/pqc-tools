@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/agent",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "BYOK LLM client for qScan triage and remediation. Native fetch, zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
@@ -33,7 +33,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@quantakrypto/core": "0.4.0"
+    "@quantakrypto/core": "0.4.1"
   },
   "scripts": {
     "build": "tsc -b",
