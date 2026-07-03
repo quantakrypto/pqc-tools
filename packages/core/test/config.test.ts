@@ -55,6 +55,7 @@ test("valid config parses all known scalar/list keys", async () => {
       maxFileSize: 4096,
       scanMinified: true,
       severityThreshold: "medium",
+      disabledRules: ["node-crypto-ecdh", "tls-weak-cipher"],
     });
     const res = await loadConfig(dir);
     assert.equal(res.path, join(dir, CONFIG_FILENAME));
@@ -64,6 +65,7 @@ test("valid config parses all known scalar/list keys", async () => {
     assert.equal(res.config.maxFileSize, 4096);
     assert.equal(res.config.scanMinified, true);
     assert.equal(res.config.severityThreshold, "medium");
+    assert.deepEqual(res.config.disabledRules, ["node-crypto-ecdh", "tls-weak-cipher"]);
     assert.deepEqual(res.warnings, []);
   });
 });

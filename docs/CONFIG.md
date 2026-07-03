@@ -96,6 +96,7 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 | `noDefaultIgnores` | bool | `false` | `ScanOptions.noDefaultIgnores` | Disables `node_modules`/`.git`/`dist`/… defaults. |
 | `maxFileSize` | int (bytes) | `2097152` | `ScanOptions.maxFileSize` | Files larger are skipped; the [perf](audits/performance.md)/[security](audits/security.md) 2 MiB cap rationale applies. |
 | `detectors.<family>` | bool | `true` | maps to `source`/`config`/`dependencies` scan toggles + per-family selection | Family names mirror `@quantakrypto/core`'s detector families and the `--no-source`/`--no-deps`/`--no-config` flags. Turning a family off is equivalent to its `--no-*` flag. |
+| `disabledRules` | string[] | `[]` | `ScanOptions.disabledRules` | Rule ids to suppress (e.g. `"node-crypto-ecdh"`, `"tls-weak-cipher"`). Finer-grained than `detectors.<family>`. See the catalog via `qscan list_rules` / the MCP `list_rules` tool. Unknown ids are harmless (never match). |
 | `languages` | string[] | (all built-in) | (forward-looking) | See §4.3 — has no effect until the detector-registry/plugin work ([ROADMAP P1-4](ROADMAP.md)) lands. |
 | `severityThreshold` | enum | `high` | `runQscan({severityThreshold})` | Drives the exit code. CLI `--severity-threshold` overrides. |
 | `baseline` | string (path) | none | `runQscan({baseline})` | Relative to the config file's directory. CLI `--baseline` overrides. |

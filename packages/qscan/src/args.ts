@@ -77,6 +77,8 @@ export interface QscanOptions {
   quiet: boolean;
   /** How many findings the human report lists (`--top N`). Default: 5. */
   topN?: number;
+  /** Rule ids to suppress (from `quantakrypto.config.json` `disabledRules`). */
+  disabledRules?: string[];
   /**
    * Omit code snippets from the JSON/SARIF report (`--no-snippets`). Passed to
    * core's reporters as `{ redactSnippets: true }`. Snippets of `sensitive`

@@ -46,6 +46,12 @@ test("config fills a key the user did not set via a flag", () => {
   assert.equal(merged.severityThreshold, "low");
 });
 
+test("config disabledRules threads onto QscanOptions", () => {
+  const { options, explicit } = parse([]);
+  const merged = applyConfig(options, { disabledRules: ["node-crypto-ecdh"] }, explicit);
+  assert.deepEqual(merged.disabledRules, ["node-crypto-ecdh"]);
+});
+
 test("a flag overrides config for the same key", () => {
   const { options, explicit } = parse(["--severity-threshold", "critical"]);
   const merged = applyConfig(options, { severityThreshold: "low" }, explicit);

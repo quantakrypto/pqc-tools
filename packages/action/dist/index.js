@@ -3987,6 +3987,9 @@ function toScanOptions(options) {
     scanOptions.maxFileSize = options.maxFileSize;
   if (options.concurrency !== void 0)
     scanOptions.concurrency = options.concurrency;
+  if (options.disabledRules && options.disabledRules.length > 0) {
+    scanOptions.disabledRules = options.disabledRules;
+  }
   return scanOptions;
 }
 async function runQscan(opts, hooks = {}) {

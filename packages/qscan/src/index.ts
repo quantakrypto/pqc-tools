@@ -113,6 +113,9 @@ function toScanOptions(options: QscanOptions): ParallelScanOptions {
   if (options.include.length > 0) scanOptions.include = options.include;
   if (options.maxFileSize !== undefined) scanOptions.maxFileSize = options.maxFileSize;
   if (options.concurrency !== undefined) scanOptions.concurrency = options.concurrency;
+  if (options.disabledRules && options.disabledRules.length > 0) {
+    scanOptions.disabledRules = options.disabledRules;
+  }
   return scanOptions;
 }
 

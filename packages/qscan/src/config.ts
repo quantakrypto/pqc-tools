@@ -103,6 +103,10 @@ export function applyConfig(
   if (config.include && config.include.length > 0) {
     out.include = [...config.include, ...options.include];
   }
+  // disabledRules is config-only (no CLI flag today) — set it straight through.
+  if (config.disabledRules && config.disabledRules.length > 0) {
+    out.disabledRules = [...config.disabledRules];
+  }
 
   return out;
 }

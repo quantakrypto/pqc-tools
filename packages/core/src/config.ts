@@ -54,6 +54,7 @@ export interface QuantakryptoFileConfig extends Partial<
     | "source"
     | "dependencies"
     | "config"
+    | "disabledRules"
   >
 > {
   /** Gate severity (drives the exit code). Maps to qScan's `severityThreshold`. */
@@ -144,6 +145,7 @@ function mapConfig(
     "maxFileSize",
     "scanMinified",
     "detectors",
+    "disabledRules",
     "languages",
     "severityThreshold",
     "baseline",
@@ -215,6 +217,12 @@ function mapConfig(
       }
     }
   }
+
+  // disabledRules: rule ids to suppress, threaded to ScanOptions.disabledRules.
+  // Unknown ids are harmless (they never match), so we accept the list as-is —
+  // this also lets a config forward-reference a rule added in a later version.
+  const disabledRules = asStringArray(raw, "disabledRules", file);
+  if (disabledRules && disabledRules.length > 0) out.disabledRules = disabledRules;
 
   // languages: forward-looking (inert until the plugin registry lands). Validate
   // the type so the file format is stable, but do not map it anywhere.
