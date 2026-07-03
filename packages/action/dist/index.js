@@ -3509,6 +3509,48 @@ var init_triage = __esm({
   }
 });
 
+// ../core/dist/patch-policy.js
+var init_patch_policy = __esm({
+  "../core/dist/patch-policy.js"() {
+    "use strict";
+  }
+});
+
+// ../core/dist/worktree.js
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+var exec;
+var init_worktree = __esm({
+  "../core/dist/worktree.js"() {
+    "use strict";
+    exec = promisify(execFile);
+  }
+});
+
+// ../core/dist/codemods/config-toggle.js
+var init_config_toggle = __esm({
+  "../core/dist/codemods/config-toggle.js"() {
+    "use strict";
+  }
+});
+
+// ../core/dist/codemods/registry.js
+var init_registry2 = __esm({
+  "../core/dist/codemods/registry.js"() {
+    "use strict";
+    init_config_toggle();
+  }
+});
+
+// ../core/dist/remediate-pipeline.js
+var init_remediate_pipeline = __esm({
+  "../core/dist/remediate-pipeline.js"() {
+    "use strict";
+    init_patch_policy();
+    init_verify();
+  }
+});
+
 // ../core/dist/parallel.js
 import { stat as stat3 } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -3805,8 +3847,8 @@ var init_baseline = __esm({
 });
 
 // ../core/dist/changed.js
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile as execFile2 } from "node:child_process";
+import { promisify as promisify2 } from "node:util";
 async function git(cwd, args) {
   try {
     const { stdout } = await execFileAsync("git", args, {
@@ -3858,7 +3900,7 @@ var execFileAsync;
 var init_changed = __esm({
   "../core/dist/changed.js"() {
     "use strict";
-    execFileAsync = promisify(execFile);
+    execFileAsync = promisify2(execFile2);
   }
 });
 
@@ -4243,6 +4285,11 @@ var init_dist = __esm({
     init_verify();
     init_redact();
     init_triage();
+    init_patch_policy();
+    init_worktree();
+    init_registry2();
+    init_config_toggle();
+    init_remediate_pipeline();
     init_errors();
     init_parallel();
     init_registry();
@@ -4904,6 +4951,9 @@ function severityColor(severity, c) {
 }
 
 // ../qscan/dist/help.js
+init_dist();
+
+// ../qscan/dist/remediate-cli.js
 init_dist();
 
 // ../qscan/dist/config.js

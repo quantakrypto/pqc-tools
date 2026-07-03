@@ -45,6 +45,19 @@ export {
 } from "./baseline.js";
 export { renderCbom, renderHuman, renderJson, renderSarif } from "./report.js";
 export { HELP_TEXT, versionLine } from "./help.js";
+export {
+  runRemediate,
+  parseRemediateArgs,
+  unifiedDiff,
+  REMEDIATE_HELP,
+  REMEDIATE_EXIT,
+} from "./remediate-cli.js";
+export type {
+  RemediateMode,
+  RemediateOptions,
+  RemediateRun,
+  RemediateHooks,
+} from "./remediate-cli.js";
 export { applyConfig, resolveConfig } from "./config.js";
 export type { ResolvedConfig } from "./config.js";
 export type { ConfigurableKey } from "./args.js";

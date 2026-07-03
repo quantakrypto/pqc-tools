@@ -92,7 +92,7 @@ export { buildInventory } from "./inventory.js";
 // Vulnerable-dependency database (the manifest scanner is used internally by scan()).
 // `DEP_VULNERABLE_RULE` is the generic catalog entry for dependency findings
 // (which don't come from a Detector, so aren't in the registry's rule catalog).
-export { vulnerableDependencies, DEP_VULNERABLE_RULE } from "./dependencies.js";
+export { vulnerableDependencies, DEP_VULNERABLE_RULE, isManifestFile } from "./dependencies.js";
 
 // Severity utilities (ordering, threshold, SARIF level) — shared across tools.
 export { SEVERITY_ORDER, severityRank, meetsThreshold, sarifLevel } from "./severity.js";

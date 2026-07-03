@@ -15,7 +15,8 @@
   },
   "type": "module",
   "bin": {
-    "qscan": "./dist/cli.js"
+    "qscan": "./dist/cli.js",
+    "qremediate": "./dist/remediate-bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
