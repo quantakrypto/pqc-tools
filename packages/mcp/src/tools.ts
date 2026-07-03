@@ -15,6 +15,7 @@ import {
   AbortError,
   BudgetExceededError,
   buildInventory,
+  buildRemediateRequest,
   buildTriageRequest,
   compareFindings,
   detectors,
@@ -1124,6 +1125,49 @@ const applyTriageTool: ToolDefinition = {
   },
 };
 
+const remediateFindingsTool: ToolDefinition = {
+  name: "remediate_findings",
+  description:
+    "Produce a deterministic remediation REQUEST bundle (rubric + fix schema + " +
+    "per-finding metadata + fingerprints) for YOU (the host agent) to fix. This " +
+    "tool calls no model and needs no key. For each finding, propose the corrected " +
+    "FULL file content, then VERIFY with verify_fix and keep only fixes that clear " +
+    "the finding. Never touch files with secrets; never auto-merge. Pass 'findings' " +
+    "from scan_path --format json.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      findings: { type: "array", description: "Findings from a scan's JSON output." },
+    },
+    required: ["findings"],
+    additionalProperties: false,
+  },
+  async handler(args): Promise<ToolResult> {
+    if (!Array.isArray(args.findings)) {
+      return errorResult("remediate_findings requires a 'findings' array.");
+    }
+    const findings = args.findings as Finding[];
+    const request = buildRemediateRequest(findings, "metadata");
+    const items = findings.map((f, i) => ({
+      fingerprint: fingerprintFinding(f),
+      context: request.contexts[i],
+    }));
+    const bundle = { instructions: request.instructions, schema: request.schema, items };
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            "Remediation request. For each item, propose {path, newContent, explanation} " +
+            "(the FULL corrected file), call verify_fix on your newContent, and keep only " +
+            "verified fixes. Skip any file containing secrets. This never merges anything.",
+        },
+        { type: "text", text: JSON.stringify(bundle, null, 2) },
+      ],
+    };
+  },
+};
+
 /**
  * Tools that read arbitrary filesystem paths. Disabled by default on the HTTP
  * transport (see {@link ./http.ts}) because a hosted endpoint must not be an
@@ -1151,9 +1195,10 @@ export const quantakryptoTools: ToolDefinition[] = [
   verifyFixTool,
   checkDependencyTool,
   scoreDeltaTool,
-  // BYOK triage — deterministic request/apply (the host agent reasons; offline).
+  // BYOK triage + remediation — deterministic request/apply (host agent reasons; offline).
   triageFindingsTool,
   applyTriageTool,
+  remediateFindingsTool,
 ];
 
 /** The core version these tools are built against (re-exported for diagnostics). */

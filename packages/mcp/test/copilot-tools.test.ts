@@ -208,3 +208,19 @@ test("apply_triage ignores malformed verdicts rather than throwing", async () =>
   assert.equal(r.isError ?? false, false);
   assert.match(textOf(r), /malformed verdict/);
 });
+
+test("remediate_findings emits an offline fix-request bundle (rubric + schema + fingerprints)", async () => {
+  const r = await callTool("remediate_findings", { findings: twoFindings });
+  const bundle = JSON.parse(r.content[1].text) as {
+    instructions: string;
+    schema: { required: string[] };
+    items: { fingerprint: string; context: { code: string | null } }[];
+  };
+  assert.match(bundle.instructions, /verify_fix/);
+  assert.deepEqual(bundle.schema.required, ["path", "newContent", "explanation"]);
+  assert.equal(bundle.items.length, 2);
+  assert.ok(
+    bundle.items.every((i) => typeof i.fingerprint === "string" && i.fingerprint.length > 0),
+  );
+  assert.ok(bundle.items.every((i) => i.context.code === null));
+});

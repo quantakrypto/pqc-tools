@@ -10,7 +10,7 @@
  * (the match IS key material) are likewise never sent.
  */
 import type { Finding, FixProposal } from "@quantakrypto/core";
-import { buildContext } from "@quantakrypto/core";
+import { buildContext, REMEDIATE_RUBRIC, FIX_REQUEST_SCHEMA } from "@quantakrypto/core";
 
 import type { LlmClient } from "./client.js";
 import type { JsonSchema } from "./validate.js";
@@ -18,25 +18,9 @@ import type { JsonSchema } from "./validate.js";
 /** Bump when the fix rubric/schema changes. */
 export const FIX_PROMPT_VERSION = "fix-1";
 
-const FIX_SYSTEM =
-  "You are a post-quantum cryptography migration engineer. You are given the FULL " +
-  "content of one source file plus a finding describing classical " +
-  "(quantum-vulnerable) cryptography in it. Return the FULL corrected file content " +
-  "that removes the flagged classical usage, migrating to a post-quantum or hybrid " +
-  "construction (ML-KEM-768 / ML-DSA-65, hybrid X25519MLKEM768) where a safe " +
-  "replacement exists. Change as little as possible; preserve all other code and " +
-  "formatting exactly. If you cannot safely fix it, return newContent identical to " +
-  "the input. NEVER invent or alter secrets/keys.";
-
-const FIX_SCHEMA: JsonSchema = {
-  type: "object",
-  required: ["path", "newContent", "explanation"],
-  properties: {
-    path: { type: "string" },
-    newContent: { type: "string" },
-    explanation: { type: "string" },
-  },
-};
+/** Fix rubric + schema — shared with the MCP plane via `@quantakrypto/core`. */
+const FIX_SYSTEM = REMEDIATE_RUBRIC;
+const FIX_SCHEMA: JsonSchema = FIX_REQUEST_SCHEMA;
 
 export interface ProposeFixOptions {
   client: LlmClient;

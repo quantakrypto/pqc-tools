@@ -33,6 +33,12 @@ export type {
 export { buildContext, renderPreflight } from "./redact.js";
 export { TRIAGE_RUBRIC, TRIAGE_VERDICT_SCHEMA, buildTriageRequest } from "./triage.js";
 export type { TriageRequest } from "./triage.js";
+export {
+  REMEDIATE_RUBRIC,
+  FIX_REQUEST_SCHEMA,
+  buildRemediateRequest,
+} from "./remediate-request.js";
+export type { RemediateRequest } from "./remediate-request.js";
 export { checkPatchPolicy } from "./patch-policy.js";
 export type { PolicyContext, PolicyDecision } from "./patch-policy.js";
 export { withWorktree } from "./worktree.js";
