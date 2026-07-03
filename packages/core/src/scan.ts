@@ -15,6 +15,7 @@ import * as path from "node:path";
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
 import { walkFiles, toPosix, isBinaryPath, looksMinified } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
+import { stripCommentFindings } from "./comments.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
@@ -72,7 +73,7 @@ export function detectFile(
   toggles: { source: boolean; config: boolean; deps: boolean },
   disabledRules?: readonly string[],
 ): Finding[] {
-  const out: Finding[] = [];
+  let out: Finding[] = [];
 
   for (const det of dets) {
     if (!det.appliesTo(file)) continue;
@@ -80,6 +81,11 @@ export function detectFile(
     if (isConfig ? !toggles.config : !toggles.source) continue;
     out.push(...det.detect({ file, content }));
   }
+
+  // Drop lexical false positives that land inside comments (`// migrated off
+  // createECDH()`). No-op for manifests (JSON has no comments) so it runs before
+  // the dependency scan appends its findings.
+  out = stripCommentFindings(out, content, file);
 
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));

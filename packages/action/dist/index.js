@@ -1072,6 +1072,126 @@ async function* walkDir(absDir, relDir, ctx) {
   }
 }
 
+// ../core/dist/comments.js
+var C_LIKE = [
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".vue",
+  ".svelte",
+  ".go",
+  ".java",
+  ".kt",
+  ".kts",
+  ".cs",
+  ".rs",
+  ".c",
+  ".h",
+  ".cc",
+  ".cpp",
+  ".cxx",
+  ".hpp",
+  ".hh"
+];
+var HASH_LIKE = [".py", ".pyi", ".pyw", ".rb"];
+function commentStyleForFile(file) {
+  const lower = file.toLowerCase();
+  if (C_LIKE.some((e) => lower.endsWith(e)))
+    return "c";
+  if (HASH_LIKE.some((e) => lower.endsWith(e)))
+    return "hash";
+  return null;
+}
+function commentSpans(content, style) {
+  const spans = [];
+  const n = content.length;
+  let i = 0;
+  while (i < n) {
+    const c = content[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      i++;
+      while (i < n) {
+        if (content[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (content[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (style === "c" && c === "/" && content[i + 1] === "/") {
+      const start = i;
+      i += 2;
+      while (i < n && content[i] !== "\n")
+        i++;
+      spans.push([start, i]);
+      continue;
+    }
+    if (style === "c" && c === "/" && content[i + 1] === "*") {
+      const start = i;
+      i += 2;
+      while (i < n && !(content[i] === "*" && content[i + 1] === "/"))
+        i++;
+      i = Math.min(n, i + 2);
+      spans.push([start, i]);
+      continue;
+    }
+    if (style === "hash" && c === "#") {
+      const start = i;
+      i++;
+      while (i < n && content[i] !== "\n")
+        i++;
+      spans.push([start, i]);
+      continue;
+    }
+    i++;
+  }
+  return spans;
+}
+function offsetInSpans(spans, offset) {
+  let lo = 0;
+  let hi = spans.length - 1;
+  while (lo <= hi) {
+    const mid = lo + hi >>> 1;
+    const [s, e] = spans[mid];
+    if (offset < s)
+      hi = mid - 1;
+    else if (offset >= e)
+      lo = mid + 1;
+    else
+      return true;
+  }
+  return false;
+}
+function stripCommentFindings(findings, content, file) {
+  if (findings.length === 0)
+    return findings;
+  const style = commentStyleForFile(file);
+  if (!style)
+    return findings;
+  const spans = commentSpans(content, style);
+  if (spans.length === 0)
+    return findings;
+  const lineStarts = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n")
+      lineStarts.push(i + 1);
+  }
+  return findings.filter((f) => {
+    const start = lineStarts[f.location.line - 1] ?? 0;
+    const offset = start + ((f.location.column ?? 1) - 1);
+    return !offsetInSpans(spans, offset);
+  });
+}
+
 // ../core/dist/detectors/source.js
 var RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
 var RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
@@ -2823,7 +2943,7 @@ function resolveDetectors(options) {
   return options.detectors ?? defaultRegistry.all();
 }
 function detectFile(file, content, dets, toggles, disabledRules) {
-  const out = [];
+  let out = [];
   for (const det of dets) {
     if (!det.appliesTo(file))
       continue;
@@ -2832,6 +2952,7 @@ function detectFile(file, content, dets, toggles, disabledRules) {
       continue;
     out.push(...det.detect({ file, content }));
   }
+  out = stripCommentFindings(out, content, file);
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));
   }

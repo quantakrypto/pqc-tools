@@ -9,11 +9,13 @@
  * regressions without being brittle.
  *
  * Honesty policy: the negative set is treated strictly — any finding on a
- * negative bait file is a false positive. Exactly one false positive is KNOWN
- * and documented (a comment containing `createECDH (` that the lexical detector
- * cannot distinguish from code); it lives in `negative/crypto-words-in-comment.ts`
- * and is asserted explicitly. Any OTHER false positive, or any false negative,
- * fails the build. See docs/validation/detection-benchmark.md.
+ * negative bait file is a false positive, and the corpus is now expected to
+ * produce ZERO of them (precision 1.000). Comment-only crypto mentions (e.g.
+ * `createECDH (` inside a `//` comment) used to be the one documented false
+ * positive; they are now suppressed by the comment-aware filter (`comments.ts`),
+ * so `negative/crypto-words-in-comment.ts` is a clean true negative. Any false
+ * positive, or any false negative, fails the build. See
+ * docs/validation/detection-benchmark.md.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -55,9 +57,6 @@ interface ScoreReport {
 
 const CORPUS_DIR = fileURLToPath(new URL("./benchmark/corpus", import.meta.url));
 const LABELS_PATH = fileURLToPath(new URL("./benchmark/labels.json", import.meta.url));
-
-/** The one documented, accepted false positive (see module doc + the markdown). */
-const KNOWN_FALSE_POSITIVE = "negative/crypto-words-in-comment.ts: node-crypto-ecdh|ECDH|true";
 
 /** Canonical key for matching expected vs. actual findings as multiset members. */
 function findingKey(ruleId: string, algorithm: string | null, hndl: boolean): string {
@@ -198,10 +197,10 @@ test("detection benchmark: scores against the labeled corpus", async () => {
   assert.ok(overall.tp >= 30, `expected >=30 true positives, got ${overall.tp}`);
 
   // Regression guards — thresholds sit JUST BELOW the current measured values
-  // (measured: precision 0.969, recall 1.000, F1 0.984).
-  assert.ok(p >= 0.95, `precision regressed: ${p.toFixed(4)} < 0.95`);
+  // (measured: precision 1.000, recall 1.000, F1 1.000 — comment FPs suppressed).
+  assert.ok(p >= 0.98, `precision regressed: ${p.toFixed(4)} < 0.98`);
   assert.ok(r >= 0.99, `recall regressed: ${r.toFixed(4)} < 0.99`);
-  assert.ok(f >= 0.97, `F1 regressed: ${f.toFixed(4)} < 0.97`);
+  assert.ok(f >= 0.98, `F1 regressed: ${f.toFixed(4)} < 0.98`);
 });
 
 test("detection benchmark: recall is perfect (no false negatives)", async () => {
@@ -218,16 +217,16 @@ test("detection benchmark: recall is perfect (no false negatives)", async () => 
   assert.equal(report.overall.fn, 0);
 });
 
-test("detection benchmark: negative set is strict (only the known FP allowed)", async () => {
+test("detection benchmark: negative set is strict (zero false positives)", async () => {
   const labels = await loadLabels();
   const result = await scan({ root: CORPUS_DIR, noDefaultIgnores: true });
   const report = score(labels, groupByFile(result.findings));
 
-  // Exactly one false positive is documented and accepted. Any new false
-  // positive (or removal of the known one without updating labels) fails.
+  // The corpus is expected to produce ZERO false positives (comment-only crypto
+  // mentions are suppressed by comments.ts). Any new false positive fails.
   assert.deepEqual(
     report.falsePositives,
-    [KNOWN_FALSE_POSITIVE],
-    "negative-set false positives changed — update labels.json and the validation doc",
+    [],
+    "negative-set false positives appeared — a detector regressed (or a bait file needs labels)",
   );
 });
