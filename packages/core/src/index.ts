@@ -39,6 +39,13 @@ export { withWorktree } from "./worktree.js";
 export { codemodRegistry, codemodFor } from "./codemods/registry.js";
 export type { Codemod } from "./codemods/registry.js";
 export { configToggleCodemod } from "./codemods/config-toggle.js";
+export { remediateFindings } from "./remediate-pipeline.js";
+export type {
+  RemediateOptions,
+  RemediationResult,
+  VerifiedPatch,
+  RejectedPatch,
+} from "./remediate-pipeline.js";
 
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
