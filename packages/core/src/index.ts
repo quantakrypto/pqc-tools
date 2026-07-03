@@ -36,6 +36,9 @@ export type { TriageRequest } from "./triage.js";
 export { checkPatchPolicy } from "./patch-policy.js";
 export type { PolicyContext, PolicyDecision } from "./patch-policy.js";
 export { withWorktree } from "./worktree.js";
+export { codemodRegistry, codemodFor } from "./codemods/registry.js";
+export type { Codemod } from "./codemods/registry.js";
+export { configToggleCodemod } from "./codemods/config-toggle.js";
 
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
