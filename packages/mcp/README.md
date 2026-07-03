@@ -142,6 +142,27 @@ tooling. Reads the filesystem, so it is gated like `scan_path` over HTTP.
 }
 ```
 
+## Copilot tools — migrate through the engine
+
+These let an AI coding agent do a PQC migration **through the deterministic
+engine** ("the model proposes, the engine disposes"): the agent plans, edits,
+and re-verifies against the same detectors the CLI uses, so nothing is claimed
+fixed that the scanner still flags.
+
+- **`plan_migration`** — scan a path and return a prioritized, phased plan
+  (harvest-now-decrypt-later first, then signatures, then transport/certs), each
+  group with its PQC target and locations. Reads the filesystem, so it is gated
+  like `scan_path` over HTTP. `{ path }`.
+- **`get_fix_examples`** — before/after migration code for a classical
+  `algorithm` (or a finding's `ruleId`). No filesystem access.
+- **`verify_fix`** — run the detectors over a `code` snippet (plus `language` or
+  `filename`) and report any classical crypto that remains. The agent's
+  fix-confirmation loop. No filesystem access.
+- **`check_dependency`** — look a package `name` (+ `ecosystem`, default npm) up
+  in the vulnerable-dependency database. No filesystem access.
+- **`score_delta`** — readiness-score / HNDL change between two finding sets
+  (`before`, `after` from `scan_path --format json`). No filesystem access.
+
 ## Hosted HTTP server (safe-by-default)
 
 The same `McpServer` can be served over HTTP (a Streamable-HTTP-style JSON-RPC
@@ -155,11 +176,13 @@ is reachable by untrusted peers:
 - **Bearer-token auth.** Set `QUANTAKRYPTO_MCP_TOKEN` and every `/mcp` request must
   send `Authorization: Bearer <token>`, else `401`. With no token set, only the
   loopback bind is allowed.
-- **Filesystem tools are disabled by default.** `scan_path`, `inventory_crypto`
-  and `generate_cbom` read arbitrary server paths, so over HTTP they are exposed
-  only when `QUANTAKRYPTO_MCP_ALLOW_FS=1`. The knowledge tools (`explain_finding`,
-  `suggest_hybrid`, `list_rules`) are always available. `tools/list` and
-  `tools/call` both reflect the gating.
+- **Filesystem tools are disabled by default.** `scan_path`, `inventory_crypto`,
+  `generate_cbom` and `plan_migration` read arbitrary server paths, so over HTTP
+  they are exposed only when `QUANTAKRYPTO_MCP_ALLOW_FS=1`. The knowledge /
+  copilot tools that take no path (`explain_finding`, `suggest_hybrid`,
+  `list_rules`, `get_fix_examples`, `verify_fix`, `check_dependency`,
+  `score_delta`) are always available. `tools/list` and `tools/call` both
+  reflect the gating.
 - **Filesystem tools are root-confined.** Even with `QUANTAKRYPTO_MCP_ALLOW_FS=1`,
   every scanned path must resolve inside the `QUANTAKRYPTO_MCP_ROOT` allow-list
   (`:`-separated; the process CWD by default). `..` traversal and out-of-root
