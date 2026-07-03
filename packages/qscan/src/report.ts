@@ -12,6 +12,7 @@
  */
 
 import {
+  ANALYZABLE_LANGUAGES_LABEL,
   defaultRegistry,
   SEVERITY_ORDER,
   severityRank,
@@ -102,7 +103,9 @@ export function renderHuman(
 
   lines.push(`${c.bold}qScan — quantum-vulnerable cryptography report${c.reset}`);
   const coverage =
-    analyzedFiles === undefined ? "" : `  •  analyzed: ${analyzedFiles} (JS/TS, Python, Go, Java)`;
+    analyzedFiles === undefined
+      ? ""
+      : `  •  analyzed: ${analyzedFiles} (${ANALYZABLE_LANGUAGES_LABEL})`;
   lines.push(
     `${c.dim}root: ${result.root}  •  files scanned: ${filesScanned}${coverage}  •  qscan v${result.toolVersion}${c.reset}`,
   );
@@ -116,7 +119,7 @@ export function renderHuman(
       lines.push(
         `${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${
           filesScanned === 1 ? "" : "s"
-        }, but none were in a supported language (JS/TS, Python, Go, Java).`,
+        }, but none were in a supported language (${ANALYZABLE_LANGUAGES_LABEL}).`,
       );
       lines.push(
         `${c.dim}The score below covers only what qScan can read today — it is NOT a clean bill of health for this codebase.${c.reset}`,

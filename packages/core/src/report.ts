@@ -6,6 +6,7 @@
 import type { Finding, RuleMeta, ScanResult, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 import { SEVERITY_ORDER, sarifLevel } from "./severity.js";
+import { ANALYZABLE_LANGUAGES_LABEL } from "./detect-utils.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
 export interface SarifLog {
@@ -342,7 +343,7 @@ export function formatSummary(result: ScanResult, options?: { color?: boolean })
   );
   const analyzed =
     result.analyzedFiles !== undefined
-      ? `   Analyzed (JS/TS, Python, Go, Java): ${result.analyzedFiles}`
+      ? `   Analyzed (${ANALYZABLE_LANGUAGES_LABEL}): ${result.analyzedFiles}`
       : "";
   lines.push(
     `Files scanned:   ${result.filesScanned}${analyzed}   Findings: ${result.findings.length}   HNDL-exposed: ${c(
@@ -355,7 +356,7 @@ export function formatSummary(result: ScanResult, options?: { color?: boolean })
     lines.push(
       c(
         ANSI.yellow,
-        "Note: 0 files were in a supported source language (JS/TS, Python, Go, Java) — the readiness score does not reflect this codebase.",
+        `Note: 0 files were in a supported source language (${ANALYZABLE_LANGUAGES_LABEL}) — the readiness score does not reflect this codebase.`,
       ),
     );
   }

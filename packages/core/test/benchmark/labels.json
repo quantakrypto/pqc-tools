@@ -199,9 +199,51 @@
       { "ruleId": "java-xdh", "algorithm": "X25519", "hndl": true }
     ]
   },
+  "positive/csharp-crypto.cs": {
+    "category": "csharp",
+    "expected": [
+      { "ruleId": "csharp-rsa", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "csharp-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "csharp-ecdh", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "csharp-dsa", "algorithm": "DSA", "hndl": false }
+    ]
+  },
+  "positive/rust-crypto.rs": {
+    "category": "rust",
+    "expected": [
+      { "ruleId": "rust-rsa", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "rust-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "rust-ecdh", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "rust-ed25519", "algorithm": "EdDSA", "hndl": false },
+      { "ruleId": "rust-x25519", "algorithm": "X25519", "hndl": true }
+    ]
+  },
+  "positive/ruby-crypto.rb": {
+    "category": "ruby",
+    "expected": [
+      { "ruleId": "ruby-rsa", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "ruby-ec", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "ruby-dsa", "algorithm": "DSA", "hndl": false },
+      { "ruleId": "ruby-dh", "algorithm": "DH", "hndl": true }
+    ]
+  },
+  "positive/c-openssl.c": {
+    "category": "c",
+    "expected": [
+      { "ruleId": "c-rsa-keygen", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "c-ec-keygen", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "c-ec-keygen", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "c-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "c-dh", "algorithm": "DH", "hndl": true }
+    ]
+  },
   "negative/python-clean.py": { "category": "negative", "expected": [] },
   "negative/go-clean.go": { "category": "negative", "expected": [] },
   "negative/java-clean.java": { "category": "negative", "expected": [] },
+  "negative/csharp-clean.cs": { "category": "negative", "expected": [] },
+  "negative/rust-clean.rs": { "category": "negative", "expected": [] },
+  "negative/ruby-clean.rb": { "category": "negative", "expected": [] },
+  "negative/c-clean.c": { "category": "negative", "expected": [] },
   "negative/password-hashing.ts": { "category": "negative", "expected": [] },
   "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
   "negative/hashing-hmac.js": { "category": "negative", "expected": [] },

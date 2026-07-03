@@ -178,6 +178,18 @@ export const GO_EXTENSIONS: readonly string[] = [".go"];
 /** Java / Kotlin source extensions handled by the JCA detector. */
 export const JAVA_EXTENSIONS: readonly string[] = [".java", ".kt", ".kts"];
 
+/** C# source extensions handled by the .NET detector. */
+export const CSHARP_EXTENSIONS: readonly string[] = [".cs"];
+
+/** Rust source extensions handled by the Rust detector. */
+export const RUST_EXTENSIONS: readonly string[] = [".rs"];
+
+/** Ruby source extensions handled by the Ruby detector. */
+export const RUBY_EXTENSIONS: readonly string[] = [".rb"];
+
+/** C / C++ source extensions handled by the OpenSSL detector. */
+export const C_EXTENSIONS: readonly string[] = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
+
 /**
  * File-literal surfaces where a JWT/JOSE algorithm string (`"RS256"`, `"ES256"`)
  * is the same evidence regardless of language. Used to un-gate the JWT detector
@@ -200,7 +212,18 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...PYTHON_EXTENSIONS,
   ...GO_EXTENSIONS,
   ...JAVA_EXTENSIONS,
+  ...CSHARP_EXTENSIONS,
+  ...RUST_EXTENSIONS,
+  ...RUBY_EXTENSIONS,
+  ...C_EXTENSIONS,
 ];
+
+/**
+ * Human label for the source languages the scanner can analyze for inline
+ * crypto, shown in coverage output. Kept next to {@link
+ * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
+ */
+export const ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java, C#, Rust, Ruby, C/C++";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {

@@ -360,13 +360,22 @@ var JS_TS_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
 var PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
 var GO_EXTENSIONS = [".go"];
 var JAVA_EXTENSIONS = [".java", ".kt", ".kts"];
+var CSHARP_EXTENSIONS = [".cs"];
+var RUST_EXTENSIONS = [".rs"];
+var RUBY_EXTENSIONS = [".rb"];
+var C_EXTENSIONS = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
 var JWT_HOST_EXTENSIONS = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
 var ANALYZABLE_SOURCE_EXTENSIONS = [
   ...JS_TS_EXTENSIONS,
   ...PYTHON_EXTENSIONS,
   ...GO_EXTENSIONS,
-  ...JAVA_EXTENSIONS
+  ...JAVA_EXTENSIONS,
+  ...CSHARP_EXTENSIONS,
+  ...RUST_EXTENSIONS,
+  ...RUBY_EXTENSIONS,
+  ...C_EXTENSIONS
 ];
+var ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java, C#, Rust, Ruby, C/C++";
 function isAnalyzableSource(filePath) {
   return hasExtension(filePath, ANALYZABLE_SOURCE_EXTENSIONS);
 }
@@ -1445,6 +1454,340 @@ var javaDetector = {
   }
 };
 
+// ../core/dist/detectors/csharp.js
+var RE_CS_RSA = /\bRSA\.Create\s*\(|\bnew\s+RSACryptoServiceProvider\s*\(|\bnew\s+RSACng\s*\(|\bnew\s+RSAOpenSsl\s*\(/g;
+var RE_CS_ECDSA = /\bECDsa\.Create\s*\(|\bnew\s+ECDsaCng\s*\(|\bnew\s+ECDsaOpenSsl\s*\(/g;
+var RE_CS_ECDH = /\bECDiffieHellman\.Create\s*\(|\bnew\s+ECDiffieHellmanCng\s*\(|\bnew\s+ECDiffieHellmanOpenSsl\s*\(/g;
+var RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bnew\s+DSACng\s*\(/g;
+var RULE_CS_RSA = {
+  id: "csharp-rsa",
+  title: "C# RSA key/usage",
+  description: "System.Security.Cryptography RSA.Create / RSACryptoServiceProvider / RSACng",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA (.NET) is not quantum-safe and RSA encryption is HNDL-exposed."
+};
+var RULE_CS_ECDSA = {
+  id: "csharp-ecdsa",
+  title: "C# ECDSA signature",
+  description: "System.Security.Cryptography ECDsa.Create / ECDsaCng",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA signing (.NET) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_CS_ECDH = {
+  id: "csharp-ecdh",
+  title: "C# ECDH key agreement",
+  description: "System.Security.Cryptography ECDiffieHellman.Create / ECDiffieHellmanCng",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Elliptic-curve Diffie-Hellman (.NET) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_CS_DSA = {
+  id: "csharp-dsa",
+  title: "C# DSA key/signature",
+  description: "System.Security.Cryptography DSA.Create / DSACryptoServiceProvider",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (.NET) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var csharpDetector = {
+  id: "csharp-crypto",
+  description: "Classical asymmetric crypto in C#/.NET (System.Security.Cryptography)",
+  scope: "source",
+  language: "csharp",
+  rules: [RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA],
+  appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_CS_ECDSA, RULE_CS_ECDSA);
+    add(RE_CS_ECDH, RULE_CS_ECDH);
+    add(RE_CS_RSA, RULE_CS_RSA);
+    add(RE_CS_DSA, RULE_CS_DSA);
+    return findings;
+  }
+};
+
+// ../core/dist/detectors/rust.js
+var RE_RUST_RSA = /\b(?:RsaPrivateKey|RsaPublicKey|RsaKeyPair)::/g;
+var RE_RUST_ECDSA = /\becdsa::SigningKey\b|\bEcdsaKeyPair::/g;
+var RE_RUST_ECDH = /\becdh::EphemeralSecret\b|\bagreement::ECDH_P(?:256|384)\b/g;
+var RE_RUST_ED25519 = /\bed25519_dalek::(?:SigningKey|Keypair|SecretKey)\b|\bEd25519KeyPair::/g;
+var RE_RUST_X25519 = /\bx25519_dalek::(?:EphemeralSecret|StaticSecret)\b/g;
+var RULE_RUST_RSA = {
+  id: "rust-rsa",
+  title: "Rust RSA key/usage",
+  description: "the `rsa` crate / ring RsaKeyPair",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA (Rust) is not quantum-safe and RSA encryption is HNDL-exposed."
+};
+var RULE_RUST_ECDSA = {
+  id: "rust-ecdsa",
+  title: "Rust ECDSA signature",
+  description: "p256/p384/k256 ecdsa::SigningKey / ring EcdsaKeyPair",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA signing (Rust) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_RUST_ECDH = {
+  id: "rust-ecdh",
+  title: "Rust ECDH key agreement",
+  description: "p256/p384 ecdh::EphemeralSecret / ring agreement",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Elliptic-curve Diffie-Hellman (Rust) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_RUST_ED25519 = {
+  id: "rust-ed25519",
+  title: "Rust Ed25519 signature",
+  description: "ed25519-dalek SigningKey/Keypair / ring Ed25519KeyPair",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Ed25519 (Rust) is a modern but still classical signature scheme."
+};
+var RULE_RUST_X25519 = {
+  id: "rust-x25519",
+  title: "Rust X25519 key agreement",
+  description: "x25519-dalek EphemeralSecret/StaticSecret",
+  category: "key-exchange",
+  severity: "low",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "X25519 (Rust) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+};
+var rustDetector = {
+  id: "rust-crypto",
+  description: "Classical asymmetric crypto in Rust (rsa, ring, *-dalek, p256/k256)",
+  scope: "source",
+  language: "rust",
+  rules: [RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519],
+  appliesTo: (f) => hasExtension(f, RUST_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_RUST_RSA, RULE_RUST_RSA);
+    add(RE_RUST_ECDSA, RULE_RUST_ECDSA);
+    add(RE_RUST_ECDH, RULE_RUST_ECDH);
+    add(RE_RUST_ED25519, RULE_RUST_ED25519);
+    add(RE_RUST_X25519, RULE_RUST_X25519);
+    return findings;
+  }
+};
+
+// ../core/dist/detectors/ruby.js
+var RE_RB_RSA = /\bOpenSSL::PKey::RSA\.(?:new|generate)\s*\(/g;
+var RE_RB_EC = /\bOpenSSL::PKey::EC\.(?:new|generate)\s*\(/g;
+var RE_RB_DSA = /\bOpenSSL::PKey::DSA\.(?:new|generate)\s*\(/g;
+var RE_RB_DH = /\bOpenSSL::PKey::DH\.new\s*\(/g;
+var RULE_RB_RSA = {
+  id: "ruby-rsa",
+  title: "Ruby RSA key/usage",
+  description: "OpenSSL::PKey::RSA.new / .generate",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA (Ruby/OpenSSL) is not quantum-safe and RSA encryption is HNDL-exposed."
+};
+var RULE_RB_EC = {
+  id: "ruby-ec",
+  title: "Ruby EC key generation",
+  description: "OpenSSL::PKey::EC.new / .generate",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical EC key pair (Ruby/OpenSSL). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+};
+var RULE_RB_DSA = {
+  id: "ruby-dsa",
+  title: "Ruby DSA key/signature",
+  description: "OpenSSL::PKey::DSA.new / .generate",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (Ruby/OpenSSL) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var RULE_RB_DH = {
+  id: "ruby-dh",
+  title: "Ruby Diffie-Hellman key exchange",
+  description: "OpenSSL::PKey::DH.new",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Finite-field Diffie-Hellman (Ruby/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var rubyDetector = {
+  id: "ruby-crypto",
+  description: "Classical asymmetric crypto in Ruby (OpenSSL::PKey::{RSA,EC,DSA,DH})",
+  scope: "source",
+  language: "ruby",
+  rules: [RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH],
+  appliesTo: (f) => hasExtension(f, RUBY_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_RB_RSA, RULE_RB_RSA);
+    add(RE_RB_EC, RULE_RB_EC);
+    add(RE_RB_DSA, RULE_RB_DSA);
+    add(RE_RB_DH, RULE_RB_DH);
+    return findings;
+  }
+};
+
+// ../core/dist/detectors/c.js
+var RE_C_RSA = /\bRSA_generate_key(?:_ex)?\s*\(|\bEVP_RSA_gen\s*\(/g;
+var RE_C_EC = /\bEC_KEY_generate_key\s*\(|\bEC_KEY_new_by_curve_name\s*\(/g;
+var RE_C_ECDSA = /\bECDSA_do_sign\s*\(|\bECDSA_sign\s*\(/g;
+var RE_C_ECDH = /\bECDH_compute_key\s*\(/g;
+var RE_C_DSA = /\bDSA_generate_key\s*\(|\bDSA_generate_parameters(?:_ex)?\s*\(/g;
+var RE_C_DH = /\bDH_generate_key\s*\(|\bDH_generate_parameters(?:_ex)?\s*\(/g;
+var RULE_C_RSA = {
+  id: "c-rsa-keygen",
+  title: "C/OpenSSL RSA key generation",
+  description: "OpenSSL RSA_generate_key(_ex) / EVP_RSA_gen",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical RSA key pair (C/OpenSSL), which is not quantum-safe."
+};
+var RULE_C_EC = {
+  id: "c-ec-keygen",
+  title: "C/OpenSSL EC key generation",
+  description: "OpenSSL EC_KEY_generate_key / EC_KEY_new_by_curve_name",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical EC key pair (C/OpenSSL). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+};
+var RULE_C_ECDSA = {
+  id: "c-ecdsa",
+  title: "C/OpenSSL ECDSA signature",
+  description: "OpenSSL ECDSA_sign / ECDSA_do_sign",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA signing (C/OpenSSL) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_C_ECDH = {
+  id: "c-ecdh",
+  title: "C/OpenSSL ECDH key agreement",
+  description: "OpenSSL ECDH_compute_key",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Elliptic-curve Diffie-Hellman (C/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_C_DSA = {
+  id: "c-dsa",
+  title: "C/OpenSSL DSA key/usage",
+  description: "OpenSSL DSA_generate_key / DSA_generate_parameters",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (C/OpenSSL) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var RULE_C_DH = {
+  id: "c-dh",
+  title: "C/OpenSSL Diffie-Hellman key exchange",
+  description: "OpenSSL DH_generate_key / DH_generate_parameters",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Finite-field Diffie-Hellman (C/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var cDetector = {
+  id: "c-crypto",
+  description: "Classical asymmetric crypto in C/C++ (OpenSSL)",
+  scope: "source",
+  language: "c",
+  rules: [RULE_C_RSA, RULE_C_EC, RULE_C_ECDSA, RULE_C_ECDH, RULE_C_DSA, RULE_C_DH],
+  appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_C_RSA, RULE_C_RSA);
+    add(RE_C_EC, RULE_C_EC);
+    add(RE_C_ECDSA, RULE_C_ECDSA);
+    add(RE_C_ECDH, RULE_C_ECDH);
+    add(RE_C_DSA, RULE_C_DSA);
+    add(RE_C_DH, RULE_C_DH);
+    return findings;
+  }
+};
+
 // ../core/dist/detectors/pem.js
 var PEM_RULES = [
   {
@@ -1682,6 +2025,10 @@ var defaultRegistry = new DetectorRegistry([
   pythonDetector,
   goDetector,
   javaDetector,
+  csharpDetector,
+  rustDetector,
+  rubyDetector,
+  cDetector,
   pemDetector
 ]);
 
@@ -2108,6 +2455,10 @@ var detectors = [
   pythonDetector,
   goDetector,
   javaDetector,
+  csharpDetector,
+  rustDetector,
+  rubyDetector,
+  cDetector,
   pemDetector
 ];
 function compareFindings(a, b) {
@@ -2966,12 +3317,12 @@ function renderHuman(result, opts = {}) {
   const noAnalyzable = analyzedFiles === 0;
   const lines = [];
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
-  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python, Go, Java)`;
+  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (${ANALYZABLE_LANGUAGES_LABEL})`;
   lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}${coverage}  \u2022  qscan v${result.toolVersion}${c.reset}`);
   lines.push("");
   if (findings.length === 0) {
     if (noAnalyzable && filesScanned > 0) {
-      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python, Go, Java).`);
+      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (${ANALYZABLE_LANGUAGES_LABEL}).`);
       lines.push(`${c.dim}The score below covers only what qScan can read today \u2014 it is NOT a clean bill of health for this codebase.${c.reset}`);
       lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100 (no analyzable source)${c.reset}`);
       lines.push("");

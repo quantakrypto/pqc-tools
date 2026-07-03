@@ -50,6 +50,13 @@ export type { QuantakryptoFileConfig, LoadConfigResult } from "./config.js";
 // Filesystem walker (relative POSIX paths, default ignores, size/binary filters).
 export { walkFiles, isBinaryPath, isGeneratedPath, looksMinified } from "./walk.js";
 
+// Analyzable-language coverage (which source languages the scanner inspects).
+export {
+  isAnalyzableSource,
+  ANALYZABLE_SOURCE_EXTENSIONS,
+  ANALYZABLE_LANGUAGES_LABEL,
+} from "./detect-utils.js";
+
 // Inventory + readiness score.
 export { buildInventory } from "./inventory.js";
 

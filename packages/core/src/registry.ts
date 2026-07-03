@@ -15,6 +15,10 @@ import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
 import { javaDetector } from "./detectors/java.js";
+import { csharpDetector } from "./detectors/csharp.js";
+import { rustDetector } from "./detectors/rust.js";
+import { rubyDetector } from "./detectors/ruby.js";
+import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -114,5 +118,9 @@ export const defaultRegistry = new DetectorRegistry([
   pythonDetector,
   goDetector,
   javaDetector,
+  csharpDetector,
+  rustDetector,
+  rubyDetector,
+  cDetector,
   pemDetector,
 ]);

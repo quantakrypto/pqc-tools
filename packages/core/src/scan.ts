@@ -19,6 +19,10 @@ import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
 import { javaDetector } from "./detectors/java.js";
+import { csharpDetector } from "./detectors/csharp.js";
+import { rustDetector } from "./detectors/rust.js";
+import { rubyDetector } from "./detectors/ruby.js";
+import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
 import { defaultRegistry, detectorScope } from "./registry.js";
 import { isManifestFile, scanManifest } from "./dependencies.js";
@@ -37,6 +41,10 @@ export const detectors: Detector[] = [
   pythonDetector,
   goDetector,
   javaDetector,
+  csharpDetector,
+  rustDetector,
+  rubyDetector,
+  cDetector,
   pemDetector,
 ];
 

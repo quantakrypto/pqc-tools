@@ -99,7 +99,16 @@ export type DetectorScope = "source" | "config";
  * The programming language / surface a detector targets. `"any"` means the
  * detector is language-agnostic (e.g. PEM material, config files).
  */
-export type DetectorLanguage = "js" | "python" | "go" | "java" | "any";
+export type DetectorLanguage =
+  | "js"
+  | "python"
+  | "go"
+  | "java"
+  | "csharp"
+  | "rust"
+  | "ruby"
+  | "c"
+  | "any";
 
 /**
  * Declarative metadata for a single rule a detector can emit. This is the
