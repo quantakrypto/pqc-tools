@@ -166,8 +166,21 @@ export function hasExtension(filePath: string, exts: readonly string[]): boolean
   return exts.some((e) => lower.endsWith(e));
 }
 
-/** JavaScript / TypeScript source extensions handled by the source detectors. */
-export const JS_TS_EXTENSIONS: readonly string[] = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
+/**
+ * JavaScript / TypeScript source extensions handled by the source detectors.
+ * `.vue` / `.svelte` single-file components embed a `<script>` block, so the
+ * lexical detectors catch crypto usage inside them.
+ */
+export const JS_TS_EXTENSIONS: readonly string[] = [
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".vue",
+  ".svelte",
+];
 
 /** Python source extensions handled by the Python detector. */
 export const PYTHON_EXTENSIONS: readonly string[] = [".py", ".pyi", ".pyw"];

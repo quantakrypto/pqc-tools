@@ -41,24 +41,30 @@ import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cw
 /* Precompiled regexes (module scope — never recreated per file)              */
 /* -------------------------------------------------------------------------- */
 
+// `rsa-pss` is listed before `rsa` so the alternation consumes the full token
+// (ordered alternation would otherwise match `rsa` and reject the `-pss` tail).
 const RE_GENERATE_KEYPAIR =
-  /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
+  /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
 const RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
-// One-shot crypto.sign/verify(algorithm, data, key). Anchored so it doesn't
-// fire inside identifiers like `assign(` or `createSign(` (which the dedicated
-// createSign/createVerify rule handles). The first argument is either a quoted
-// digest-algorithm string (RSA/ECDSA) or `null` — Node's EdDSA one-shot form is
-// `crypto.sign(null, data, edKey)`, which must still be detected.
+// One-shot crypto.sign/verify(algorithm, data, key). A LOOKBEHIND (not a
+// consumed char) anchors it so it doesn't fire inside identifiers like `assign(`
+// or `createSign(` (handled by the dedicated createSign/createVerify rule) —
+// consuming the preceding char used to push the match onto the previous line,
+// corrupting the reported line/snippet and SARIF/baseline fingerprints. The
+// first argument is either a quoted digest-algorithm string (RSA/ECDSA) or
+// `null` — Node's EdDSA one-shot form is `crypto.sign(null, data, edKey)`.
 const RE_ONESHOT_SIGN_VERIFY =
-  /(?:^|[^.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
+  /(?<![.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
 const RE_CREATE_DH = /createDiffieHellman(?:Group)?\s*\(/g;
 const RE_GET_DH = /getDiffieHellman\s*\(\s*['"`](modp\d+)['"`]\s*\)/g;
 const RE_CREATE_ECDH = /createECDH\s*\(/g;
 const RE_RSA_ENCRYPT = /(?:crypto\.)?(?:publicEncrypt|privateDecrypt)\s*\(/g;
 const RE_DH_KEYOBJECT = /(?:crypto\.)?diffieHellman\s*\(\s*\{/g;
 
-// WebCrypto.
-const RE_WEBCRYPTO_ALGO = /\b(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDH|ECDSA)\b/gi;
+// WebCrypto. Includes the newer curve algorithms (Ed25519/Ed448 signatures,
+// X25519/X448 key agreement) shipping in modern SubtleCrypto implementations.
+const RE_WEBCRYPTO_ALGO =
+  /\b(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDH|ECDSA|Ed25519|Ed448|X25519|X448)\b/gi;
 const RE_SUBTLE_CALL =
   /subtle\s*\.\s*(generateKey|importKey|exportKey|deriveKey|deriveBits|sign|verify|encrypt|decrypt|wrapKey|unwrapKey)\s*\(/g;
 
@@ -238,6 +244,18 @@ const nodeCryptoDetector: Detector = {
         }
       > = {
         rsa: { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" },
+        // RSA-PSS is signature-only, so classify it as a (forgeable) signature
+        // rather than a KEM — no HNDL confidentiality exposure.
+        "rsa-pss": {
+          algo: "RSA",
+          cat: "signature",
+          sev: "high",
+          hndl: false,
+          label: "RSA-PSS",
+          message:
+            "Generates a classical RSA-PSS signing key, which is forgeable by a quantum attacker.",
+          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+        },
         // EC keys feed BOTH ECDSA (sign) and ECDH (key agreement). ECDH is
         // HNDL-exposed, so classify conservatively as key-exchange-capable and
         // surface both concerns rather than asserting signature-only (P0-4).
@@ -407,15 +425,36 @@ const webCryptoDetector: Detector = {
     eachMatch(RE_WEBCRYPTO_ALGO, content, (m) => {
       if (!nearSortedCall(callIndexes, m.index, 400)) return;
       const name = m[1].toUpperCase();
-      const isKem = name === "RSA-OAEP";
-      const isEcdh = name === "ECDH";
-      const algorithm: Finding["algorithm"] = name.startsWith("RSA")
-        ? "RSA"
-        : isEcdh
-          ? "ECDH"
-          : "ECDSA";
-      const category: Finding["category"] = isEcdh ? "key-exchange" : isKem ? "kem" : "signature";
-      const hndl = isKem || isEcdh;
+      // Classify by algorithm: RSA-OAEP is KEM (HNDL); ECDH/X25519/X448 are key
+      // agreement (HNDL); RSA-PSS/RSASSA/ECDSA/Ed25519/Ed448 are signatures.
+      let algorithm: Finding["algorithm"];
+      let category: Finding["category"];
+      let hndl: boolean;
+      let severity: Finding["severity"] | undefined;
+      if (name.startsWith("RSA")) {
+        algorithm = "RSA";
+        const isKem = name === "RSA-OAEP";
+        category = isKem ? "kem" : "signature";
+        hndl = isKem;
+      } else if (name === "ECDH") {
+        algorithm = "ECDH";
+        category = "key-exchange";
+        hndl = true;
+      } else if (name === "X25519" || name === "X448") {
+        algorithm = name === "X448" ? "X448" : "X25519";
+        category = "key-exchange";
+        hndl = true;
+        severity = "low"; // modern but classical
+      } else if (name === "ED25519" || name === "ED448") {
+        algorithm = "EdDSA";
+        category = "signature";
+        hndl = false;
+        severity = "low";
+      } else {
+        algorithm = "ECDSA";
+        category = "signature";
+        hndl = false;
+      }
       findings.push(
         findingFromRule(
           RULE_WEBCRYPTO,
@@ -425,6 +464,7 @@ const webCryptoDetector: Detector = {
             category,
             algorithm,
             hndl,
+            ...(severity ? { severity } : {}),
             message: `WebCrypto algorithm "${m[1]}" is classical asymmetric crypto and not quantum-safe.`,
           },
         ),

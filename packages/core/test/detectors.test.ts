@@ -117,6 +117,56 @@ test("Node crypto one-shot sign/verify is flagged", () => {
   assert.equal(f.hndl, false);
 });
 
+test("one-shot sign reports the correct line (lookbehind, not a consumed newline)", () => {
+  // The call is on line 2; the old anchor consumed the preceding \n and reported line 1.
+  const src = "const data = Buffer.from('x');\ncrypto.sign('sha256', data, key);";
+  const f = byRule(run("a.ts", src), "node-crypto-sign-oneshot");
+  assert.ok(f);
+  assert.equal(f.location.line, 2, "line must point at the call, not the previous line");
+});
+
+test("Node crypto RSA-PSS keygen is a (forgeable) signature, not a KEM", () => {
+  const f = byRule(
+    run("a.ts", "crypto.generateKeyPairSync('rsa-pss', { modulusLength: 2048 });"),
+    "node-crypto-keygen",
+  );
+  assert.ok(f, "rsa-pss keygen detected");
+  assert.equal(f.algorithm, "RSA");
+  assert.equal(f.category, "signature");
+  assert.equal(f.hndl, false);
+});
+
+test("WebCrypto detects modern curves (Ed25519 signature, X25519 key agreement)", () => {
+  const ed = byRule(
+    run("a.ts", "await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign']);"),
+    "webcrypto-classical",
+  );
+  assert.equal(ed?.algorithm, "EdDSA");
+  assert.equal(ed?.category, "signature");
+  assert.equal(ed?.severity, "low");
+
+  const x = byRule(
+    run("a.ts", "await crypto.subtle.deriveBits({ name: 'X25519', public: pk }, priv, 256);"),
+    "webcrypto-classical",
+  );
+  assert.equal(x?.algorithm, "X25519");
+  assert.equal(x?.category, "key-exchange");
+  assert.equal(x?.hndl, true);
+});
+
+test("source detectors run on .vue / .svelte single-file components", () => {
+  const vue = byRule(
+    run("App.vue", "<script>const e = crypto.createECDH('p256');</script>"),
+    "node-crypto-ecdh",
+  );
+  assert.ok(vue, "crypto usage inside a .vue <script> block is detected");
+  const svelte = byRule(
+    run("C.svelte", "<script>crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });</script>"),
+    "node-crypto-keygen",
+  );
+  assert.ok(svelte);
+});
+
 test("Node crypto EdDSA one-shot sign/verify with null algorithm is flagged", () => {
   // Node's Ed25519/Ed448 one-shot form passes `null` as the first argument:
   // crypto.sign(null, data, edKey). It must still be detected.

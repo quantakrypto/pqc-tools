@@ -128,6 +128,14 @@
       { "ruleId": "tls-reject-unauthorized", "algorithm": null, "hndl": false }
     ]
   },
+  "positive/js-modern-curves.ts": {
+    "category": "signature",
+    "expected": [
+      { "ruleId": "node-crypto-keygen", "algorithm": "RSA", "hndl": false },
+      { "ruleId": "webcrypto-classical", "algorithm": "EdDSA", "hndl": false },
+      { "ruleId": "webcrypto-classical", "algorithm": "X25519", "hndl": true }
+    ]
+  },
   "positive/python-cryptography.py": {
     "category": "python",
     "expected": [

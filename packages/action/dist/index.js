@@ -356,7 +356,16 @@ function hasExtension(filePath, exts) {
   const lower = filePath.toLowerCase();
   return exts.some((e) => lower.endsWith(e));
 }
-var JS_TS_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
+var JS_TS_EXTENSIONS = [
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".vue",
+  ".svelte"
+];
 var PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
 var GO_EXTENSIONS = [".go"];
 var JAVA_EXTENSIONS = [".java", ".kt", ".kts"];
@@ -414,15 +423,15 @@ var CWE_CERT_VALIDATION = "CWE-295";
 var CWE_HARDCODED_KEY = "CWE-798";
 
 // ../core/dist/detectors/source.js
-var RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
+var RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
 var RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
-var RE_ONESHOT_SIGN_VERIFY = /(?:^|[^.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
+var RE_ONESHOT_SIGN_VERIFY = /(?<![.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
 var RE_CREATE_DH = /createDiffieHellman(?:Group)?\s*\(/g;
 var RE_GET_DH = /getDiffieHellman\s*\(\s*['"`](modp\d+)['"`]\s*\)/g;
 var RE_CREATE_ECDH = /createECDH\s*\(/g;
 var RE_RSA_ENCRYPT = /(?:crypto\.)?(?:publicEncrypt|privateDecrypt)\s*\(/g;
 var RE_DH_KEYOBJECT = /(?:crypto\.)?diffieHellman\s*\(\s*\{/g;
-var RE_WEBCRYPTO_ALGO = /\b(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDH|ECDSA)\b/gi;
+var RE_WEBCRYPTO_ALGO = /\b(RSA-OAEP|RSA-PSS|RSASSA-PKCS1-v1_5|ECDH|ECDSA|Ed25519|Ed448|X25519|X448)\b/gi;
 var RE_SUBTLE_CALL = /subtle\s*\.\s*(generateKey|importKey|exportKey|deriveKey|deriveBits|sign|verify|encrypt|decrypt|wrapKey|unwrapKey)\s*\(/g;
 var RE_FORGE_RSA = /pki\.rsa\.generateKeyPair\s*\(/g;
 var RE_FORGE_ED25519 = /forge\.ed25519\b/g;
@@ -556,6 +565,17 @@ var nodeCryptoDetector = {
       const type = m[1].toLowerCase();
       const map = {
         rsa: { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" },
+        // RSA-PSS is signature-only, so classify it as a (forgeable) signature
+        // rather than a KEM — no HNDL confidentiality exposure.
+        "rsa-pss": {
+          algo: "RSA",
+          cat: "signature",
+          sev: "high",
+          hndl: false,
+          label: "RSA-PSS",
+          message: "Generates a classical RSA-PSS signing key, which is forgeable by a quantum attacker.",
+          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+        },
         // EC keys feed BOTH ECDSA (sign) and ECDH (key agreement). ECDH is
         // HNDL-exposed, so classify conservatively as key-exchange-capable and
         // surface both concerns rather than asserting signature-only (P0-4).
@@ -667,16 +687,40 @@ var webCryptoDetector = {
       if (!nearSortedCall(callIndexes, m.index, 400))
         return;
       const name = m[1].toUpperCase();
-      const isKem = name === "RSA-OAEP";
-      const isEcdh = name === "ECDH";
-      const algorithm = name.startsWith("RSA") ? "RSA" : isEcdh ? "ECDH" : "ECDSA";
-      const category = isEcdh ? "key-exchange" : isKem ? "kem" : "signature";
-      const hndl = isKem || isEcdh;
+      let algorithm;
+      let category;
+      let hndl;
+      let severity;
+      if (name.startsWith("RSA")) {
+        algorithm = "RSA";
+        const isKem = name === "RSA-OAEP";
+        category = isKem ? "kem" : "signature";
+        hndl = isKem;
+      } else if (name === "ECDH") {
+        algorithm = "ECDH";
+        category = "key-exchange";
+        hndl = true;
+      } else if (name === "X25519" || name === "X448") {
+        algorithm = name === "X448" ? "X448" : "X25519";
+        category = "key-exchange";
+        hndl = true;
+        severity = "low";
+      } else if (name === "ED25519" || name === "ED448") {
+        algorithm = "EdDSA";
+        category = "signature";
+        hndl = false;
+        severity = "low";
+      } else {
+        algorithm = "ECDSA";
+        category = "signature";
+        hndl = false;
+      }
       findings.push(findingFromRule(RULE_WEBCRYPTO, { file, content, index: m.index, matchLength: m[0].length }, {
         title: `WebCrypto ${m[1]}`,
         category,
         algorithm,
         hndl,
+        ...severity ? { severity } : {},
         message: `WebCrypto algorithm "${m[1]}" is classical asymmetric crypto and not quantum-safe.`
       }));
     });
