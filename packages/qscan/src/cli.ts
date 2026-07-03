@@ -80,6 +80,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     run = await runQscan(options, { color });
   } catch (err) {
+    // A missing scan path is the most common failure; a raw
+    // "ENOENT: no such file or directory, stat '…'" reads like a tool bug.
+    // Turn it into a plain, actionable line (still exit 2).
+    if (isErrno(err) && err.code === "ENOENT") {
+      process.stderr.write(`qscan: path not found: ${options.path}\n`);
+      return EXIT.ERROR;
+    }
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`qscan: ${message}\n`);
     return EXIT.ERROR;
@@ -119,6 +126,11 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   return run.exitCode;
+}
+
+/** True for Node system errors (fs/os), which carry a string `code` like `ENOENT`. */
+function isErrno(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === "string";
 }
 
 /**

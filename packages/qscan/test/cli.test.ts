@@ -85,6 +85,14 @@ test("scan failure is caught and mapped to exit 2", async () => {
   if (code === EXIT.ERROR) assert.match(err, /qscan:/);
 });
 
+test("a missing scan path exits 2 with a friendly message (not a raw ENOENT)", async () => {
+  const missing = join(tmpdir(), "qscan-does-not-exist-9c3f1a2b", "nope");
+  const { code, err } = await capture(() => main([missing]));
+  assert.equal(code, EXIT.ERROR);
+  assert.match(err, /path not found/);
+  assert.doesNotMatch(err, /ENOENT/, "the raw stat error should not leak to the user");
+});
+
 test("report can be written to a file", async () => {
   // This path only runs the file-write branch when a scan succeeds; when core
   // is a stub the scan throws first. We assert the no-crash contract and, if a
