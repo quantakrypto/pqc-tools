@@ -42,6 +42,8 @@ if (parentPort) {
     try {
       const findings: Finding[] = [];
       let filesScanned = 0;
+      let unreadable = 0;
+      let skippedMinified = 0;
       const scannedNames: string[] = [];
 
       for (const rel of req.files) {
@@ -50,9 +52,11 @@ if (parentPort) {
         try {
           content = readFileSync(abs, "utf8");
         } catch {
-          continue; // vanished / unreadable — skip.
+          unreadable += 1;
+          continue;
         }
         if (!toggles.scanMinified && !isManifestFile(rel) && looksMinified(content)) {
+          skippedMinified += 1;
           continue;
         }
         filesScanned += 1;
@@ -75,7 +79,7 @@ if (parentPort) {
       port.postMessage({
         index: req.index,
         files: scannedNames,
-        result: { findings, filesScanned },
+        result: { findings, filesScanned, unreadable, skippedMinified },
       });
     } catch (err) {
       port.postMessage({

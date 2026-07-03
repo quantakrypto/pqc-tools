@@ -286,12 +286,29 @@ export interface CryptoInventory {
   readinessScore: number;
 }
 
+/**
+ * Non-fatal things that happened during a scan that reduce coverage. Surfaced so
+ * a silent under-scan (e.g. half the tree was unreadable) can't masquerade as a
+ * clean "0 findings" result — reporters warn when any count is non-zero.
+ */
+export interface ScanDiagnostics {
+  /** Files that could not be read (permissions, vanished, decode failure) and were skipped. */
+  unreadable: number;
+  /** Files skipped because they look machine-minified / generated (scan with `scanMinified` to include). */
+  skippedMinified: number;
+}
+
 /** The full result of a scan. */
 export interface ScanResult {
   /** The scan root (as provided). */
   root: string;
   findings: Finding[];
   filesScanned: number;
+  /**
+   * Coverage diagnostics: counts of files skipped as unreadable or minified.
+   * Optional for backward compatibility with hand-built results.
+   */
+  diagnostics?: ScanDiagnostics;
   /**
    * Of `filesScanned`, how many were in a source language the scanner can
    * actually analyze for inline crypto (JS/TS, Python, Go, Java). When this is 0 but

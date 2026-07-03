@@ -2977,6 +2977,8 @@ async function scan(options) {
   let filesScanned = 0;
   let analyzedFiles = 0;
   let bytesScanned = 0;
+  let unreadable = 0;
+  let skippedMinified = 0;
   const signal = options.signal;
   const maxFiles = options.maxFiles;
   const maxBytes = options.maxBytes;
@@ -2999,9 +3001,11 @@ async function scan(options) {
     try {
       content = await readFile(absPath, "utf8");
     } catch {
+      unreadable += 1;
       continue;
     }
     if (!scanMinified && !isManifestFile(reportedPath) && looksMinified(content)) {
+      skippedMinified += 1;
       continue;
     }
     bytesScanned += Buffer.byteLength(content, "utf8");
@@ -3025,6 +3029,7 @@ async function scan(options) {
     findings,
     filesScanned,
     analyzedFiles,
+    diagnostics: { unreadable, skippedMinified },
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
@@ -3098,13 +3103,17 @@ function chunkByBytes(files, chunkBytes) {
 function mergeChunkResults(results) {
   const findings = [];
   let filesScanned = 0;
+  let unreadable = 0;
+  let skippedMinified = 0;
   for (const r of results) {
     for (const f of r.findings)
       findings.push(f);
     filesScanned += r.filesScanned;
+    unreadable += r.unreadable ?? 0;
+    skippedMinified += r.skippedMinified ?? 0;
   }
   findings.sort(compareFindings);
-  return { findings, filesScanned };
+  return { findings, filesScanned, unreadable, skippedMinified };
 }
 function resolveConcurrency(options) {
   const raw = options.concurrency;
@@ -3201,6 +3210,10 @@ async function scanParallel(options) {
     findings: merged.findings,
     filesScanned: merged.filesScanned,
     analyzedFiles,
+    diagnostics: {
+      unreadable: merged.unreadable ?? 0,
+      skippedMinified: merged.skippedMinified ?? 0
+    },
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
@@ -3582,6 +3595,7 @@ function toJson(result, opts) {
     finishedAt: result.finishedAt,
     filesScanned: result.filesScanned,
     ...result.analyzedFiles !== void 0 ? { analyzedFiles: result.analyzedFiles } : {},
+    ...result.diagnostics ? { diagnostics: result.diagnostics } : {},
     inventory: {
       readinessScore: result.inventory.readinessScore,
       hndlCount: result.inventory.hndlCount,
@@ -3791,6 +3805,15 @@ function renderHuman(result, opts = {}) {
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
   const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (${ANALYZABLE_LANGUAGES_LABEL})`;
   lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}${coverage}  \u2022  qscan v${result.toolVersion}${c.reset}`);
+  const diag = result.diagnostics;
+  if (diag && (diag.unreadable > 0 || diag.skippedMinified > 0)) {
+    const parts = [];
+    if (diag.unreadable > 0)
+      parts.push(`${diag.unreadable} unreadable`);
+    if (diag.skippedMinified > 0)
+      parts.push(`${diag.skippedMinified} skipped (minified)`);
+    lines.push(`${c.yellow}Coverage: ${parts.join(", ")} \u2014 results may be incomplete.${c.reset}`);
+  }
   lines.push("");
   if (findings.length === 0) {
     if (noAnalyzable && filesScanned > 0) {

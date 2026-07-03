@@ -32,6 +32,10 @@ export interface ScanChunk {
 export interface ChunkResult {
   findings: Finding[];
   filesScanned: number;
+  /** Files that couldn't be read in this chunk (optional; older workers omit it). */
+  unreadable?: number;
+  /** Files skipped as minified in this chunk (optional; older workers omit it). */
+  skippedMinified?: number;
 }
 
 const DEFAULT_PARALLEL_THRESHOLD_BYTES = 2 * 1024 * 1024;
@@ -75,12 +79,16 @@ export function chunkByBytes(files: readonly SizedFile[], chunkBytes: number): S
 export function mergeChunkResults(results: readonly ChunkResult[]): ChunkResult {
   const findings: Finding[] = [];
   let filesScanned = 0;
+  let unreadable = 0;
+  let skippedMinified = 0;
   for (const r of results) {
     for (const f of r.findings) findings.push(f);
     filesScanned += r.filesScanned;
+    unreadable += r.unreadable ?? 0;
+    skippedMinified += r.skippedMinified ?? 0;
   }
   findings.sort(compareFindings);
-  return { findings, filesScanned };
+  return { findings, filesScanned, unreadable, skippedMinified };
 }
 
 /** Resolve the worker count (>= 1). */
@@ -228,6 +236,10 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
     findings: merged.findings,
     filesScanned: merged.filesScanned,
     analyzedFiles,
+    diagnostics: {
+      unreadable: merged.unreadable ?? 0,
+      skippedMinified: merged.skippedMinified ?? 0,
+    },
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),

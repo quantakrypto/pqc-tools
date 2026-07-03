@@ -109,6 +109,15 @@ export function renderHuman(
   lines.push(
     `${c.dim}root: ${result.root}  •  files scanned: ${filesScanned}${coverage}  •  qscan v${result.toolVersion}${c.reset}`,
   );
+  // Coverage diagnostics: warn when files were skipped, so a low finding count
+  // isn't mistaken for a clean scan of the whole tree.
+  const diag = result.diagnostics;
+  if (diag && (diag.unreadable > 0 || diag.skippedMinified > 0)) {
+    const parts: string[] = [];
+    if (diag.unreadable > 0) parts.push(`${diag.unreadable} unreadable`);
+    if (diag.skippedMinified > 0) parts.push(`${diag.skippedMinified} skipped (minified)`);
+    lines.push(`${c.yellow}Coverage: ${parts.join(", ")} — results may be incomplete.${c.reset}`);
+  }
   lines.push("");
 
   if (findings.length === 0) {

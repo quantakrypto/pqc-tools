@@ -125,6 +125,8 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   let filesScanned = 0;
   let analyzedFiles = 0;
   let bytesScanned = 0;
+  let unreadable = 0;
+  let skippedMinified = 0;
 
   // Work-budget / cancellation controls (all optional, unlimited when omitted).
   const signal = options.signal;
@@ -160,12 +162,14 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     try {
       content = await readFile(absPath, "utf8");
     } catch {
-      continue; // unreadable / vanished file — skip.
+      unreadable += 1; // permissions / vanished / decode failure — tracked, not silent.
+      continue;
     }
 
     // Skip machine-minified / generated content (unless explicitly enabled).
     // Manifests are always scanned (their findings are dependency findings).
     if (!scanMinified && !isManifestFile(reportedPath) && looksMinified(content)) {
+      skippedMinified += 1;
       continue;
     }
 
@@ -203,6 +207,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     findings,
     filesScanned,
     analyzedFiles,
+    diagnostics: { unreadable, skippedMinified },
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),

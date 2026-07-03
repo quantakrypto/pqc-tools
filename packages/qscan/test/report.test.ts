@@ -34,3 +34,22 @@ test("renderHuman is unchanged (no coverage line) for results without analyzedFi
   assert.match(out, /No quantum-vulnerable cryptography detected/);
   assert.doesNotMatch(out, /analyzed:/);
 });
+
+test("renderHuman surfaces coverage diagnostics when files were skipped", () => {
+  const result = {
+    ...makeResult([]),
+    filesScanned: 10,
+    analyzedFiles: 8,
+    diagnostics: { unreadable: 2, skippedMinified: 3 },
+  };
+  const out = renderHuman(result);
+  assert.match(out, /Coverage:/);
+  assert.match(out, /2 unreadable/);
+  assert.match(out, /3 skipped \(minified\)/);
+  assert.match(out, /results may be incomplete/);
+});
+
+test("renderHuman shows no coverage line when nothing was skipped", () => {
+  const result = { ...makeResult([]), diagnostics: { unreadable: 0, skippedMinified: 0 } };
+  assert.doesNotMatch(renderHuman(result), /Coverage:/);
+});

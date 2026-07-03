@@ -255,6 +255,7 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
     finishedAt: result.finishedAt,
     filesScanned: result.filesScanned,
     ...(result.analyzedFiles !== undefined ? { analyzedFiles: result.analyzedFiles } : {}),
+    ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
     inventory: {
       readinessScore: result.inventory.readinessScore,
       hndlCount: result.inventory.hndlCount,
@@ -357,6 +358,16 @@ export function formatSummary(result: ScanResult, options?: { color?: boolean })
       c(
         ANSI.yellow,
         `Note: 0 files were in a supported source language (${ANALYZABLE_LANGUAGES_LABEL}) — the readiness score does not reflect this codebase.`,
+      ),
+    );
+  }
+  // Coverage diagnostics: skipped files mean the finding count may be incomplete.
+  const diag = result.diagnostics;
+  if (diag && (diag.unreadable > 0 || diag.skippedMinified > 0)) {
+    lines.push(
+      c(
+        ANSI.yellow,
+        `Coverage: ${diag.unreadable} unreadable, ${diag.skippedMinified} skipped as minified — results may be incomplete.`,
       ),
     );
   }

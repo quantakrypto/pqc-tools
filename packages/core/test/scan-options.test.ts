@@ -100,6 +100,29 @@ test("analyzedFiles is 0 when the codebase is entirely unsupported languages", a
   }
 });
 
+test("diagnostics count unreadable and minified skips (coverage trust)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-diag-"));
+  try {
+    await writeFile(path.join(dir, "a.ts"), "const e = crypto.createECDH('p256');\n");
+    // A long single-line file trips the minified heuristic and is skipped.
+    await writeFile(
+      path.join(dir, "min.ts"),
+      "const x=1;".repeat(9000) + "crypto.createECDH('p256');",
+    );
+
+    const r = await scan({ root: dir });
+    assert.equal(r.diagnostics?.skippedMinified, 1, "one minified file skipped");
+    assert.equal(r.diagnostics?.unreadable, 0);
+
+    // An explicit file list with a vanished path → counted as unreadable.
+    const r2 = await scan({ root: dir, files: ["a.ts", "gone.ts"] });
+    assert.equal(r2.diagnostics?.unreadable, 1, "one unreadable file counted");
+    assert.equal(r2.filesScanned, 1, "only the real file is scanned");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("disabledRules suppresses exactly the listed rules", async () => {
   const dir = await makeTree();
   try {
