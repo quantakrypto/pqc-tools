@@ -21,9 +21,10 @@ step.
 ## Language coverage
 
 Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
-and **Go** source. PEM key material, SSH keys, TLS/certificate config, and npm
-dependency manifests are detected in **any** file regardless of language. Support
-for more source languages (Java, Rust, C#, …) is expanding.
+**Go**, and **Java/Kotlin** (JCA + BouncyCastle) source. PEM key material, SSH
+keys, TLS/certificate config, and npm dependency manifests are detected in
+**any** file regardless of language. Support for more source languages (Rust,
+C#, …) is expanding.
 
 qScan is **honest about coverage**: if a scan walks files but finds none in a
 supported source language, it says so and will **not** present a bare `100/100`

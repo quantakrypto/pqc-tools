@@ -18,6 +18,7 @@ import { isAnalyzableSource } from "./detect-utils.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
+import { javaDetector } from "./detectors/java.js";
 import { pemDetector } from "./detectors/pem.js";
 import { defaultRegistry, detectorScope } from "./registry.js";
 import { isManifestFile, scanManifest } from "./dependencies.js";
@@ -31,7 +32,13 @@ import { VERSION } from "./version.js";
  * apply to every text file. The manifest scanner is handled separately (it
  * parses JSON rather than running a Detector).
  */
-export const detectors: Detector[] = [...sourceDetectors, pythonDetector, goDetector, pemDetector];
+export const detectors: Detector[] = [
+  ...sourceDetectors,
+  pythonDetector,
+  goDetector,
+  javaDetector,
+  pemDetector,
+];
 
 /** Stable comparator: by file, then line, then ruleId. Exported for reuse. */
 export function compareFindings(a: Finding, b: Finding): number {

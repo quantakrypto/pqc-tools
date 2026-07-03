@@ -172,8 +172,36 @@
       { "ruleId": "go-ed25519", "algorithm": "EdDSA", "hndl": false }
     ]
   },
+  "positive/java-jca.java": {
+    "category": "java",
+    "expected": [
+      { "ruleId": "java-rsa", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "java-rsa", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "java-ec-keygen", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "java-ecdsa-sign", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "java-ecdh", "algorithm": "ECDH", "hndl": true }
+    ]
+  },
+  "positive/java-bc.java": {
+    "category": "java",
+    "expected": [
+      { "ruleId": "java-ecdsa-sign", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "java-xdh", "algorithm": "X25519", "hndl": true },
+      { "ruleId": "java-dsa", "algorithm": "DSA", "hndl": false },
+      { "ruleId": "java-dh", "algorithm": "DH", "hndl": true }
+    ]
+  },
+  "positive/java-kotlin.kt": {
+    "category": "java",
+    "expected": [
+      { "ruleId": "java-rsa-sign", "algorithm": "RSA", "hndl": false },
+      { "ruleId": "java-eddsa", "algorithm": "EdDSA", "hndl": false },
+      { "ruleId": "java-xdh", "algorithm": "X25519", "hndl": true }
+    ]
+  },
   "negative/python-clean.py": { "category": "negative", "expected": [] },
   "negative/go-clean.go": { "category": "negative", "expected": [] },
+  "negative/java-clean.java": { "category": "negative", "expected": [] },
   "negative/password-hashing.ts": { "category": "negative", "expected": [] },
   "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
   "negative/hashing-hmac.js": { "category": "negative", "expected": [] },

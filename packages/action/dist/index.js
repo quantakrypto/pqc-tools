@@ -359,11 +359,13 @@ function hasExtension(filePath, exts) {
 var JS_TS_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
 var PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
 var GO_EXTENSIONS = [".go"];
+var JAVA_EXTENSIONS = [".java", ".kt", ".kts"];
 var JWT_HOST_EXTENSIONS = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
 var ANALYZABLE_SOURCE_EXTENSIONS = [
   ...JS_TS_EXTENSIONS,
   ...PYTHON_EXTENSIONS,
-  ...GO_EXTENSIONS
+  ...GO_EXTENSIONS,
+  ...JAVA_EXTENSIONS
 ];
 function isAnalyzableSource(filePath) {
   return hasExtension(filePath, ANALYZABLE_SOURCE_EXTENSIONS);
@@ -1262,6 +1264,187 @@ var goDetector = {
   }
 };
 
+// ../core/dist/detectors/java.js
+var RE_JAVA_GETINSTANCE = /\b(KeyPairGenerator|Signature|Cipher|KeyAgreement|KeyFactory)\s*\.\s*getInstance\s*\(\s*"([^"]+)"/g;
+var RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement)\s*\(/g;
+var RULE_JAVA_RSA = {
+  id: "java-rsa",
+  title: "Java RSA key/encryption",
+  description: "JCA RSA KeyPairGenerator / Cipher / KeyFactory",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA (Java/JCA) is not quantum-safe and RSA encryption is HNDL-exposed."
+};
+var RULE_JAVA_RSA_SIGN = {
+  id: "java-rsa-sign",
+  title: "Java RSA signature",
+  description: 'JCA Signature.getInstance("\u2026withRSA")',
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA signing (Java/JCA) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_JAVA_EC_KEYGEN = {
+  id: "java-ec-keygen",
+  title: "Java EC key generation",
+  description: 'JCA KeyPairGenerator.getInstance("EC")',
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical EC key pair (Java/JCA). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+};
+var RULE_JAVA_ECDSA_SIGN = {
+  id: "java-ecdsa-sign",
+  title: "Java ECDSA signature",
+  description: 'JCA Signature.getInstance("\u2026withECDSA")',
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA signing (Java/JCA) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_JAVA_ECDH = {
+  id: "java-ecdh",
+  title: "Java ECDH key agreement",
+  description: 'JCA KeyAgreement.getInstance("ECDH")',
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Elliptic-curve Diffie-Hellman (Java/JCA) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_JAVA_DSA = {
+  id: "java-dsa",
+  title: "Java DSA key/signature",
+  description: "JCA DSA KeyPairGenerator / Signature",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (Java/JCA) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var RULE_JAVA_DH = {
+  id: "java-dh",
+  title: "Java Diffie-Hellman key exchange",
+  description: "JCA DiffieHellman KeyPairGenerator / KeyAgreement",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Finite-field Diffie-Hellman (Java/JCA) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_JAVA_XDH = {
+  id: "java-xdh",
+  title: "Java X25519/X448 key agreement",
+  description: "JCA XDH / X25519 / X448 (KeyPairGenerator / KeyAgreement)",
+  category: "key-exchange",
+  severity: "low",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "X25519/X448 (Java/JCA) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+};
+var RULE_JAVA_EDDSA = {
+  id: "java-eddsa",
+  title: "Java Ed25519/Ed448 signature",
+  description: "JCA EdDSA / Ed25519 / Ed448",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Ed25519/Ed448 (Java/JCA) is a modern but still classical signature scheme."
+};
+function classifyGetInstance(factory, rawAlg) {
+  const alg = rawAlg.split("/")[0].trim().toUpperCase();
+  const isSignature = factory === "Signature";
+  if (alg.includes("ECDSA"))
+    return RULE_JAVA_ECDSA_SIGN;
+  if (alg.includes("ECDH"))
+    return RULE_JAVA_ECDH;
+  if (alg === "EC")
+    return isSignature ? RULE_JAVA_ECDSA_SIGN : RULE_JAVA_EC_KEYGEN;
+  if (alg.includes("ED25519") || alg.includes("ED448") || alg.includes("EDDSA"))
+    return RULE_JAVA_EDDSA;
+  if (alg.includes("X25519") || alg.includes("X448") || alg === "XDH")
+    return RULE_JAVA_XDH;
+  if (alg.includes("RSA"))
+    return isSignature ? RULE_JAVA_RSA_SIGN : RULE_JAVA_RSA;
+  if (alg.includes("DSA"))
+    return RULE_JAVA_DSA;
+  if (alg.includes("DH") || alg.includes("DIFFIEHELLMAN"))
+    return RULE_JAVA_DH;
+  return null;
+}
+var BC_CLASS_RULES = {
+  RSAKeyPairGenerator: RULE_JAVA_RSA,
+  DSAKeyPairGenerator: RULE_JAVA_DSA,
+  ECKeyPairGenerator: RULE_JAVA_EC_KEYGEN,
+  ECDSASigner: RULE_JAVA_ECDSA_SIGN,
+  Ed25519Signer: RULE_JAVA_EDDSA,
+  Ed448Signer: RULE_JAVA_EDDSA,
+  X25519Agreement: RULE_JAVA_XDH,
+  X448Agreement: RULE_JAVA_XDH
+};
+var javaDetector = {
+  id: "java-crypto",
+  description: "Classical asymmetric crypto in Java/Kotlin (JCA getInstance + BouncyCastle)",
+  scope: "source",
+  language: "java",
+  rules: [
+    RULE_JAVA_RSA,
+    RULE_JAVA_RSA_SIGN,
+    RULE_JAVA_EC_KEYGEN,
+    RULE_JAVA_ECDSA_SIGN,
+    RULE_JAVA_ECDH,
+    RULE_JAVA_DSA,
+    RULE_JAVA_DH,
+    RULE_JAVA_XDH,
+    RULE_JAVA_EDDSA
+  ],
+  appliesTo: (f) => hasExtension(f, JAVA_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    eachMatch(RE_JAVA_GETINSTANCE, content, (m) => {
+      const rule = classifyGetInstance(m[1], m[2]);
+      if (!rule)
+        return;
+      findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+    });
+    eachMatch(RE_JAVA_BC, content, (m) => {
+      const rule = BC_CLASS_RULES[m[1]];
+      if (!rule)
+        return;
+      findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+    });
+    return findings;
+  }
+};
+
 // ../core/dist/detectors/pem.js
 var PEM_RULES = [
   {
@@ -1498,6 +1681,7 @@ var defaultRegistry = new DetectorRegistry([
   ...sourceDetectors,
   pythonDetector,
   goDetector,
+  javaDetector,
   pemDetector
 ]);
 
@@ -1919,7 +2103,13 @@ var BudgetExceededError = class extends Error {
 };
 
 // ../core/dist/scan.js
-var detectors = [...sourceDetectors, pythonDetector, goDetector, pemDetector];
+var detectors = [
+  ...sourceDetectors,
+  pythonDetector,
+  goDetector,
+  javaDetector,
+  pemDetector
+];
 function compareFindings(a, b) {
   if (a.location.file !== b.location.file)
     return a.location.file < b.location.file ? -1 : 1;
@@ -2776,12 +2966,12 @@ function renderHuman(result, opts = {}) {
   const noAnalyzable = analyzedFiles === 0;
   const lines = [];
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
-  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python, Go)`;
+  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python, Go, Java)`;
   lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}${coverage}  \u2022  qscan v${result.toolVersion}${c.reset}`);
   lines.push("");
   if (findings.length === 0) {
     if (noAnalyzable && filesScanned > 0) {
-      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python, Go).`);
+      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python, Go, Java).`);
       lines.push(`${c.dim}The score below covers only what qScan can read today \u2014 it is NOT a clean bill of health for this codebase.${c.reset}`);
       lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100 (no analyzable source)${c.reset}`);
       lines.push("");

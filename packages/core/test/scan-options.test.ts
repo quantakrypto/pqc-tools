@@ -82,17 +82,14 @@ test("analyzedFiles counts only supported source languages (coverage honesty)", 
 test("analyzedFiles is 0 when the codebase is entirely unsupported languages", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-cov0-"));
   try {
-    // A polyglot repo with RSA in Rust + Java — the false-100/100 case for
+    // A polyglot repo with RSA in Rust + Ruby — the false-100/100 case for
     // languages the scanner cannot read yet.
     await writeFile(path.join(dir, "lib.rs"), "let key = Rsa::generate(2048).unwrap();\n");
-    await writeFile(
-      path.join(dir, "App.java"),
-      'KeyPairGenerator.getInstance("RSA").generateKeyPair();\n',
-    );
+    await writeFile(path.join(dir, "keys.rb"), "key = OpenSSL::PKey::RSA.new(2048)\n");
     const r = await scan({ root: dir });
     assert.equal(r.filesScanned, 2);
     assert.equal(r.analyzedFiles, 0, "no analyzable source → score is not meaningful");
-    assert.equal(r.findings.length, 0, "we cannot see the Rust/Java crypto yet");
+    assert.equal(r.findings.length, 0, "we cannot see the Rust/Ruby crypto yet");
     assert.equal(
       r.inventory.readinessScore,
       100,
