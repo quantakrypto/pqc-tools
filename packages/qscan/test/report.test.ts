@@ -12,7 +12,7 @@ test("renderHuman warns when no analyzable source was scanned", () => {
   const result = { ...makeResult([]), filesScanned: 12, analyzedFiles: 0 };
   const out = renderHuman(result);
   assert.match(out, /No analyzable source found/);
-  assert.match(out, /none were in a supported language \(JS\/TS, Python\)/);
+  assert.match(out, /none were in a supported language \(JS\/TS, Python, Go\)/);
   assert.match(out, /NOT a clean bill of health/);
   // It must not claim the codebase is clean.
   assert.doesNotMatch(out, /No quantum-vulnerable cryptography detected/);

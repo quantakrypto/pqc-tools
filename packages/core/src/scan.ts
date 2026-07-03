@@ -17,6 +17,7 @@ import { walkFiles, toPosix, isBinaryPath, looksMinified } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
+import { goDetector } from "./detectors/go.js";
 import { pemDetector } from "./detectors/pem.js";
 import { defaultRegistry, detectorScope } from "./registry.js";
 import { isManifestFile, scanManifest } from "./dependencies.js";
@@ -25,12 +26,12 @@ import { AbortError, BudgetExceededError } from "./errors.js";
 import { VERSION } from "./version.js";
 
 /**
- * The full set of built-in detectors exposed on the public API. The PEM
- * detector applies to every text file; the source detectors apply only to
- * JS/TS. The manifest scanner is handled separately (it parses JSON rather than
- * running a Detector).
+ * The full set of built-in detectors exposed on the public API. The source
+ * detectors are per-language (JS/TS, Python, Go); the PEM / SSH-cert detectors
+ * apply to every text file. The manifest scanner is handled separately (it
+ * parses JSON rather than running a Detector).
  */
-export const detectors: Detector[] = [...sourceDetectors, pythonDetector, pemDetector];
+export const detectors: Detector[] = [...sourceDetectors, pythonDetector, goDetector, pemDetector];
 
 /** Stable comparator: by file, then line, then ruleId. Exported for reuse. */
 export function compareFindings(a: Finding, b: Finding): number {

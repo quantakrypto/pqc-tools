@@ -94,7 +94,7 @@ export function renderHuman(
   const topN = opts.topN ?? 5;
   const { findings, inventory, filesScanned } = result;
   // `analyzedFiles`: of the scanned files, how many were in a language the
-  // scanner can actually inspect for crypto (JS/TS, Python). When it's 0 the
+  // scanner can actually inspect for crypto (JS/TS, Python, Go). When it's 0 the
   // readiness score reflects no analyzable code — say so rather than imply safe.
   const analyzedFiles = result.analyzedFiles;
   const noAnalyzable = analyzedFiles === 0;
@@ -102,7 +102,7 @@ export function renderHuman(
 
   lines.push(`${c.bold}qScan — quantum-vulnerable cryptography report${c.reset}`);
   const coverage =
-    analyzedFiles === undefined ? "" : `  •  analyzed: ${analyzedFiles} (JS/TS, Python)`;
+    analyzedFiles === undefined ? "" : `  •  analyzed: ${analyzedFiles} (JS/TS, Python, Go)`;
   lines.push(
     `${c.dim}root: ${result.root}  •  files scanned: ${filesScanned}${coverage}  •  qscan v${result.toolVersion}${c.reset}`,
   );
@@ -116,7 +116,7 @@ export function renderHuman(
       lines.push(
         `${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${
           filesScanned === 1 ? "" : "s"
-        }, but none were in a supported language (JS/TS, Python).`,
+        }, but none were in a supported language (JS/TS, Python, Go).`,
       );
       lines.push(
         `${c.dim}The score below covers only what qScan can read today — it is NOT a clean bill of health for this codebase.${c.reset}`,

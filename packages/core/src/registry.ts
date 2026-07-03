@@ -13,6 +13,7 @@
 import type { Detector, DetectorScope, RuleMeta } from "./types.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
+import { goDetector } from "./detectors/go.js";
 import { pemDetector } from "./detectors/pem.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -110,5 +111,6 @@ export class DetectorRegistry {
 export const defaultRegistry = new DetectorRegistry([
   ...sourceDetectors,
   pythonDetector,
+  goDetector,
   pemDetector,
 ]);

@@ -358,10 +358,12 @@ function hasExtension(filePath, exts) {
 }
 var JS_TS_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
 var PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
+var GO_EXTENSIONS = [".go"];
 var JWT_HOST_EXTENSIONS = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
 var ANALYZABLE_SOURCE_EXTENSIONS = [
   ...JS_TS_EXTENSIONS,
-  ...PYTHON_EXTENSIONS
+  ...PYTHON_EXTENSIONS,
+  ...GO_EXTENSIONS
 ];
 function isAnalyzableSource(filePath) {
   return hasExtension(filePath, ANALYZABLE_SOURCE_EXTENSIONS);
@@ -1136,6 +1138,130 @@ var pythonDetector = {
   }
 };
 
+// ../core/dist/detectors/go.js
+var RE_GO_RSA_KEYGEN = /\brsa\.GenerateKey\s*\(|\brsa\.GenerateMultiPrimeKey\s*\(/g;
+var RE_GO_RSA_ENCRYPT = /\brsa\.EncryptOAEP\s*\(|\brsa\.EncryptPKCS1v15\s*\(/g;
+var RE_GO_RSA_SIGN = /\brsa\.SignPKCS1v15\s*\(|\brsa\.SignPSS\s*\(/g;
+var RE_GO_ECDSA = /\becdsa\.GenerateKey\s*\(|\becdsa\.SignASN1\s*\(|\becdsa\.Sign\s*\(/g;
+var RE_GO_ECDH = /\becdh\.(?:P256|P384|P521|X25519)\s*\(/g;
+var RE_GO_ED25519 = /\bed25519\.GenerateKey\s*\(|\bed25519\.Sign\s*\(/g;
+var RE_GO_DSA = /\bdsa\.GenerateKey\s*\(|\bdsa\.GenerateParameters\s*\(/g;
+var RULE_GO_RSA_KEYGEN = {
+  id: "go-rsa-keygen",
+  title: "Go RSA key generation",
+  description: "crypto/rsa GenerateKey / GenerateMultiPrimeKey",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical RSA key pair (Go), which is not quantum-safe."
+};
+var RULE_GO_RSA_ENCRYPT = {
+  id: "go-rsa-encrypt",
+  title: "Go RSA public-key encryption",
+  description: "crypto/rsa EncryptOAEP / EncryptPKCS1v15",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "RSA public-key encryption (Go) is broken by Shor's algorithm and exposed to harvest-now-decrypt-later."
+};
+var RULE_GO_RSA_SIGN = {
+  id: "go-rsa-sign",
+  title: "Go RSA signature",
+  description: "crypto/rsa SignPKCS1v15 / SignPSS",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical RSA signing (Go) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_GO_ECDSA = {
+  id: "go-ecdsa",
+  title: "Go ECDSA key/signature",
+  description: "crypto/ecdsa GenerateKey / Sign / SignASN1",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA (Go) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_GO_ECDH = {
+  id: "go-ecdh",
+  title: "Go ECDH key exchange",
+  description: "crypto/ecdh P256/P384/P521/X25519 key agreement",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Elliptic-curve Diffie-Hellman (Go crypto/ecdh) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_GO_ED25519 = {
+  id: "go-ed25519",
+  title: "Go Ed25519 signature",
+  description: "crypto/ed25519 GenerateKey / Sign",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Ed25519 (Go) is a modern but still classical signature scheme."
+};
+var RULE_GO_DSA = {
+  id: "go-dsa",
+  title: "Go DSA key/usage",
+  description: "crypto/dsa GenerateKey / GenerateParameters",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (Go) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var goDetector = {
+  id: "go-crypto",
+  description: "Classical asymmetric crypto in Go (crypto/rsa, ecdsa, ecdh, ed25519, dsa)",
+  scope: "source",
+  language: "go",
+  rules: [
+    RULE_GO_RSA_KEYGEN,
+    RULE_GO_RSA_ENCRYPT,
+    RULE_GO_RSA_SIGN,
+    RULE_GO_ECDSA,
+    RULE_GO_ECDH,
+    RULE_GO_ED25519,
+    RULE_GO_DSA
+  ],
+  appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_GO_RSA_KEYGEN, RULE_GO_RSA_KEYGEN);
+    add(RE_GO_RSA_ENCRYPT, RULE_GO_RSA_ENCRYPT);
+    add(RE_GO_RSA_SIGN, RULE_GO_RSA_SIGN);
+    add(RE_GO_ECDSA, RULE_GO_ECDSA);
+    add(RE_GO_ECDH, RULE_GO_ECDH);
+    add(RE_GO_ED25519, RULE_GO_ED25519);
+    add(RE_GO_DSA, RULE_GO_DSA);
+    return findings;
+  }
+};
+
 // ../core/dist/detectors/pem.js
 var PEM_RULES = [
   {
@@ -1371,6 +1497,7 @@ var DetectorRegistry = class _DetectorRegistry {
 var defaultRegistry = new DetectorRegistry([
   ...sourceDetectors,
   pythonDetector,
+  goDetector,
   pemDetector
 ]);
 
@@ -1792,7 +1919,7 @@ var BudgetExceededError = class extends Error {
 };
 
 // ../core/dist/scan.js
-var detectors = [...sourceDetectors, pythonDetector, pemDetector];
+var detectors = [...sourceDetectors, pythonDetector, goDetector, pemDetector];
 function compareFindings(a, b) {
   if (a.location.file !== b.location.file)
     return a.location.file < b.location.file ? -1 : 1;
@@ -2649,12 +2776,12 @@ function renderHuman(result, opts = {}) {
   const noAnalyzable = analyzedFiles === 0;
   const lines = [];
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
-  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python)`;
+  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python, Go)`;
   lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}${coverage}  \u2022  qscan v${result.toolVersion}${c.reset}`);
   lines.push("");
   if (findings.length === 0) {
     if (noAnalyzable && filesScanned > 0) {
-      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python).`);
+      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python, Go).`);
       lines.push(`${c.dim}The score below covers only what qScan can read today \u2014 it is NOT a clean bill of health for this codebase.${c.reset}`);
       lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100 (no analyzable source)${c.reset}`);
       lines.push("");

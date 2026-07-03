@@ -172,6 +172,9 @@ export const JS_TS_EXTENSIONS: readonly string[] = [".js", ".jsx", ".ts", ".tsx"
 /** Python source extensions handled by the Python detector. */
 export const PYTHON_EXTENSIONS: readonly string[] = [".py", ".pyi", ".pyw"];
 
+/** Go source extensions handled by the Go detector. */
+export const GO_EXTENSIONS: readonly string[] = [".go"];
+
 /**
  * File-literal surfaces where a JWT/JOSE algorithm string (`"RS256"`, `"ES256"`)
  * is the same evidence regardless of language. Used to un-gate the JWT detector
@@ -192,6 +195,7 @@ export const JWT_HOST_EXTENSIONS: readonly string[] = [...JS_TS_EXTENSIONS, ...P
 export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...JS_TS_EXTENSIONS,
   ...PYTHON_EXTENSIONS,
+  ...GO_EXTENSIONS,
 ];
 
 /** True when a path is in a source language the scanner can analyze for crypto. */

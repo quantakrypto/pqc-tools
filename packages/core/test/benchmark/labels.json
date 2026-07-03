@@ -161,7 +161,19 @@
       { "ruleId": "jwt-classical-alg", "algorithm": "ECDSA", "hndl": false }
     ]
   },
+  "positive/go-crypto.go": {
+    "category": "go",
+    "expected": [
+      { "ruleId": "go-rsa-keygen", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "go-rsa-encrypt", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "go-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "go-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "go-ecdh", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "go-ed25519", "algorithm": "EdDSA", "hndl": false }
+    ]
+  },
   "negative/python-clean.py": { "category": "negative", "expected": [] },
+  "negative/go-clean.go": { "category": "negative", "expected": [] },
   "negative/password-hashing.ts": { "category": "negative", "expected": [] },
   "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
   "negative/hashing-hmac.js": { "category": "negative", "expected": [] },
