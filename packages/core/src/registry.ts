@@ -12,6 +12,7 @@
  */
 import type { Detector, DetectorScope, RuleMeta } from "./types.js";
 import { sourceDetectors } from "./detectors/source.js";
+import { pythonDetector } from "./detectors/python.js";
 import { pemDetector } from "./detectors/pem.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -106,4 +107,8 @@ export class DetectorRegistry {
  * the JS/TS source + config detectors, then the language-agnostic PEM detector.
  * The manifest (dependency) scanner is handled separately by `scan()`.
  */
-export const defaultRegistry = new DetectorRegistry([...sourceDetectors, pemDetector]);
+export const defaultRegistry = new DetectorRegistry([
+  ...sourceDetectors,
+  pythonDetector,
+  pemDetector,
+]);

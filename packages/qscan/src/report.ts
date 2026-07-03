@@ -93,15 +93,43 @@ export function renderHuman(
   const c = opts.color ? COLOR : PLAIN;
   const topN = opts.topN ?? 5;
   const { findings, inventory, filesScanned } = result;
+  // `analyzedFiles`: of the scanned files, how many were in a language the
+  // scanner can actually inspect for crypto (JS/TS, Python). When it's 0 the
+  // readiness score reflects no analyzable code — say so rather than imply safe.
+  const analyzedFiles = result.analyzedFiles;
+  const noAnalyzable = analyzedFiles === 0;
   const lines: string[] = [];
 
   lines.push(`${c.bold}qScan — quantum-vulnerable cryptography report${c.reset}`);
+  const coverage =
+    analyzedFiles === undefined ? "" : `  •  analyzed: ${analyzedFiles} (JS/TS, Python)`;
   lines.push(
-    `${c.dim}root: ${result.root}  •  files scanned: ${filesScanned}  •  qscan v${result.toolVersion}${c.reset}`,
+    `${c.dim}root: ${result.root}  •  files scanned: ${filesScanned}${coverage}  •  qscan v${result.toolVersion}${c.reset}`,
   );
   lines.push("");
 
   if (findings.length === 0) {
+    if (noAnalyzable && filesScanned > 0) {
+      // Honesty guard: don't let a 100/100 read as "safe" when nothing the
+      // scanner understands was analyzed — the crypto may live in an
+      // unsupported language (Go, Java, Rust, C#, …).
+      lines.push(
+        `${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${
+          filesScanned === 1 ? "" : "s"
+        }, but none were in a supported language (JS/TS, Python).`,
+      );
+      lines.push(
+        `${c.dim}The score below covers only what qScan can read today — it is NOT a clean bill of health for this codebase.${c.reset}`,
+      );
+      lines.push(
+        `${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100 (no analyzable source)${c.reset}`,
+      );
+      lines.push("");
+      lines.push(
+        `${c.dim}Next step:${c.reset} multi-language support is expanding; track coverage before relying on the score.`,
+      );
+      return lines.join("\n");
+    }
     lines.push(`${c.green}No quantum-vulnerable cryptography detected.${c.reset}`);
     lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
     lines.push("");

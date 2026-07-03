@@ -6,7 +6,7 @@ import { dirname as dirname3, isAbsolute, resolve, sep as sep2 } from "node:path
 import { pathToFileURL } from "node:url";
 
 // ../core/dist/version.js
-var VERSION = "0.3.0";
+var VERSION = "0.4.0";
 
 // ../core/dist/scan.js
 import { readFile, stat as stat2 } from "node:fs/promises";
@@ -357,6 +357,15 @@ function hasExtension(filePath, exts) {
   return exts.some((e) => lower.endsWith(e));
 }
 var JS_TS_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
+var PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
+var JWT_HOST_EXTENSIONS = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
+var ANALYZABLE_SOURCE_EXTENSIONS = [
+  ...JS_TS_EXTENSIONS,
+  ...PYTHON_EXTENSIONS
+];
+function isAnalyzableSource(filePath) {
+  return hasExtension(filePath, ANALYZABLE_SOURCE_EXTENSIONS);
+}
 function nearSortedCall(sortedCalls, idx, window) {
   let lo = 0;
   let hi = sortedCalls.length - 1;
@@ -806,9 +815,12 @@ var jwtDetector = {
   id: "jwt-jose",
   description: "Classical JWT/JOSE algorithms (RS/PS/ES/EdDSA) and ECDH-ES key agreement",
   scope: "source",
-  language: "js",
+  // Language-agnostic evidence: a quoted "RS256"/"ES256" alg token is the same
+  // signal in JS/TS or Python (e.g. PyJWT `algorithm="RS256"`), so this detector
+  // is un-gated from JS-only to the JWT host surfaces.
+  language: "any",
   rules: [RULE_JWT_ALG, RULE_JOSE_ECDH],
-  appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
+  appliesTo: (f) => hasExtension(f, JWT_HOST_EXTENSIONS),
   detect({ file, content }) {
     const findings = [];
     eachMatch(RE_JWT_ALG, content, (m) => {
@@ -969,6 +981,160 @@ var sourceDetectors = [
   tlsDetector,
   sshCertDetector
 ];
+
+// ../core/dist/detectors/python.js
+var RE_PY_RSA_KEYGEN = /\brsa\.generate_private_key\s*\(|\bRSA\.generate\s*\(|\bparamiko\.RSAKey\b|\bRSAKey\.generate\s*\(/g;
+var RE_PY_RSA_ENCRYPT = /\bpadding\.OAEP\s*\(|\bPKCS1_OAEP\.new\s*\(/g;
+var RE_PY_EC_KEYGEN = /\bec\.generate_private_key\s*\(|\bECC\.generate\s*\(/g;
+var RE_PY_ECDSA = /\bec\.ECDSA\s*\(|\bparamiko\.ECDSAKey\b|\bECDSAKey\.generate\s*\(/g;
+var RE_PY_DSA = /\bDSA\.generate\s*\(|\bparamiko\.DSSKey\b|\bDSSKey\.generate\s*\(/g;
+var RE_PY_DH = /\bdh\.generate_parameters\s*\(|\bdh\.DHParameterNumbers\s*\(/g;
+var RE_PY_X25519 = /\bX25519PrivateKey\.generate\s*\(/g;
+var RE_PY_X448 = /\bX448PrivateKey\.generate\s*\(/g;
+var RE_PY_EDDSA = /\b(?:Ed25519|Ed448)PrivateKey\.generate\s*\(|\bparamiko\.Ed25519Key\b/g;
+var RULE_PY_RSA_KEYGEN = {
+  id: "python-rsa-keygen",
+  title: "Python RSA key generation",
+  description: "cryptography rsa.generate_private_key / PyCryptodome RSA.generate / paramiko RSAKey",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical RSA key pair (Python), which is not quantum-safe."
+};
+var RULE_PY_RSA_ENCRYPT = {
+  id: "python-rsa-encrypt",
+  title: "Python RSA public-key encryption",
+  description: "RSA-OAEP / PKCS1_OAEP encryption padding",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "RSA public-key encryption (OAEP) is broken by Shor's algorithm and exposed to harvest-now-decrypt-later."
+};
+var RULE_PY_EC_KEYGEN = {
+  id: "python-ec-keygen",
+  title: "Python EC key generation",
+  description: "cryptography ec.generate_private_key / PyCryptodome ECC.generate",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical EC key pair (Python). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+};
+var RULE_PY_ECDSA = {
+  id: "python-ecdsa",
+  title: "Python ECDSA signature",
+  description: "cryptography ec.ECDSA / paramiko ECDSAKey",
+  category: "signature",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA signing (Python) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+};
+var RULE_PY_DSA = {
+  id: "python-dsa",
+  title: "Python DSA key/usage",
+  description: "PyCryptodome DSA.generate / paramiko DSSKey",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical DSA (Python) is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+};
+var RULE_PY_DH = {
+  id: "python-dh",
+  title: "Python Diffie-Hellman key exchange",
+  description: "cryptography dh.generate_parameters / DHParameterNumbers",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Finite-field Diffie-Hellman (Python) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+};
+var RULE_PY_X25519 = {
+  id: "python-x25519",
+  title: "Python X25519 key exchange",
+  description: "cryptography X25519PrivateKey.generate",
+  category: "key-exchange",
+  severity: "low",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "X25519 (Python) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+};
+var RULE_PY_X448 = {
+  id: "python-x448",
+  title: "Python X448 key exchange",
+  description: "cryptography X448PrivateKey.generate",
+  category: "key-exchange",
+  severity: "low",
+  confidence: "high",
+  algorithm: "X448",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "X448 (Python) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+};
+var RULE_PY_EDDSA = {
+  id: "python-eddsa",
+  title: "Python Ed25519/Ed448 signature",
+  description: "cryptography Ed25519/Ed448 PrivateKey.generate / paramiko Ed25519Key",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Ed25519/Ed448 (Python) is a modern but still classical signature scheme."
+};
+var pythonDetector = {
+  id: "python-crypto",
+  description: "Classical asymmetric crypto in Python (cryptography, PyCryptodome, paramiko)",
+  scope: "source",
+  language: "python",
+  rules: [
+    RULE_PY_RSA_KEYGEN,
+    RULE_PY_RSA_ENCRYPT,
+    RULE_PY_EC_KEYGEN,
+    RULE_PY_ECDSA,
+    RULE_PY_DSA,
+    RULE_PY_DH,
+    RULE_PY_X25519,
+    RULE_PY_X448,
+    RULE_PY_EDDSA
+  ],
+  appliesTo: (f) => hasExtension(f, PYTHON_EXTENSIONS),
+  detect({ file, content }) {
+    const findings = [];
+    const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+    add(RE_PY_RSA_KEYGEN, RULE_PY_RSA_KEYGEN);
+    add(RE_PY_RSA_ENCRYPT, RULE_PY_RSA_ENCRYPT);
+    add(RE_PY_EC_KEYGEN, RULE_PY_EC_KEYGEN);
+    add(RE_PY_ECDSA, RULE_PY_ECDSA);
+    add(RE_PY_DSA, RULE_PY_DSA);
+    add(RE_PY_DH, RULE_PY_DH);
+    add(RE_PY_X25519, RULE_PY_X25519);
+    add(RE_PY_X448, RULE_PY_X448);
+    add(RE_PY_EDDSA, RULE_PY_EDDSA);
+    return findings;
+  }
+};
 
 // ../core/dist/detectors/pem.js
 var PEM_RULES = [
@@ -1202,7 +1368,11 @@ var DetectorRegistry = class _DetectorRegistry {
     return new _DetectorRegistry(this.all());
   }
 };
-var defaultRegistry = new DetectorRegistry([...sourceDetectors, pemDetector]);
+var defaultRegistry = new DetectorRegistry([
+  ...sourceDetectors,
+  pythonDetector,
+  pemDetector
+]);
 
 // ../core/dist/dependencies.js
 var vulnerableDependencies = [
@@ -1622,7 +1792,7 @@ var BudgetExceededError = class extends Error {
 };
 
 // ../core/dist/scan.js
-var detectors = [...sourceDetectors, pemDetector];
+var detectors = [...sourceDetectors, pythonDetector, pemDetector];
 function compareFindings(a, b) {
   if (a.location.file !== b.location.file)
     return a.location.file < b.location.file ? -1 : 1;
@@ -1665,6 +1835,7 @@ async function scan(options) {
   const singleFileName = rootIsFile ? path2.basename(options.root) : null;
   const findings = [];
   let filesScanned = 0;
+  let analyzedFiles = 0;
   let bytesScanned = 0;
   const signal = options.signal;
   const maxFiles = options.maxFiles;
@@ -1698,6 +1869,8 @@ async function scan(options) {
       throw new BudgetExceededError(`maxBytes budget exceeded (limit: ${maxBytes}).`);
     }
     filesScanned += 1;
+    if (isAnalyzableSource(reportedPath))
+      analyzedFiles += 1;
     findings.push(...detectFile(reportedPath, content, dets, {
       source: doSource,
       config: doConfig,
@@ -1711,6 +1884,7 @@ async function scan(options) {
     root: options.root,
     findings,
     filesScanned,
+    analyzedFiles,
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
@@ -1881,10 +2055,12 @@ async function scanParallel(options) {
   const merged = mergeChunkResults(results);
   const inventory = buildInventory(merged.findings);
   const finishedAt = /* @__PURE__ */ new Date();
+  const analyzedFiles = files.reduce((n, f) => isAnalyzableSource(f.rel) ? n + 1 : n, 0);
   return {
     root: options.root,
     findings: merged.findings,
     filesScanned: merged.filesScanned,
+    analyzedFiles,
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
@@ -2265,6 +2441,7 @@ function toJson(result, opts) {
     startedAt: result.startedAt,
     finishedAt: result.finishedAt,
     filesScanned: result.filesScanned,
+    ...result.analyzedFiles !== void 0 ? { analyzedFiles: result.analyzedFiles } : {},
     inventory: {
       readinessScore: result.inventory.readinessScore,
       hndlCount: result.inventory.hndlCount,
@@ -2468,11 +2645,22 @@ function renderHuman(result, opts = {}) {
   const c = opts.color ? COLOR : PLAIN;
   const topN = opts.topN ?? 5;
   const { findings, inventory, filesScanned } = result;
+  const analyzedFiles = result.analyzedFiles;
+  const noAnalyzable = analyzedFiles === 0;
   const lines = [];
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
-  lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}  \u2022  qscan v${result.toolVersion}${c.reset}`);
+  const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (JS/TS, Python)`;
+  lines.push(`${c.dim}root: ${result.root}  \u2022  files scanned: ${filesScanned}${coverage}  \u2022  qscan v${result.toolVersion}${c.reset}`);
   lines.push("");
   if (findings.length === 0) {
+    if (noAnalyzable && filesScanned > 0) {
+      lines.push(`${c.yellow}No analyzable source found.${c.reset} Scanned ${filesScanned} file${filesScanned === 1 ? "" : "s"}, but none were in a supported language (JS/TS, Python).`);
+      lines.push(`${c.dim}The score below covers only what qScan can read today \u2014 it is NOT a clean bill of health for this codebase.${c.reset}`);
+      lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100 (no analyzable source)${c.reset}`);
+      lines.push("");
+      lines.push(`${c.dim}Next step:${c.reset} multi-language support is expanding; track coverage before relying on the score.`);
+      return lines.join("\n");
+    }
     lines.push(`${c.green}No quantum-vulnerable cryptography detected.${c.reset}`);
     lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
     lines.push("");

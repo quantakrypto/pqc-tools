@@ -29,6 +29,7 @@
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import {
   JS_TS_EXTENSIONS,
+  JWT_HOST_EXTENSIONS,
   eachMatch,
   findingFromRule,
   hasExtension,
@@ -607,9 +608,12 @@ const jwtDetector: Detector = {
   id: "jwt-jose",
   description: "Classical JWT/JOSE algorithms (RS/PS/ES/EdDSA) and ECDH-ES key agreement",
   scope: "source",
-  language: "js",
+  // Language-agnostic evidence: a quoted "RS256"/"ES256" alg token is the same
+  // signal in JS/TS or Python (e.g. PyJWT `algorithm="RS256"`), so this detector
+  // is un-gated from JS-only to the JWT host surfaces.
+  language: "any",
   rules: [RULE_JWT_ALG, RULE_JOSE_ECDH],
-  appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
+  appliesTo: (f) => hasExtension(f, JWT_HOST_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
 

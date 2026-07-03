@@ -18,6 +18,7 @@ import type { Worker as NodeWorker } from "node:worker_threads";
 
 import type { Finding, ParallelScanOptions, ScanResult } from "./types.js";
 import { walkFiles } from "./walk.js";
+import { isAnalyzableSource } from "./detect-utils.js";
 import { buildInventory } from "./inventory.js";
 import { compareFindings, filterExplicitFileList, scan } from "./scan.js";
 import { VERSION } from "./version.js";
@@ -216,10 +217,17 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
   const inventory = buildInventory(merged.findings);
   const finishedAt = new Date();
 
+  // Coverage: count analyzable-source files in the enumerated set. Computed from
+  // the file list (not per-worker) to avoid worker-boundary plumbing; on the
+  // parallel path this can include a minified analyzable file the workers
+  // skipped, but that is vanishingly rare and never under-reports coverage.
+  const analyzedFiles = files.reduce((n, f) => (isAnalyzableSource(f.rel) ? n + 1 : n), 0);
+
   return {
     root: options.root,
     findings: merged.findings,
     filesScanned: merged.filesScanned,
+    analyzedFiles,
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),

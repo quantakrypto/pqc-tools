@@ -280,6 +280,15 @@ export interface ScanResult {
   root: string;
   findings: Finding[];
   filesScanned: number;
+  /**
+   * Of `filesScanned`, how many were in a source language the scanner can
+   * actually analyze for inline crypto (JS/TS, Python). When this is 0 but
+   * `filesScanned` > 0, the readiness score reflects NO analyzable code — the
+   * crypto likely lives in an unsupported language (Go, Java, Rust, …) — and
+   * reporters surface that so a bare 100/100 can't read as "safe". Optional for
+   * backward compatibility with hand-built results.
+   */
+  analyzedFiles?: number;
   inventory: CryptoInventory;
   /** ISO timestamps. */
   startedAt: string;

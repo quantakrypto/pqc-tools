@@ -128,6 +128,40 @@
       { "ruleId": "tls-reject-unauthorized", "algorithm": null, "hndl": false }
     ]
   },
+  "positive/python-cryptography.py": {
+    "category": "python",
+    "expected": [
+      { "ruleId": "python-rsa-keygen", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "python-ec-keygen", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "python-ecdsa", "algorithm": "ECDSA", "hndl": false },
+      { "ruleId": "python-dh", "algorithm": "DH", "hndl": true }
+    ]
+  },
+  "positive/python-pycryptodome.py": {
+    "category": "python",
+    "expected": [
+      { "ruleId": "python-rsa-keygen", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "python-ec-keygen", "algorithm": "ECDH", "hndl": true },
+      { "ruleId": "python-dsa", "algorithm": "DSA", "hndl": false },
+      { "ruleId": "python-rsa-encrypt", "algorithm": "RSA", "hndl": true }
+    ]
+  },
+  "positive/python-curves.py": {
+    "category": "python",
+    "expected": [
+      { "ruleId": "python-x25519", "algorithm": "X25519", "hndl": true },
+      { "ruleId": "python-x448", "algorithm": "X448", "hndl": true },
+      { "ruleId": "python-eddsa", "algorithm": "EdDSA", "hndl": false }
+    ]
+  },
+  "positive/python-jwt.py": {
+    "category": "python",
+    "expected": [
+      { "ruleId": "jwt-classical-alg", "algorithm": "RSA", "hndl": false },
+      { "ruleId": "jwt-classical-alg", "algorithm": "ECDSA", "hndl": false }
+    ]
+  },
+  "negative/python-clean.py": { "category": "negative", "expected": [] },
   "negative/password-hashing.ts": { "category": "negative", "expected": [] },
   "negative/symmetric-aead.ts": { "category": "negative", "expected": [] },
   "negative/hashing-hmac.js": { "category": "negative", "expected": [] },

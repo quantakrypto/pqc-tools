@@ -18,6 +18,19 @@ step.
 - **Fast on big repos.** Optional worker-thread parallelism (`--parallel`) and
   git-aware incremental scanning (`--changed`).
 
+## Language coverage
+
+Inline crypto detection currently covers **JavaScript/TypeScript** and
+**Python** source. PEM key material, SSH keys, TLS/certificate config, and npm
+dependency manifests are detected in **any** file regardless of language. Support
+for more source languages (Go, Java, Rust, C#, …) is expanding.
+
+qScan is **honest about coverage**: if a scan walks files but finds none in a
+supported source language, it says so and will **not** present a bare `100/100`
+as a clean bill of health — the crypto may simply live in a language it can't
+read yet. Always check the `analyzed` count in the report before relying on the
+score.
+
 ## Install
 
 ```bash

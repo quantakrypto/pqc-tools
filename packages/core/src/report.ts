@@ -253,6 +253,7 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
     startedAt: result.startedAt,
     finishedAt: result.finishedAt,
     filesScanned: result.filesScanned,
+    ...(result.analyzedFiles !== undefined ? { analyzedFiles: result.analyzedFiles } : {}),
     inventory: {
       readinessScore: result.inventory.readinessScore,
       hndlCount: result.inventory.hndlCount,
@@ -339,12 +340,25 @@ export function formatSummary(result: ScanResult, options?: { color?: boolean })
   lines.push(
     `Readiness score: ${c(`${ANSI.bold}${scoreColor(inv.readinessScore)}`, `${inv.readinessScore}/100`)}`,
   );
+  const analyzed =
+    result.analyzedFiles !== undefined
+      ? `   Analyzed (JS/TS, Python): ${result.analyzedFiles}`
+      : "";
   lines.push(
-    `Files scanned:   ${result.filesScanned}   Findings: ${result.findings.length}   HNDL-exposed: ${c(
+    `Files scanned:   ${result.filesScanned}${analyzed}   Findings: ${result.findings.length}   HNDL-exposed: ${c(
       inv.hndlCount > 0 ? ANSI.red : ANSI.green,
       String(inv.hndlCount),
     )}`,
   );
+  // Coverage honesty: a score over zero analyzable files is not a clean bill of health.
+  if (result.analyzedFiles === 0 && result.filesScanned > 0) {
+    lines.push(
+      c(
+        ANSI.yellow,
+        "Note: 0 files were in a supported source language (JS/TS, Python) — the readiness score does not reflect this codebase.",
+      ),
+    );
+  }
   lines.push("");
 
   // Severity breakdown.

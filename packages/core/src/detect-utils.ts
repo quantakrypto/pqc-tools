@@ -169,6 +169,36 @@ export function hasExtension(filePath: string, exts: readonly string[]): boolean
 /** JavaScript / TypeScript source extensions handled by the source detectors. */
 export const JS_TS_EXTENSIONS: readonly string[] = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
 
+/** Python source extensions handled by the Python detector. */
+export const PYTHON_EXTENSIONS: readonly string[] = [".py", ".pyi", ".pyw"];
+
+/**
+ * File-literal surfaces where a JWT/JOSE algorithm string (`"RS256"`, `"ES256"`)
+ * is the same evidence regardless of language. Used to un-gate the JWT detector
+ * from JS-only. Kept to JS/TS + Python for now (both quote the alg token, so the
+ * regex stays precise); YAML/JSON config carry unquoted tokens and higher FP
+ * risk, so they wait for a config-aware pass.
+ */
+export const JWT_HOST_EXTENSIONS: readonly string[] = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
+
+/**
+ * Extensions the scanner can actually analyze for inline crypto usage today
+ * (the language-specific source detectors). A scan that walked files but found
+ * none of these has NOT meaningfully assessed the codebase — reporters surface
+ * that ({@link CryptoInventory}/coverage), so a bare 100/100 can't masquerade as
+ * "safe" on, say, a Go or Rust repo. PEM / SSH / dependency detectors run on any
+ * file and are intentionally excluded here.
+ */
+export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
+  ...JS_TS_EXTENSIONS,
+  ...PYTHON_EXTENSIONS,
+];
+
+/** True when a path is in a source language the scanner can analyze for crypto. */
+export function isAnalyzableSource(filePath: string): boolean {
+  return hasExtension(filePath, ANALYZABLE_SOURCE_EXTENSIONS);
+}
+
 /**
  * Given a SORTED ascending array of call offsets, return true when `idx` is at
  * or after some call offset `c` with `idx - c < window`. Runs in O(log n) by

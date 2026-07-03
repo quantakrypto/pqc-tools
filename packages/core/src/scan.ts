@@ -14,7 +14,9 @@ import * as path from "node:path";
 
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
 import { walkFiles, toPosix, isBinaryPath, looksMinified } from "./walk.js";
+import { isAnalyzableSource } from "./detect-utils.js";
 import { sourceDetectors } from "./detectors/source.js";
+import { pythonDetector } from "./detectors/python.js";
 import { pemDetector } from "./detectors/pem.js";
 import { defaultRegistry, detectorScope } from "./registry.js";
 import { isManifestFile, scanManifest } from "./dependencies.js";
@@ -28,7 +30,7 @@ import { VERSION } from "./version.js";
  * JS/TS. The manifest scanner is handled separately (it parses JSON rather than
  * running a Detector).
  */
-export const detectors: Detector[] = [...sourceDetectors, pemDetector];
+export const detectors: Detector[] = [...sourceDetectors, pythonDetector, pemDetector];
 
 /** Stable comparator: by file, then line, then ruleId. Exported for reuse. */
 export function compareFindings(a: Finding, b: Finding): number {
@@ -99,6 +101,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
   const findings: Finding[] = [];
   let filesScanned = 0;
+  let analyzedFiles = 0;
   let bytesScanned = 0;
 
   // Work-budget / cancellation controls (all optional, unlimited when omitted).
@@ -151,6 +154,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     }
 
     filesScanned += 1;
+    if (isAnalyzableSource(reportedPath)) analyzedFiles += 1;
     findings.push(
       ...detectFile(
         reportedPath,
@@ -176,6 +180,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     root: options.root,
     findings,
     filesScanned,
+    analyzedFiles,
     inventory,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),

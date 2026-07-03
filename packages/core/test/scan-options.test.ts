@@ -58,6 +58,50 @@ test("scan honours include (only src/ scanned)", async () => {
   }
 });
 
+test("analyzedFiles counts only supported source languages (coverage honesty)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-cov-"));
+  try {
+    // A Go file (unsupported) with real classical crypto, a README, and one .py.
+    await writeFile(
+      path.join(dir, "main.go"),
+      'import "crypto/rsa"\nrsa.GenerateKey(rand.Reader, 2048)\n',
+    );
+    await writeFile(path.join(dir, "README.md"), "# project\n");
+    await writeFile(path.join(dir, "keys.py"), "key = rsa.generate_private_key(key_size=2048)\n");
+
+    const r = await scan({ root: dir });
+    // 3 files walked, but only keys.py is an analyzable source language.
+    assert.equal(r.filesScanned, 3);
+    assert.equal(r.analyzedFiles, 1, "only the .py counts as analyzable");
+    assert.ok(
+      r.findings.some((f) => f.ruleId === "python-rsa-keygen"),
+      "the python file is actually analyzed",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("analyzedFiles is 0 when the codebase is entirely unsupported languages", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-cov0-"));
+  try {
+    // A polyglot repo with RSA in Go — the false-100/100 case.
+    await writeFile(path.join(dir, "main.go"), "rsa.GenerateKey(rand.Reader, 2048)\n");
+    await writeFile(path.join(dir, "lib.rs"), "let key = Rsa::generate(2048);\n");
+    const r = await scan({ root: dir });
+    assert.equal(r.filesScanned, 2);
+    assert.equal(r.analyzedFiles, 0, "no analyzable source → score is not meaningful");
+    assert.equal(r.findings.length, 0, "we cannot see the Go/Rust crypto yet");
+    assert.equal(
+      r.inventory.readinessScore,
+      100,
+      "score is 100 but analyzedFiles=0 flags it as hollow",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("disabledRules suppresses exactly the listed rules", async () => {
   const dir = await makeTree();
   try {
