@@ -7,20 +7,132 @@ import assert from "node:assert/strict";
 import { vulnerableDependencies } from "../src/index.js";
 import { scanManifest, isManifestFile } from "../src/dependencies.js";
 
-test("database has a healthy number of curated entries", () => {
+test("database has a healthy number of curated entries across ecosystems", () => {
   assert.ok(vulnerableDependencies.length >= 15, "at least 15 curated entries");
+  const validEcosystems = new Set(["npm", "pypi", "cargo", "go", "maven", "rubygems"]);
+  const ecosystems = new Set<string>();
   for (const d of vulnerableDependencies) {
-    assert.equal(d.ecosystem, "npm");
+    assert.ok(validEcosystems.has(d.ecosystem), `${d.name}: valid ecosystem`);
+    ecosystems.add(d.ecosystem);
     assert.ok(d.name.length > 0);
     assert.ok(d.algorithms.length > 0);
     assert.ok(d.reason.length > 0);
   }
+  // Multi-ecosystem coverage — not just npm anymore.
+  for (const eco of ["npm", "pypi", "cargo", "go", "maven", "rubygems"]) {
+    assert.ok(ecosystems.has(eco), `database covers ${eco}`);
+  }
 });
 
-test("isManifestFile recognises manifests by basename", () => {
-  assert.equal(isManifestFile("package.json"), true);
-  assert.equal(isManifestFile("nested/dir/package-lock.json"), true);
+test("isManifestFile recognises manifests across ecosystems", () => {
+  for (const f of [
+    "package.json",
+    "nested/dir/package-lock.json",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "Gemfile",
+    "lib/foo.gemspec",
+  ]) {
+    assert.equal(isManifestFile(f), true, `${f} is a manifest`);
+  }
   assert.equal(isManifestFile("src/index.ts"), false);
+  assert.equal(isManifestFile("notes.txt"), false);
+});
+
+/** Assert a scanManifest run flags exactly the given package names (by title substring). */
+function assertFlags(file: string, content: string, expected: string[]): void {
+  const findings = scanManifest(file, content);
+  for (const f of findings) {
+    assert.equal(f.ruleId, "dep-vulnerable");
+    assert.equal(f.category, "dependency");
+    assert.equal(f.location.file, file);
+  }
+  const titles = findings.map((f) => f.title).join(" | ");
+  for (const name of expected) {
+    assert.ok(
+      findings.some((f) => f.title.includes(name)),
+      `expected ${name} flagged in ${file}; got: ${titles}`,
+    );
+  }
+}
+
+test("pypi: requirements.txt is parsed (name normalization, comments skipped)", () => {
+  const req = [
+    "# app deps",
+    "PyJWT==2.8.0",
+    "pycryptodome>=3.19",
+    "cryptography~=41.0",
+    "requests==2.31.0",
+    "-r other.txt",
+  ].join("\n");
+  assertFlags("requirements.txt", req, ["pycryptodome", "cryptography", "pyjwt"]);
+  assert.ok(!scanManifest("requirements.txt", req).some((f) => f.title.includes("requests")));
+});
+
+test("cargo: Cargo.toml dependency keys are matched", () => {
+  const toml = [
+    "[dependencies]",
+    'rsa = "0.9"',
+    'ed25519-dalek = { version = "2" }',
+    'serde = "1"',
+    "[dev-dependencies]",
+    'p256 = "0.13"',
+  ].join("\n");
+  assertFlags("Cargo.toml", toml, ["rsa", "ed25519-dalek", "p256"]);
+  assert.ok(!scanManifest("Cargo.toml", toml).some((f) => f.title.includes("serde")));
+});
+
+test("go.mod require paths are matched", () => {
+  const gomod = [
+    "module example.com/app",
+    "go 1.22",
+    "require (",
+    "\tgolang.org/x/crypto v0.17.0",
+    ")",
+  ].join("\n");
+  assertFlags("go.mod", gomod, ["golang.org/x/crypto"]);
+});
+
+test("maven pom.xml artifactIds are matched", () => {
+  const pom = [
+    "<project>",
+    "  <dependencies>",
+    "    <dependency>",
+    "      <groupId>org.bouncycastle</groupId>",
+    "      <artifactId>bcprov-jdk18on</artifactId>",
+    "    </dependency>",
+    "  </dependencies>",
+    "</project>",
+  ].join("\n");
+  assertFlags("pom.xml", pom, ["bcprov-jdk18on"]);
+});
+
+test("rubygems Gemfile gem lines are matched", () => {
+  const gemfile = [
+    "source 'https://rubygems.org'",
+    "gem 'jwt'",
+    "gem 'rails'",
+    "gem 'rbnacl'",
+  ].join("\n");
+  assertFlags("Gemfile", gemfile, ["jwt", "rbnacl"]);
+  assert.ok(
+    !scanManifest("Gemfile", gemfile).some(
+      (f) => f.title === "Quantum-vulnerable dependency: rails",
+    ),
+  );
+});
+
+test("ecosystem scoping: a same-named package matches only its ecosystem", () => {
+  // "rsa" is a pypi + cargo package but NOT npm — a package.json must not flag it.
+  const pkg = JSON.stringify({ dependencies: { rsa: "^1.0.0" } });
+  assert.equal(scanManifest("package.json", pkg).length, 0, "npm has no 'rsa' entry");
+  // …but the same name in requirements.txt does flag.
+  assertFlags("requirements.txt", "rsa==4.9\n", ["rsa"]);
 });
 
 test("package.json dependencies + devDependencies are matched", () => {

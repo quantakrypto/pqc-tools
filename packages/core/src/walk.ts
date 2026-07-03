@@ -8,6 +8,8 @@ import { readdir, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import * as path from "node:path";
 
+import { isManifestFile } from "./dependencies.js";
+
 /** Directories ignored by default (can be disabled with noDefaultIgnores). */
 export const DEFAULT_IGNORES: readonly string[] = [
   "node_modules",
@@ -232,14 +234,10 @@ interface WalkContext {
  * scanned for vulnerable dependencies instead of being silently dropped.
  */
 function passesSizeLimit(rel: string, size: number, maxFileSize: number): boolean {
-  if (isManifestPath(rel)) return true;
+  // Dependency manifests are always read (they can exceed the size cap but carry
+  // the whole dependency tree). Uses the single {@link isManifestFile} definition.
+  if (isManifestFile(rel)) return true;
   return size <= maxFileSize;
-}
-
-/** True if the path's basename is a dependency manifest we always read. */
-function isManifestPath(rel: string): boolean {
-  const base = rel.split("/").pop() ?? rel;
-  return base === "package.json" || base === "package-lock.json";
 }
 
 /** Internal recursive directory walker. `relDir` is POSIX-relative to the root. */

@@ -77,11 +77,14 @@ export interface Finding {
   location: SourceLocation;
 }
 
+/** Package ecosystems the dependency scanner understands. */
+export type DependencyEcosystem = "npm" | "pypi" | "cargo" | "go" | "maven" | "rubygems";
+
 /** A known quantum-vulnerable dependency entry. */
 export interface VulnerableDependency {
-  /** Package name. */
+  /** Package name (as written in the ecosystem's manifest). */
   name: string;
-  ecosystem: "npm";
+  ecosystem: DependencyEcosystem;
   /** Why it's flagged (what classical crypto it provides). */
   reason: string;
   /** Algorithm families the package primarily exposes. */

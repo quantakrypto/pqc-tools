@@ -15,209 +15,6 @@ import * as path2 from "node:path";
 // ../core/dist/walk.js
 import { readdir, stat } from "node:fs/promises";
 import * as path from "node:path";
-var DEFAULT_IGNORES = [
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".next",
-  "out",
-  "coverage",
-  "vendor",
-  ".turbo",
-  ".cache"
-];
-var DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024;
-var BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
-  // images
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".ico",
-  ".tiff",
-  ".avif",
-  // fonts
-  ".woff",
-  ".woff2",
-  ".ttf",
-  ".otf",
-  ".eot",
-  // archives / compressed
-  ".zip",
-  ".gz",
-  ".tgz",
-  ".bz2",
-  ".xz",
-  ".7z",
-  ".rar",
-  ".tar",
-  // media
-  ".mp3",
-  ".mp4",
-  ".mov",
-  ".avi",
-  ".mkv",
-  ".wav",
-  ".flac",
-  ".ogg",
-  ".webm",
-  // documents / binaries
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".exe",
-  ".dll",
-  ".so",
-  ".dylib",
-  ".bin",
-  ".o",
-  ".a",
-  ".class",
-  ".wasm",
-  // data blobs / db
-  ".db",
-  ".sqlite",
-  ".sqlite3",
-  ".dat",
-  ".pack",
-  ".idx",
-  // misc
-  ".lock",
-  ".map",
-  ".min.js",
-  ".node"
-]);
-function toPosix(p) {
-  return p.split(path.sep).join("/");
-}
-function matchesAny(rel, patterns) {
-  for (const pattern of patterns) {
-    if (!pattern)
-      continue;
-    const p = toPosix(pattern).replace(/\/+$/, "");
-    if (rel.includes(p))
-      return true;
-    if (rel === p || rel.startsWith(`${p}/`))
-      return true;
-  }
-  return false;
-}
-function isExcluded(rel, exclude) {
-  return matchesAny(rel, exclude);
-}
-function isIncluded(rel, include) {
-  if (include.length === 0)
-    return true;
-  return matchesAny(rel, include);
-}
-function isBinaryPath(rel) {
-  const lower = rel.toLowerCase();
-  if (lower.endsWith(".min.js"))
-    return true;
-  const ext = path.posix.extname(lower);
-  return BINARY_EXTENSIONS.has(ext);
-}
-var GENERATED_PATH_RE = /(?:\.min\.[mc]?js|[.-]min\.[mc]?js|\.bundle\.[mc]?js|\.chunk\.[mc]?js|\.generated\.[jt]sx?|_pb\.js|\.pb\.go)$/i;
-function isGeneratedPath(rel) {
-  return GENERATED_PATH_RE.test(rel.toLowerCase());
-}
-function looksMinified(content) {
-  const sample = content.length > 65536 ? content.slice(0, 65536) : content;
-  if (sample.length === 0)
-    return false;
-  let maxLine = 0;
-  let cur = 0;
-  let lines = 1;
-  for (let i = 0; i < sample.length; i++) {
-    if (sample.charCodeAt(i) === 10) {
-      if (cur > maxLine)
-        maxLine = cur;
-      cur = 0;
-      lines++;
-    } else {
-      cur++;
-    }
-  }
-  if (cur > maxLine)
-    maxLine = cur;
-  if (maxLine > 5e4)
-    return true;
-  const avgLine = sample.length / lines;
-  return avgLine > 1e3;
-}
-async function* walkFiles(root, options = {}) {
-  const include = options.include ?? [];
-  const exclude = options.exclude ?? [];
-  const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
-  const ignores = options.noDefaultIgnores ? [] : DEFAULT_IGNORES;
-  const rootStat = await stat(root);
-  if (rootStat.isFile()) {
-    const name = toPosix(path.basename(root));
-    if (!isBinaryPath(name) && isIncluded(name, include) && passesSizeLimit(name, rootStat.size, maxFileSize)) {
-      yield name;
-    }
-    return;
-  }
-  yield* walkDir(root, "", { include, exclude, maxFileSize, ignores });
-}
-function passesSizeLimit(rel, size, maxFileSize) {
-  if (isManifestPath(rel))
-    return true;
-  return size <= maxFileSize;
-}
-function isManifestPath(rel) {
-  const base = rel.split("/").pop() ?? rel;
-  return base === "package.json" || base === "package-lock.json";
-}
-async function* walkDir(absDir, relDir, ctx) {
-  let entries;
-  try {
-    entries = await readdir(absDir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-  for (const entry of entries) {
-    const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-    const abs = path.join(absDir, entry.name);
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-    if (entry.isDirectory()) {
-      if (ctx.ignores.includes(entry.name))
-        continue;
-      if (isExcluded(rel, ctx.exclude))
-        continue;
-      yield* walkDir(abs, rel, ctx);
-      continue;
-    }
-    if (!entry.isFile())
-      continue;
-    if (isExcluded(rel, ctx.exclude))
-      continue;
-    if (!isIncluded(rel, ctx.include))
-      continue;
-    if (isBinaryPath(rel))
-      continue;
-    if (isGeneratedPath(rel))
-      continue;
-    try {
-      const s = await stat(abs);
-      if (!passesSizeLimit(rel, s.size, ctx.maxFileSize))
-        continue;
-    } catch {
-      continue;
-    }
-    yield rel;
-  }
-}
 
 // ../core/dist/remediation.js
 var REMEDIATIONS = {
@@ -421,6 +218,859 @@ var CWE_BROKEN_CRYPTO = "CWE-327";
 var CWE_WEAK_STRENGTH = "CWE-326";
 var CWE_CERT_VALIDATION = "CWE-295";
 var CWE_HARDCODED_KEY = "CWE-798";
+
+// ../core/dist/dependencies.js
+var vulnerableDependencies = [
+  {
+    name: "node-forge",
+    ecosystem: "npm",
+    reason: "Pure-JS implementation of RSA, RSA-OAEP, and X.509 PKI.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "elliptic",
+    ecosystem: "npm",
+    reason: "Elliptic-curve ECDSA/ECDH (secp256k1, p256, ed25519).",
+    algorithms: ["ECDSA", "ECDH", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "jsrsasign",
+    ecosystem: "npm",
+    reason: "RSA/ECDSA/DSA signing, JWT, and X.509 in pure JS.",
+    algorithms: ["RSA", "ECDSA", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "node-rsa",
+    ecosystem: "npm",
+    reason: "Classical RSA encryption and signing.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "ursa",
+    ecosystem: "npm",
+    reason: "OpenSSL-backed RSA encryption and signing bindings.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "sshpk",
+    ecosystem: "npm",
+    reason: "Parses/handles SSH and PEM keys (RSA, ECDSA, Ed25519, DSA).",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "DSA"],
+    severity: "medium"
+  },
+  {
+    name: "jsonwebtoken",
+    ecosystem: "npm",
+    reason: "JWTs commonly signed with RS256/ES256 (classical RSA/ECDSA).",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "jose",
+    ecosystem: "npm",
+    reason: "JWS/JWE with classical RSA-OAEP, RSA-PSS, ECDH-ES and ECDSA.",
+    algorithms: ["RSA", "ECDH", "ECDSA", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "jws",
+    ecosystem: "npm",
+    reason: "JSON Web Signatures using classical RS/ES algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "eccrypto",
+    ecosystem: "npm",
+    reason: "ECIES (ECDH-based) encryption and ECDSA signatures.",
+    algorithms: ["ECIES", "ECDH", "ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "secp256k1",
+    ecosystem: "npm",
+    reason: "secp256k1 ECDSA/ECDH bindings (blockchain keys).",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "tweetnacl",
+    ecosystem: "npm",
+    reason: "X25519 key exchange and Ed25519 signatures (modern but classical).",
+    algorithms: ["X25519", "EdDSA"],
+    severity: "low"
+  },
+  {
+    name: "ed25519",
+    ecosystem: "npm",
+    reason: "Ed25519 signatures (classical).",
+    algorithms: ["EdDSA"],
+    severity: "low"
+  },
+  {
+    name: "@noble/curves",
+    ecosystem: "npm",
+    reason: "Audited classical curves: ECDSA, ECDH, Ed25519, X25519, secp256k1.",
+    algorithms: ["ECDSA", "ECDH", "EdDSA", "X25519"],
+    severity: "medium"
+  },
+  {
+    name: "@noble/secp256k1",
+    ecosystem: "npm",
+    reason: "secp256k1 ECDSA/ECDH (classical).",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "medium"
+  },
+  {
+    name: "@noble/ed25519",
+    ecosystem: "npm",
+    reason: "Ed25519 signatures and X25519 key exchange (classical).",
+    algorithms: ["EdDSA", "X25519"],
+    severity: "low"
+  },
+  {
+    name: "paseto",
+    ecosystem: "npm",
+    reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
+    algorithms: ["EdDSA", "RSA"],
+    severity: "medium"
+  },
+  {
+    name: "bcrypto",
+    ecosystem: "npm",
+    reason: "Broad classical crypto suite: RSA, ECDSA, ECDH, Ed25519, DSA.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "EdDSA", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "ecpair",
+    ecosystem: "npm",
+    reason: "secp256k1 ECDSA key pairs for Bitcoin.",
+    algorithms: ["ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "keypair",
+    ecosystem: "npm",
+    reason: "Pure-JS RSA key pair generation.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "ethers",
+    ecosystem: "npm",
+    reason: "Ethereum library built on secp256k1 ECDSA signing and key derivation.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "web3",
+    ecosystem: "npm",
+    reason: "Ethereum library using secp256k1 ECDSA for accounts and signing.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "bitcoinjs-lib",
+    ecosystem: "npm",
+    reason: "Bitcoin library built on secp256k1 ECDSA/Schnorr keys and signatures.",
+    algorithms: ["ECDSA"],
+    severity: "high"
+  },
+  {
+    name: "ethereumjs-util",
+    ecosystem: "npm",
+    reason: "secp256k1 ECDSA utilities for Ethereum keys and signatures.",
+    algorithms: ["ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "openpgp",
+    ecosystem: "npm",
+    reason: "OpenPGP.js: RSA, ECDSA, ECDH, and EdDSA public-key crypto.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "node-jose",
+    ecosystem: "npm",
+    reason: "JOSE (JWS/JWE/JWK) with classical RSA and EC algorithms.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "jwa",
+    ecosystem: "npm",
+    reason: "JSON Web Algorithms: RSA (RS/PS) and EC (ES) signatures.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "jwk-to-pem",
+    ecosystem: "npm",
+    reason: "Converts RSA/EC JWKs to PEM \u2014 classical public keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "fast-jwt",
+    ecosystem: "npm",
+    reason: "JWT signing/verification with classical RS/PS/ES algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "ssh2",
+    ecosystem: "npm",
+    reason: "SSH client/server using classical RSA/ECDSA/Ed25519 host and user keys.",
+    algorithms: ["RSA", "ECDSA", "EdDSA"],
+    severity: "high"
+  },
+  {
+    name: "@peculiar/x509",
+    ecosystem: "npm",
+    reason: "X.509 certificate library over classical RSA/EC keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "pkijs",
+    ecosystem: "npm",
+    reason: "PKI (X.509/CMS) built on classical RSA and EC public-key crypto.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium"
+  },
+  {
+    name: "http-signature",
+    ecosystem: "npm",
+    reason: "HTTP request signing with classical RSA/ECDSA keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "libsodium-wrappers",
+    ecosystem: "npm",
+    reason: "libsodium: Ed25519 signatures and X25519 key exchange (classical).",
+    algorithms: ["EdDSA", "X25519"],
+    severity: "medium"
+  },
+  {
+    name: "ecdsa-sig-formatter",
+    ecosystem: "npm",
+    reason: "Formats ECDSA signatures \u2014 a marker of classical EC signing.",
+    algorithms: ["ECDSA"],
+    severity: "low"
+  },
+  // --- PyPI (Python) ---
+  {
+    name: "pycryptodome",
+    ecosystem: "pypi",
+    reason: "RSA / ECC / DSA public-key crypto for Python.",
+    algorithms: ["RSA", "ECDSA", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "pycryptodomex",
+    ecosystem: "pypi",
+    reason: "RSA / ECC / DSA public-key crypto (the `Cryptodome` namespace).",
+    algorithms: ["RSA", "ECDSA", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "rsa",
+    ecosystem: "pypi",
+    reason: "Pure-Python RSA encryption and signing.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "ecdsa",
+    ecosystem: "pypi",
+    reason: "Pure-Python ECDSA/ECDH over NIST + secp256k1 curves.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "cryptography",
+    ecosystem: "pypi",
+    reason: "General crypto library exposing classical RSA/EC/DH/DSA (also symmetric/PQC).",
+    algorithms: ["RSA", "ECDH", "ECDSA", "DSA"],
+    severity: "medium"
+  },
+  {
+    name: "pyjwt",
+    ecosystem: "pypi",
+    reason: "JWT signing with classical RS*/ES* algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "python-jose",
+    ecosystem: "pypi",
+    reason: "JOSE/JWT with classical RSA/ECDSA algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "paramiko",
+    ecosystem: "pypi",
+    reason: "SSH client/server with classical RSA/ECDSA/Ed25519/DSA host + user keys.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "DSA"],
+    severity: "medium"
+  },
+  {
+    name: "pyopenssl",
+    ecosystem: "pypi",
+    reason: "OpenSSL bindings for classical RSA/EC X.509 + TLS.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "pynacl",
+    ecosystem: "pypi",
+    reason: "libsodium bindings \u2014 X25519 key agreement and Ed25519 signatures (modern but classical).",
+    algorithms: ["X25519", "EdDSA"],
+    severity: "low"
+  },
+  // --- crates.io (Rust) ---
+  {
+    name: "rsa",
+    ecosystem: "cargo",
+    reason: "Pure-Rust RSA encryption and signing.",
+    algorithms: ["RSA"],
+    severity: "high"
+  },
+  {
+    name: "ring",
+    ecosystem: "cargo",
+    reason: "RSA / ECDSA / Ed25519 / ECDH primitives.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECDH"],
+    severity: "medium"
+  },
+  {
+    name: "openssl",
+    ecosystem: "cargo",
+    reason: "OpenSSL bindings for classical RSA/EC crypto.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "p256",
+    ecosystem: "cargo",
+    reason: "NIST P-256 ECDSA signatures and ECDH key agreement.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "p384",
+    ecosystem: "cargo",
+    reason: "NIST P-384 ECDSA signatures and ECDH key agreement.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "k256",
+    ecosystem: "cargo",
+    reason: "secp256k1 ECDSA signatures and ECDH key agreement.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high"
+  },
+  {
+    name: "ed25519-dalek",
+    ecosystem: "cargo",
+    reason: "Ed25519 signatures (modern but classical).",
+    algorithms: ["EdDSA"],
+    severity: "low"
+  },
+  {
+    name: "x25519-dalek",
+    ecosystem: "cargo",
+    reason: "X25519 key agreement (modern but classical).",
+    algorithms: ["X25519"],
+    severity: "low"
+  },
+  // --- Go modules ---
+  {
+    name: "golang.org/x/crypto",
+    ecosystem: "go",
+    reason: "SSH, OpenPGP, and classical curve helpers on top of the Go stdlib.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECDH"],
+    severity: "medium"
+  },
+  // --- Maven (Java) ---
+  {
+    name: "bcprov-jdk18on",
+    ecosystem: "maven",
+    reason: "BouncyCastle provider \u2014 full classical RSA/ECDSA/ECDH/DSA suite.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "bcprov-jdk15on",
+    ecosystem: "maven",
+    reason: "BouncyCastle provider (JDK 1.5+) \u2014 classical RSA/ECDSA/ECDH/DSA.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+    severity: "high"
+  },
+  {
+    name: "bcpkix-jdk18on",
+    ecosystem: "maven",
+    reason: "BouncyCastle PKIX \u2014 classical X.509 / CMS with RSA/ECDSA.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "java-jwt",
+    ecosystem: "maven",
+    reason: "Auth0 JWT with classical RS*/ES* algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  // --- RubyGems ---
+  {
+    name: "jwt",
+    ecosystem: "rubygems",
+    reason: "Ruby JWT with classical RS*/ES* algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium"
+  },
+  {
+    name: "rbnacl",
+    ecosystem: "rubygems",
+    reason: "libsodium bindings \u2014 X25519 key agreement and Ed25519 signatures.",
+    algorithms: ["X25519", "EdDSA"],
+    severity: "low"
+  },
+  {
+    name: "ed25519",
+    ecosystem: "rubygems",
+    reason: "Ed25519 signatures (modern but classical).",
+    algorithms: ["EdDSA"],
+    severity: "low"
+  }
+];
+function normalizeName(ecosystem, name) {
+  const n = name.trim();
+  if (ecosystem === "pypi")
+    return n.toLowerCase().replace(/[-_.]+/g, "-");
+  if (ecosystem === "npm" || ecosystem === "go")
+    return n;
+  return n.toLowerCase();
+}
+var BY_ECOSYSTEM = (() => {
+  const m = /* @__PURE__ */ new Map();
+  for (const d of vulnerableDependencies) {
+    let em = m.get(d.ecosystem);
+    if (!em) {
+      em = /* @__PURE__ */ new Map();
+      m.set(d.ecosystem, em);
+    }
+    em.set(normalizeName(d.ecosystem, d.name), d);
+  }
+  return m;
+})();
+var KEY_REGEX_BY_NAME = new Map(vulnerableDependencies.filter((d) => d.ecosystem === "npm").map((d) => {
+  const escaped = d.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  return [d.name, new RegExp(`"${escaped}"\\s*:`)];
+}));
+var CONFIDENTIALITY_FAMILIES = /* @__PURE__ */ new Set([
+  "RSA",
+  "ECDH",
+  "DH",
+  "ECIES",
+  "X25519",
+  "X448"
+]);
+function multiFamilyRemediation(algorithms) {
+  const parts = /* @__PURE__ */ new Set();
+  for (const a of algorithms)
+    parts.add(remediationText(a));
+  return [...parts].join("; ");
+}
+function manifestEcosystem(file) {
+  const base = (file.split("/").pop() ?? file).toLowerCase();
+  if (base === "package.json" || base === "package-lock.json")
+    return "npm";
+  if (base === "requirements.txt" || /^requirements[\w.-]*\.txt$/.test(base))
+    return "pypi";
+  if (base === "pyproject.toml" || base === "pipfile")
+    return "pypi";
+  if (base === "cargo.toml")
+    return "cargo";
+  if (base === "go.mod")
+    return "go";
+  if (base === "pom.xml" || base === "build.gradle" || base === "build.gradle.kts")
+    return "maven";
+  if (base === "gemfile" || base.endsWith(".gemspec"))
+    return "rubygems";
+  return null;
+}
+function isManifestFile(file) {
+  return manifestEcosystem(file) !== null;
+}
+function candidateNames(ecosystem, content) {
+  const names = [];
+  const lines = content.split("\n");
+  switch (ecosystem) {
+    case "pypi": {
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith("#") || line.startsWith("-"))
+          continue;
+        const lead = /^["']?([A-Za-z][A-Za-z0-9._-]+)/.exec(line);
+        if (lead)
+          names.push(lead[1]);
+        for (const m of line.matchAll(/["']([A-Za-z][A-Za-z0-9._-]+)/g))
+          names.push(m[1]);
+      }
+      break;
+    }
+    case "cargo": {
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith("#"))
+          continue;
+        const key = /^([A-Za-z0-9][A-Za-z0-9_-]+)\s*=/.exec(line);
+        if (key)
+          names.push(key[1]);
+        const table = /^\[[\w.-]*dependencies\.([A-Za-z0-9][A-Za-z0-9_-]+)\]/.exec(line);
+        if (table)
+          names.push(table[1]);
+      }
+      break;
+    }
+    case "go": {
+      for (const m of content.matchAll(/(?:^|\s)([a-z0-9][\w.\-/]+)\s+v\d/gm))
+        names.push(m[1]);
+      break;
+    }
+    case "maven": {
+      for (const m of content.matchAll(/<artifactId>\s*([\w.-]+)\s*<\/artifactId>/g)) {
+        names.push(m[1]);
+      }
+      for (const m of content.matchAll(/["']([\w.-]+):([\w.-]+):[\w.$-]+["']/g))
+        names.push(m[2]);
+      break;
+    }
+    case "rubygems": {
+      for (const m of content.matchAll(/\bgem\s+["']([\w.-]+)["']/g))
+        names.push(m[1]);
+      for (const m of content.matchAll(/add(?:_runtime|_development)?_dependency\s+["']([\w.-]+)["']/g)) {
+        names.push(m[1]);
+      }
+      break;
+    }
+    case "npm":
+      break;
+  }
+  return names;
+}
+function offsetOfName(content, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const m = new RegExp(`(?<![\\w./-])${escaped}(?![\\w-])`).exec(content);
+  return m ? m.index : 0;
+}
+function dependencyFinding(dep, file, content, index) {
+  const algorithm = dep.algorithms[0] ?? "unknown";
+  return makeFinding({
+    ruleId: "dep-vulnerable",
+    title: `Quantum-vulnerable dependency: ${dep.name}`,
+    category: "dependency",
+    severity: dep.severity,
+    confidence: "high",
+    algorithm,
+    // Confidentiality libs are HNDL-exposed; signature-only ones are not.
+    hndl: dep.algorithms.some((a) => CONFIDENTIALITY_FAMILIES.has(a)),
+    cwe: CWE_BROKEN_CRYPTO,
+    message: `${dep.name} \u2014 ${dep.reason}`,
+    remediation: multiFamilyRemediation(dep.algorithms),
+    file,
+    content,
+    index
+  });
+}
+function offsetOfKey(content, name) {
+  const re = KEY_REGEX_BY_NAME.get(name);
+  if (!re)
+    return 0;
+  const m = re.exec(content);
+  return m ? m.index : 0;
+}
+function sortByTitle(findings) {
+  findings.sort((a, b) => a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+  return findings;
+}
+function scanManifest(file, content) {
+  const ecosystem = manifestEcosystem(file);
+  if (!ecosystem)
+    return [];
+  const db = BY_ECOSYSTEM.get(ecosystem);
+  if (!db)
+    return [];
+  if (ecosystem === "npm")
+    return scanNpmManifest(content, file, db);
+  const found = /* @__PURE__ */ new Map();
+  for (const raw of candidateNames(ecosystem, content)) {
+    const dep = db.get(normalizeName(ecosystem, raw));
+    if (dep)
+      found.set(dep.name, dep);
+  }
+  const findings = [];
+  for (const dep of found.values()) {
+    findings.push(dependencyFinding(dep, file, content, offsetOfName(content, dep.name)));
+  }
+  return sortByTitle(findings);
+}
+function scanNpmManifest(content, file, db) {
+  let json;
+  try {
+    json = JSON.parse(content);
+  } catch {
+    return [];
+  }
+  if (json === null || typeof json !== "object")
+    return [];
+  const found = /* @__PURE__ */ new Set();
+  const obj = json;
+  const collectFromRecord = (rec) => {
+    if (rec === null || typeof rec !== "object")
+      return;
+    for (const key of Object.keys(rec)) {
+      if (db.has(key))
+        found.add(key);
+    }
+  };
+  collectFromRecord(obj.dependencies);
+  collectFromRecord(obj.devDependencies);
+  collectFromRecord(obj.peerDependencies);
+  collectFromRecord(obj.optionalDependencies);
+  const packages = obj.packages;
+  if (packages !== null && typeof packages === "object") {
+    for (const key of Object.keys(packages)) {
+      if (!key)
+        continue;
+      const marker = "node_modules/";
+      const idx = key.lastIndexOf(marker);
+      const name = idx >= 0 ? key.slice(idx + marker.length) : key;
+      if (db.has(name))
+        found.add(name);
+    }
+  }
+  const findings = [];
+  for (const name of found) {
+    const dep = db.get(name);
+    if (!dep)
+      continue;
+    findings.push(dependencyFinding(dep, file, content, offsetOfKey(content, name)));
+  }
+  return sortByTitle(findings);
+}
+
+// ../core/dist/walk.js
+var DEFAULT_IGNORES = [
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  "out",
+  "coverage",
+  "vendor",
+  ".turbo",
+  ".cache"
+];
+var DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024;
+var BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
+  // images
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".ico",
+  ".tiff",
+  ".avif",
+  // fonts
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  // archives / compressed
+  ".zip",
+  ".gz",
+  ".tgz",
+  ".bz2",
+  ".xz",
+  ".7z",
+  ".rar",
+  ".tar",
+  // media
+  ".mp3",
+  ".mp4",
+  ".mov",
+  ".avi",
+  ".mkv",
+  ".wav",
+  ".flac",
+  ".ogg",
+  ".webm",
+  // documents / binaries
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".bin",
+  ".o",
+  ".a",
+  ".class",
+  ".wasm",
+  // data blobs / db
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  ".dat",
+  ".pack",
+  ".idx",
+  // misc
+  ".lock",
+  ".map",
+  ".min.js",
+  ".node"
+]);
+function toPosix(p) {
+  return p.split(path.sep).join("/");
+}
+function matchesAny(rel, patterns) {
+  for (const pattern of patterns) {
+    if (!pattern)
+      continue;
+    const p = toPosix(pattern).replace(/\/+$/, "");
+    if (rel.includes(p))
+      return true;
+    if (rel === p || rel.startsWith(`${p}/`))
+      return true;
+  }
+  return false;
+}
+function isExcluded(rel, exclude) {
+  return matchesAny(rel, exclude);
+}
+function isIncluded(rel, include) {
+  if (include.length === 0)
+    return true;
+  return matchesAny(rel, include);
+}
+function isBinaryPath(rel) {
+  const lower = rel.toLowerCase();
+  if (lower.endsWith(".min.js"))
+    return true;
+  const ext = path.posix.extname(lower);
+  return BINARY_EXTENSIONS.has(ext);
+}
+var GENERATED_PATH_RE = /(?:\.min\.[mc]?js|[.-]min\.[mc]?js|\.bundle\.[mc]?js|\.chunk\.[mc]?js|\.generated\.[jt]sx?|_pb\.js|\.pb\.go)$/i;
+function isGeneratedPath(rel) {
+  return GENERATED_PATH_RE.test(rel.toLowerCase());
+}
+function looksMinified(content) {
+  const sample = content.length > 65536 ? content.slice(0, 65536) : content;
+  if (sample.length === 0)
+    return false;
+  let maxLine = 0;
+  let cur = 0;
+  let lines = 1;
+  for (let i = 0; i < sample.length; i++) {
+    if (sample.charCodeAt(i) === 10) {
+      if (cur > maxLine)
+        maxLine = cur;
+      cur = 0;
+      lines++;
+    } else {
+      cur++;
+    }
+  }
+  if (cur > maxLine)
+    maxLine = cur;
+  if (maxLine > 5e4)
+    return true;
+  const avgLine = sample.length / lines;
+  return avgLine > 1e3;
+}
+async function* walkFiles(root, options = {}) {
+  const include = options.include ?? [];
+  const exclude = options.exclude ?? [];
+  const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
+  const ignores = options.noDefaultIgnores ? [] : DEFAULT_IGNORES;
+  const rootStat = await stat(root);
+  if (rootStat.isFile()) {
+    const name = toPosix(path.basename(root));
+    if (!isBinaryPath(name) && isIncluded(name, include) && passesSizeLimit(name, rootStat.size, maxFileSize)) {
+      yield name;
+    }
+    return;
+  }
+  yield* walkDir(root, "", { include, exclude, maxFileSize, ignores });
+}
+function passesSizeLimit(rel, size, maxFileSize) {
+  if (isManifestFile(rel))
+    return true;
+  return size <= maxFileSize;
+}
+async function* walkDir(absDir, relDir, ctx) {
+  let entries;
+  try {
+    entries = await readdir(absDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  for (const entry of entries) {
+    const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+    const abs = path.join(absDir, entry.name);
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      if (ctx.ignores.includes(entry.name))
+        continue;
+      if (isExcluded(rel, ctx.exclude))
+        continue;
+      yield* walkDir(abs, rel, ctx);
+      continue;
+    }
+    if (!entry.isFile())
+      continue;
+    if (isExcluded(rel, ctx.exclude))
+      continue;
+    if (!isIncluded(rel, ctx.include))
+      continue;
+    if (isBinaryPath(rel))
+      continue;
+    if (isGeneratedPath(rel))
+      continue;
+    try {
+      const s = await stat(abs);
+      if (!passesSizeLimit(rel, s.size, ctx.maxFileSize))
+        continue;
+    } catch {
+      continue;
+    }
+    yield rel;
+  }
+}
 
 // ../core/dist/detectors/source.js
 var RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
@@ -2075,349 +2725,6 @@ var defaultRegistry = new DetectorRegistry([
   cDetector,
   pemDetector
 ]);
-
-// ../core/dist/dependencies.js
-var vulnerableDependencies = [
-  {
-    name: "node-forge",
-    ecosystem: "npm",
-    reason: "Pure-JS implementation of RSA, RSA-OAEP, and X.509 PKI.",
-    algorithms: ["RSA"],
-    severity: "high"
-  },
-  {
-    name: "elliptic",
-    ecosystem: "npm",
-    reason: "Elliptic-curve ECDSA/ECDH (secp256k1, p256, ed25519).",
-    algorithms: ["ECDSA", "ECDH", "EdDSA"],
-    severity: "high"
-  },
-  {
-    name: "jsrsasign",
-    ecosystem: "npm",
-    reason: "RSA/ECDSA/DSA signing, JWT, and X.509 in pure JS.",
-    algorithms: ["RSA", "ECDSA", "DSA"],
-    severity: "high"
-  },
-  {
-    name: "node-rsa",
-    ecosystem: "npm",
-    reason: "Classical RSA encryption and signing.",
-    algorithms: ["RSA"],
-    severity: "high"
-  },
-  {
-    name: "ursa",
-    ecosystem: "npm",
-    reason: "OpenSSL-backed RSA encryption and signing bindings.",
-    algorithms: ["RSA"],
-    severity: "high"
-  },
-  {
-    name: "sshpk",
-    ecosystem: "npm",
-    reason: "Parses/handles SSH and PEM keys (RSA, ECDSA, Ed25519, DSA).",
-    algorithms: ["RSA", "ECDSA", "EdDSA", "DSA"],
-    severity: "medium"
-  },
-  {
-    name: "jsonwebtoken",
-    ecosystem: "npm",
-    reason: "JWTs commonly signed with RS256/ES256 (classical RSA/ECDSA).",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "jose",
-    ecosystem: "npm",
-    reason: "JWS/JWE with classical RSA-OAEP, RSA-PSS, ECDH-ES and ECDSA.",
-    algorithms: ["RSA", "ECDH", "ECDSA", "EdDSA"],
-    severity: "high"
-  },
-  {
-    name: "jws",
-    ecosystem: "npm",
-    reason: "JSON Web Signatures using classical RS/ES algorithms.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "eccrypto",
-    ecosystem: "npm",
-    reason: "ECIES (ECDH-based) encryption and ECDSA signatures.",
-    algorithms: ["ECIES", "ECDH", "ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "secp256k1",
-    ecosystem: "npm",
-    reason: "secp256k1 ECDSA/ECDH bindings (blockchain keys).",
-    algorithms: ["ECDSA", "ECDH"],
-    severity: "high"
-  },
-  {
-    name: "tweetnacl",
-    ecosystem: "npm",
-    reason: "X25519 key exchange and Ed25519 signatures (modern but classical).",
-    algorithms: ["X25519", "EdDSA"],
-    severity: "low"
-  },
-  {
-    name: "ed25519",
-    ecosystem: "npm",
-    reason: "Ed25519 signatures (classical).",
-    algorithms: ["EdDSA"],
-    severity: "low"
-  },
-  {
-    name: "@noble/curves",
-    ecosystem: "npm",
-    reason: "Audited classical curves: ECDSA, ECDH, Ed25519, X25519, secp256k1.",
-    algorithms: ["ECDSA", "ECDH", "EdDSA", "X25519"],
-    severity: "medium"
-  },
-  {
-    name: "@noble/secp256k1",
-    ecosystem: "npm",
-    reason: "secp256k1 ECDSA/ECDH (classical).",
-    algorithms: ["ECDSA", "ECDH"],
-    severity: "medium"
-  },
-  {
-    name: "@noble/ed25519",
-    ecosystem: "npm",
-    reason: "Ed25519 signatures and X25519 key exchange (classical).",
-    algorithms: ["EdDSA", "X25519"],
-    severity: "low"
-  },
-  {
-    name: "paseto",
-    ecosystem: "npm",
-    reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
-    algorithms: ["EdDSA", "RSA"],
-    severity: "medium"
-  },
-  {
-    name: "bcrypto",
-    ecosystem: "npm",
-    reason: "Broad classical crypto suite: RSA, ECDSA, ECDH, Ed25519, DSA.",
-    algorithms: ["RSA", "ECDSA", "ECDH", "EdDSA", "DSA"],
-    severity: "high"
-  },
-  {
-    name: "ecpair",
-    ecosystem: "npm",
-    reason: "secp256k1 ECDSA key pairs for Bitcoin.",
-    algorithms: ["ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "keypair",
-    ecosystem: "npm",
-    reason: "Pure-JS RSA key pair generation.",
-    algorithms: ["RSA"],
-    severity: "high"
-  },
-  {
-    name: "ethers",
-    ecosystem: "npm",
-    reason: "Ethereum library built on secp256k1 ECDSA signing and key derivation.",
-    algorithms: ["ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "web3",
-    ecosystem: "npm",
-    reason: "Ethereum library using secp256k1 ECDSA for accounts and signing.",
-    algorithms: ["ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "bitcoinjs-lib",
-    ecosystem: "npm",
-    reason: "Bitcoin library built on secp256k1 ECDSA/Schnorr keys and signatures.",
-    algorithms: ["ECDSA"],
-    severity: "high"
-  },
-  {
-    name: "ethereumjs-util",
-    ecosystem: "npm",
-    reason: "secp256k1 ECDSA utilities for Ethereum keys and signatures.",
-    algorithms: ["ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "openpgp",
-    ecosystem: "npm",
-    reason: "OpenPGP.js: RSA, ECDSA, ECDH, and EdDSA public-key crypto.",
-    algorithms: ["RSA", "ECDSA", "ECDH", "EdDSA"],
-    severity: "high"
-  },
-  {
-    name: "node-jose",
-    ecosystem: "npm",
-    reason: "JOSE (JWS/JWE/JWK) with classical RSA and EC algorithms.",
-    algorithms: ["RSA", "ECDSA", "ECDH"],
-    severity: "high"
-  },
-  {
-    name: "jwa",
-    ecosystem: "npm",
-    reason: "JSON Web Algorithms: RSA (RS/PS) and EC (ES) signatures.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "jwk-to-pem",
-    ecosystem: "npm",
-    reason: "Converts RSA/EC JWKs to PEM \u2014 classical public keys.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "fast-jwt",
-    ecosystem: "npm",
-    reason: "JWT signing/verification with classical RS/PS/ES algorithms.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "ssh2",
-    ecosystem: "npm",
-    reason: "SSH client/server using classical RSA/ECDSA/Ed25519 host and user keys.",
-    algorithms: ["RSA", "ECDSA", "EdDSA"],
-    severity: "high"
-  },
-  {
-    name: "@peculiar/x509",
-    ecosystem: "npm",
-    reason: "X.509 certificate library over classical RSA/EC keys.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "pkijs",
-    ecosystem: "npm",
-    reason: "PKI (X.509/CMS) built on classical RSA and EC public-key crypto.",
-    algorithms: ["RSA", "ECDSA", "ECDH"],
-    severity: "medium"
-  },
-  {
-    name: "http-signature",
-    ecosystem: "npm",
-    reason: "HTTP request signing with classical RSA/ECDSA keys.",
-    algorithms: ["RSA", "ECDSA"],
-    severity: "medium"
-  },
-  {
-    name: "libsodium-wrappers",
-    ecosystem: "npm",
-    reason: "libsodium: Ed25519 signatures and X25519 key exchange (classical).",
-    algorithms: ["EdDSA", "X25519"],
-    severity: "medium"
-  },
-  {
-    name: "ecdsa-sig-formatter",
-    ecosystem: "npm",
-    reason: "Formats ECDSA signatures \u2014 a marker of classical EC signing.",
-    algorithms: ["ECDSA"],
-    severity: "low"
-  }
-];
-var BY_NAME = new Map(vulnerableDependencies.map((d) => [d.name, d]));
-var KEY_REGEX_BY_NAME = new Map(vulnerableDependencies.map((d) => {
-  const escaped = d.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-  return [d.name, new RegExp(`"${escaped}"\\s*:`)];
-}));
-var CONFIDENTIALITY_FAMILIES = /* @__PURE__ */ new Set([
-  "RSA",
-  "ECDH",
-  "DH",
-  "ECIES",
-  "X25519",
-  "X448"
-]);
-function multiFamilyRemediation(algorithms) {
-  const parts = /* @__PURE__ */ new Set();
-  for (const a of algorithms)
-    parts.add(remediationText(a));
-  return [...parts].join("; ");
-}
-function isManifestFile(file) {
-  const base = file.split("/").pop() ?? file;
-  return base === "package.json" || base === "package-lock.json";
-}
-function dependencyFinding(dep, file, content, index) {
-  const algorithm = dep.algorithms[0] ?? "unknown";
-  return makeFinding({
-    ruleId: "dep-vulnerable",
-    title: `Quantum-vulnerable dependency: ${dep.name}`,
-    category: "dependency",
-    severity: dep.severity,
-    confidence: "high",
-    algorithm,
-    // Confidentiality libs are HNDL-exposed; signature-only ones are not.
-    hndl: dep.algorithms.some((a) => CONFIDENTIALITY_FAMILIES.has(a)),
-    cwe: CWE_BROKEN_CRYPTO,
-    message: `${dep.name} \u2014 ${dep.reason}`,
-    remediation: multiFamilyRemediation(dep.algorithms),
-    file,
-    content,
-    index
-  });
-}
-function offsetOfKey(content, name) {
-  const re = KEY_REGEX_BY_NAME.get(name);
-  if (!re)
-    return 0;
-  const m = re.exec(content);
-  return m ? m.index : 0;
-}
-function scanManifest(file, content) {
-  let json;
-  try {
-    json = JSON.parse(content);
-  } catch {
-    return [];
-  }
-  if (json === null || typeof json !== "object")
-    return [];
-  const found = /* @__PURE__ */ new Set();
-  const obj = json;
-  const collectFromRecord = (rec) => {
-    if (rec === null || typeof rec !== "object")
-      return;
-    for (const key of Object.keys(rec)) {
-      if (BY_NAME.has(key))
-        found.add(key);
-    }
-  };
-  collectFromRecord(obj.dependencies);
-  collectFromRecord(obj.devDependencies);
-  collectFromRecord(obj.peerDependencies);
-  collectFromRecord(obj.optionalDependencies);
-  const packages = obj.packages;
-  if (packages !== null && typeof packages === "object") {
-    for (const key of Object.keys(packages)) {
-      if (!key)
-        continue;
-      const marker = "node_modules/";
-      const idx = key.lastIndexOf(marker);
-      const name = idx >= 0 ? key.slice(idx + marker.length) : key;
-      if (BY_NAME.has(name))
-        found.add(name);
-    }
-  }
-  const findings = [];
-  for (const name of found) {
-    const dep = BY_NAME.get(name);
-    if (!dep)
-      continue;
-    findings.push(dependencyFinding(dep, file, content, offsetOfKey(content, name)));
-  }
-  findings.sort((a, b) => a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
-  return findings;
-}
 
 // ../core/dist/inventory.js
 var SEVERITIES = ["critical", "high", "medium", "low", "info"];

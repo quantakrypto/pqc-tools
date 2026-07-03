@@ -136,6 +136,13 @@
       { "ruleId": "webcrypto-classical", "algorithm": "X25519", "hndl": true }
     ]
   },
+  "positive/requirements.txt": {
+    "category": "dependency",
+    "expected": [
+      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true },
+      { "ruleId": "dep-vulnerable", "algorithm": "RSA", "hndl": true }
+    ]
+  },
   "positive/python-cryptography.py": {
     "category": "python",
     "expected": [
