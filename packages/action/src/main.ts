@@ -13,7 +13,7 @@
  * small, pure functions so it can be tested without a real Actions environment.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -310,13 +310,33 @@ function resolveInWorkspace(p: string, env: NodeJS.ProcessEnv): string {
 
 /**
  * Load the shared `@quantakrypto/core` baseline (the `{ version, fingerprints }`
- * format written by `qscan --write-baseline`) into the set of accepted
- * fingerprints. `loadBaseline` is tolerant of a missing/unparseable file, so
- * an absent baseline degrades to "suppress nothing".
+ * format written by `qscan --write-baseline`). `loadBaseline` is tolerant of a
+ * missing/unparseable file, so it degrades to "suppress nothing" — but a
+ * workflow that DID set `baseline:` and expects suppression would then fail on
+ * old findings with no explanation. So we warn (loudly, once) when the named
+ * file is missing or loads no fingerprints, rather than degrading silently.
  */
 async function loadBaselineSet(baselinePath: string, env: NodeJS.ProcessEnv): Promise<Baseline> {
   const abs = resolveInWorkspace(baselinePath, env);
-  return loadBaseline(abs);
+  const present = await access(abs).then(
+    () => true,
+    () => false,
+  );
+  if (!present) {
+    warning(
+      `baseline file not found at "${baselinePath}" — no findings will be suppressed. ` +
+        `Create it with: qscan --write-baseline ${baselinePath}`,
+    );
+    return loadBaseline(abs);
+  }
+  const baseline = await loadBaseline(abs);
+  if (baseline.fingerprints.length === 0) {
+    warning(
+      `baseline file "${baselinePath}" loaded 0 fingerprints — it may be empty or malformed; ` +
+        `no findings will be suppressed.`,
+    );
+  }
+  return baseline;
 }
 
 /** The full action run, parameterised on `env` for testability. */

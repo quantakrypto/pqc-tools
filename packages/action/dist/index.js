@@ -1,7 +1,7 @@
 import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);
 
 // src/main.ts
-import { mkdir, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
+import { access, mkdir, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname3, isAbsolute, resolve, sep as sep2 } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -4272,7 +4272,23 @@ function resolveInWorkspace(p, env) {
 }
 async function loadBaselineSet(baselinePath, env) {
   const abs = resolveInWorkspace(baselinePath, env);
-  return loadBaseline(abs);
+  const present = await access(abs).then(
+    () => true,
+    () => false
+  );
+  if (!present) {
+    warning(
+      `baseline file not found at "${baselinePath}" \u2014 no findings will be suppressed. Create it with: qscan --write-baseline ${baselinePath}`
+    );
+    return loadBaseline(abs);
+  }
+  const baseline = await loadBaseline(abs);
+  if (baseline.fingerprints.length === 0) {
+    warning(
+      `baseline file "${baselinePath}" loaded 0 fingerprints \u2014 it may be empty or malformed; no findings will be suppressed.`
+    );
+  }
+  return baseline;
 }
 async function run(env = process.env) {
   const inputs = readInputs(env);

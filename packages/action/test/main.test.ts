@@ -316,6 +316,34 @@ test("run rejects a baseline path that escapes the workspace via ../", async () 
   await assert.rejects(() => run(env), /escapes the workspace/);
 });
 
+test("run warns (does not silently degrade) when the baseline file is missing", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_BASELINE: "missing-baseline.json",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  const original = process.stdout.write.bind(process.stdout);
+  let buf = "";
+  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
+    buf += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await run(env);
+  } finally {
+    process.stdout.write = original;
+  }
+  assert.match(buf, /::warning/);
+  assert.match(buf, /baseline file not found/);
+});
+
 // ---------------------------------------------------------------------------
 // A5: the `redact-snippets` input is parsed and honored end-to-end — when set,
 // the written report carries no matched source snippet.
