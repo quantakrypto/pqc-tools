@@ -16,6 +16,8 @@ import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
 import { walkFiles, toPosix, isBinaryPath, looksMinified, matchesAny } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import { stripCommentFindings, stripIgnoredFindings } from "./comments.js";
+import { hashContent, loadCache, rulesetFingerprint, saveCache } from "./cache.js";
+import type { CacheEntry } from "./cache.js";
 import { sourceDetectors } from "./detectors/source.js";
 import { pythonDetector } from "./detectors/python.js";
 import { goDetector } from "./detectors/go.js";
@@ -130,6 +132,12 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   let unreadable = 0;
   let skippedMinified = 0;
 
+  // Optional content-hash scan cache: unchanged files reuse prior findings.
+  const cacheFile = options.cacheFile;
+  const ruleset = cacheFile ? rulesetFingerprint(dets, options.disabledRules) : "";
+  const cache = cacheFile ? await loadCache(cacheFile, ruleset) : null;
+  const nextEntries: Map<string, CacheEntry> | null = cacheFile ? new Map() : null;
+
   // Work-budget / cancellation controls (all optional, unlimited when omitted).
   const signal = options.signal;
   const maxFiles = options.maxFiles;
@@ -183,20 +191,38 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     filesScanned += 1;
     if (isAnalyzableSource(reportedPath)) analyzedFiles += 1;
-    findings.push(
-      ...detectFile(
+
+    // Cache: reuse prior findings when the content hash matches; otherwise scan
+    // and record. `nextEntries` becomes the new cache (dropping vanished files).
+    let fileFindings: Finding[];
+    if (cache && nextEntries) {
+      const hash = hashContent(content);
+      const hit = cache.get(reportedPath);
+      fileFindings =
+        hit && hit.hash === hash
+          ? hit.findings
+          : detectFile(
+              reportedPath,
+              content,
+              dets,
+              { source: doSource, config: doConfig, deps: doDeps },
+              options.disabledRules,
+            );
+      nextEntries.set(reportedPath, { hash, findings: fileFindings });
+    } else {
+      fileFindings = detectFile(
         reportedPath,
         content,
         dets,
-        {
-          source: doSource,
-          config: doConfig,
-          deps: doDeps,
-        },
+        { source: doSource, config: doConfig, deps: doDeps },
         options.disabledRules,
-      ),
-    );
+      );
+    }
+    findings.push(...fileFindings);
   }
+
+  // Persist the cache (best effort) before ordering/returning.
+  if (cacheFile && nextEntries) await saveCache(cacheFile, ruleset, nextEntries);
 
   // Stable ordering: by file, then line, then ruleId.
   findings.sort(compareFindings);

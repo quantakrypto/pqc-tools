@@ -171,9 +171,10 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
   const rootStat = await stat(options.root);
   const baseDir = rootStat.isFile() ? path.dirname(options.root) : options.root;
 
-  // Single-file roots and the override-detectors path always run serially:
-  // detectors may not be structured-cloneable across the worker boundary.
-  if (rootStat.isFile() || options.detectors) {
+  // Single-file roots, the override-detectors path, and the scan cache always
+  // run serially: detectors may not be structured-cloneable across the worker
+  // boundary, and the cache read/write is owned by the in-process `scan()`.
+  if (rootStat.isFile() || options.detectors || options.cacheFile) {
     return scan(options);
   }
 

@@ -236,6 +236,14 @@ export interface ScanOptions {
    * catalog ({@link DetectorRegistry.ruleCatalog}) for the valid ids.
    */
   disabledRules?: string[];
+  /**
+   * Path to an on-disk scan cache. When set, unchanged files (same content hash)
+   * reuse their previous findings instead of re-running detectors, and the cache
+   * is rewritten after the scan. Invalidated wholesale when the tool version,
+   * detector set, or `disabledRules` change. Optional; omitted = no caching.
+   * The cache forces the in-process (serial) path.
+   */
+  cacheFile?: string;
   /** Optional progress callback. */
   onFile?: (file: string) => void;
   /**

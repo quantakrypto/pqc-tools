@@ -116,6 +116,7 @@ function toScanOptions(options: QscanOptions): ParallelScanOptions {
   if (options.disabledRules && options.disabledRules.length > 0) {
     scanOptions.disabledRules = options.disabledRules;
   }
+  if (options.cacheFile) scanOptions.cacheFile = options.cacheFile;
   return scanOptions;
 }
 

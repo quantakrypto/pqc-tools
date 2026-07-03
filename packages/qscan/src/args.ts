@@ -79,6 +79,8 @@ export interface QscanOptions {
   topN?: number;
   /** Rule ids to suppress (from `quantakrypto.config.json` `disabledRules`). */
   disabledRules?: string[];
+  /** Content-hash scan cache path (`--cache [path]`); reuse unchanged files. */
+  cacheFile?: string;
   /**
    * Omit code snippets from the JSON/SARIF report (`--no-snippets`). Passed to
    * core's reporters as `{ redactSnippets: true }`. Snippets of `sensitive`
@@ -158,6 +160,9 @@ export function defaultOptions(): QscanOptions {
  *
  * @throws {ArgError} On unknown flags, missing values, or invalid enum values.
  */
+/** Default scan-cache file when `--cache` is given without a path. */
+export const DEFAULT_CACHE_FILE = ".quantakrypto-cache.json";
+
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const options = defaultOptions();
   const explicit = new Set<ConfigurableKey>();
@@ -253,6 +258,21 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--top":
         options.topN = asInt(takeValue(), "--top");
         break;
+      case "--cache": {
+        // `--cache` alone uses the default file; `--cache <path>` names it.
+        if (inlineValue !== undefined) {
+          options.cacheFile = inlineValue;
+        } else {
+          const next = argv[i + 1];
+          if (next !== undefined && !(next.startsWith("-") && next !== "-")) {
+            options.cacheFile = next;
+            i++;
+          } else {
+            options.cacheFile = DEFAULT_CACHE_FILE;
+          }
+        }
+        break;
+      }
       case "--no-default-ignores":
         rejectInlineValue();
         options.noDefaultIgnores = true;

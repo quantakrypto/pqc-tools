@@ -1,16 +1,16 @@
 import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);
 
 // src/main.ts
-import { access, mkdir, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname3, isAbsolute, resolve, sep as sep2 } from "node:path";
+import { access, mkdir as mkdir2, readFile as readFile4, writeFile as writeFile3 } from "node:fs/promises";
+import { dirname as dirname4, isAbsolute, resolve, sep as sep2 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // ../core/dist/version.js
 var VERSION = "0.4.0";
 
 // ../core/dist/scan.js
-import { readFile, stat as stat2 } from "node:fs/promises";
-import * as path2 from "node:path";
+import { readFile as readFile2, stat as stat2 } from "node:fs/promises";
+import * as path3 from "node:path";
 
 // ../core/dist/walk.js
 import { readdir, stat } from "node:fs/promises";
@@ -1283,6 +1283,59 @@ function stripCommentFindings(findings, content, file) {
     const offset = start + ((f.location.column ?? 1) - 1);
     return !offsetInSpans(spans, offset);
   });
+}
+
+// ../core/dist/cache.js
+import { createHash } from "node:crypto";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import * as path2 from "node:path";
+var CACHE_VERSION = 1;
+function hashContent(content) {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+function rulesetFingerprint(detectors2, disabledRules) {
+  const ids = detectors2.map((d) => d.id).sort();
+  const disabled = [...disabledRules ?? []].sort();
+  return `v${VERSION}|d:${ids.join(",")}|x:${disabled.join(",")}`;
+}
+async function loadCache(cacheFile, ruleset) {
+  let raw;
+  try {
+    raw = await readFile(cacheFile, "utf8");
+  } catch {
+    return /* @__PURE__ */ new Map();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return /* @__PURE__ */ new Map();
+  }
+  if (parsed === null || typeof parsed !== "object" || parsed.version !== CACHE_VERSION || parsed.ruleset !== ruleset || typeof parsed.entries !== "object" || parsed.entries === null) {
+    return /* @__PURE__ */ new Map();
+  }
+  const map = /* @__PURE__ */ new Map();
+  for (const [file, entry] of Object.entries(parsed.entries)) {
+    if (entry && typeof entry.hash === "string" && Array.isArray(entry.findings)) {
+      map.set(file, entry);
+    }
+  }
+  return map;
+}
+async function saveCache(cacheFile, ruleset, entries) {
+  const doc = {
+    version: CACHE_VERSION,
+    ruleset,
+    entries: Object.fromEntries(entries)
+  };
+  try {
+    await mkdir(path2.dirname(cacheFile), { recursive: true });
+    const tmp = `${cacheFile}.tmp-${process.pid}`;
+    await writeFile(tmp, JSON.stringify(doc), "utf8");
+    const { rename } = await import("node:fs/promises");
+    await rename(tmp, cacheFile);
+  } catch {
+  }
 }
 
 // ../core/dist/detectors/source.js
@@ -3065,14 +3118,18 @@ async function scan(options) {
   const dets = resolveDetectors(options);
   const rootStat = await stat2(options.root);
   const rootIsFile = rootStat.isFile();
-  const baseDir = rootIsFile ? path2.dirname(options.root) : options.root;
-  const singleFileName = rootIsFile ? path2.basename(options.root) : null;
+  const baseDir = rootIsFile ? path3.dirname(options.root) : options.root;
+  const singleFileName = rootIsFile ? path3.basename(options.root) : null;
   const findings = [];
   let filesScanned = 0;
   let analyzedFiles = 0;
   let bytesScanned = 0;
   let unreadable = 0;
   let skippedMinified = 0;
+  const cacheFile = options.cacheFile;
+  const ruleset = cacheFile ? rulesetFingerprint(dets, options.disabledRules) : "";
+  const cache = cacheFile ? await loadCache(cacheFile, ruleset) : null;
+  const nextEntries = cacheFile ? /* @__PURE__ */ new Map() : null;
   const signal = options.signal;
   const maxFiles = options.maxFiles;
   const maxBytes = options.maxBytes;
@@ -3088,12 +3145,12 @@ async function scan(options) {
     if (typeof maxFiles === "number" && filesScanned >= maxFiles) {
       throw new BudgetExceededError(`maxFiles budget exceeded (limit: ${maxFiles}).`);
     }
-    const absPath = singleFileName ? options.root : path2.join(baseDir, ...rel.split("/"));
+    const absPath = singleFileName ? options.root : path3.join(baseDir, ...rel.split("/"));
     const reportedPath = singleFileName ? toPosix(rel) : rel;
     options.onFile?.(reportedPath);
     let content;
     try {
-      content = await readFile(absPath, "utf8");
+      content = await readFile2(absPath, "utf8");
     } catch {
       unreadable += 1;
       continue;
@@ -3109,12 +3166,19 @@ async function scan(options) {
     filesScanned += 1;
     if (isAnalyzableSource(reportedPath))
       analyzedFiles += 1;
-    findings.push(...detectFile(reportedPath, content, dets, {
-      source: doSource,
-      config: doConfig,
-      deps: doDeps
-    }, options.disabledRules));
+    let fileFindings;
+    if (cache && nextEntries) {
+      const hash = hashContent(content);
+      const hit = cache.get(reportedPath);
+      fileFindings = hit && hit.hash === hash ? hit.findings : detectFile(reportedPath, content, dets, { source: doSource, config: doConfig, deps: doDeps }, options.disabledRules);
+      nextEntries.set(reportedPath, { hash, findings: fileFindings });
+    } else {
+      fileFindings = detectFile(reportedPath, content, dets, { source: doSource, config: doConfig, deps: doDeps }, options.disabledRules);
+    }
+    findings.push(...fileFindings);
   }
+  if (cacheFile && nextEntries)
+    await saveCache(cacheFile, ruleset, nextEntries);
   findings.sort(compareFindings);
   const inventory = buildInventory(findings);
   const finishedAt = /* @__PURE__ */ new Date();
@@ -3159,7 +3223,7 @@ async function* filterExplicitFiles(files, options) {
 import { stat as stat3 } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import * as os from "node:os";
-import * as path3 from "node:path";
+import * as path4 from "node:path";
 import { fileURLToPath } from "node:url";
 var DEFAULT_PARALLEL_THRESHOLD_BYTES = 2 * 1024 * 1024;
 var DEFAULT_PARALLEL_FILE_THRESHOLD = 200;
@@ -3231,7 +3295,7 @@ async function enumerateFiles(options, baseDir) {
   for (const rel of rels) {
     let size = 0;
     try {
-      size = (await stat3(path3.join(baseDir, ...rel.split("/")))).size;
+      size = (await stat3(path4.join(baseDir, ...rel.split("/")))).size;
     } catch {
     }
     sized.push({ rel, size });
@@ -3240,11 +3304,11 @@ async function enumerateFiles(options, baseDir) {
 }
 function workerEntry() {
   const here = fileURLToPath(import.meta.url);
-  const dir = path3.dirname(here);
-  const js = path3.join(dir, "scan-worker.js");
+  const dir = path4.dirname(here);
+  const js = path4.join(dir, "scan-worker.js");
   if (existsSync(js))
     return { entry: js };
-  const ts = path3.join(dir, "scan-worker.ts");
+  const ts = path4.join(dir, "scan-worker.ts");
   if (existsSync(ts))
     return { entry: ts, execArgv: ["--import", "tsx"] };
   return { entry: js };
@@ -3252,8 +3316,8 @@ function workerEntry() {
 async function scanParallel(options) {
   const startedAt = /* @__PURE__ */ new Date();
   const rootStat = await stat3(options.root);
-  const baseDir = rootStat.isFile() ? path3.dirname(options.root) : options.root;
-  if (rootStat.isFile() || options.detectors) {
+  const baseDir = rootStat.isFile() ? path4.dirname(options.root) : options.root;
+  if (rootStat.isFile() || options.detectors || options.cacheFile) {
     return scan(options);
   }
   const files = await enumerateFiles(options, baseDir);
@@ -3370,8 +3434,8 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
 }
 
 // ../core/dist/baseline.js
-import { createHash } from "node:crypto";
-import { readFile as readFile2, writeFile } from "node:fs/promises";
+import { createHash as createHash2 } from "node:crypto";
+import { readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
 var BASELINE_VERSION = 1;
 function normalizeSnippet(snippet) {
   if (!snippet)
@@ -3381,7 +3445,7 @@ function normalizeSnippet(snippet) {
 function fingerprintFinding(f) {
   const snippet = normalizeSnippet(f.location.snippet);
   const input = `${f.ruleId}|${f.location.file}|${snippet}`;
-  return createHash("sha256").update(input, "utf8").digest("hex");
+  return createHash2("sha256").update(input, "utf8").digest("hex");
 }
 function baselineFromFindings(findings) {
   const set = /* @__PURE__ */ new Set();
@@ -3413,10 +3477,10 @@ function coerceBaseline(value) {
   const fingerprints = Array.isArray(obj.fingerprints) ? obj.fingerprints.filter((x) => typeof x === "string") : [];
   return { version, fingerprints };
 }
-async function loadBaseline(path4) {
+async function loadBaseline(path5) {
   let text;
   try {
-    text = await readFile2(path4, "utf8");
+    text = await readFile3(path5, "utf8");
   } catch {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
@@ -3426,9 +3490,9 @@ async function loadBaseline(path4) {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
 }
-async function saveBaseline(path4, findings) {
+async function saveBaseline(path5, findings) {
   const baseline = baselineFromFindings(findings);
-  await writeFile(path4, `${JSON.stringify(baseline, null, 2)}
+  await writeFile2(path5, `${JSON.stringify(baseline, null, 2)}
 `, "utf8");
   return baseline;
 }
@@ -3717,7 +3781,7 @@ function toJson(result, opts) {
 }
 
 // ../core/dist/cbom.js
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 function primitiveFor(category) {
   switch (category) {
     case "kem":
@@ -3756,7 +3820,7 @@ function classicalSecurityLevelFor(algorithm) {
   }
 }
 function bomRef(key) {
-  return `crypto:${createHash2("sha256").update(key, "utf8").digest("hex").slice(0, 16)}`;
+  return `crypto:${createHash3("sha256").update(key, "utf8").digest("hex").slice(0, 16)}`;
 }
 function toCbom(result) {
   const groups = /* @__PURE__ */ new Map();
@@ -3824,7 +3888,7 @@ function toCbom(result) {
   };
 }
 function stableUuid(result) {
-  const h = createHash2("sha256").update(`${result.root}|${result.toolVersion}|${result.findings.length}`, "utf8").digest("hex");
+  const h = createHash3("sha256").update(`${result.root}|${result.toolVersion}|${result.findings.length}`, "utf8").digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
@@ -3834,22 +3898,22 @@ function applyBaseline2(findings, baseline) {
   const { newFindings, suppressed } = applyBaseline(findings, resolved);
   return { kept: newFindings, suppressed };
 }
-async function readBaseline(path4) {
-  const { readFile: readFile4 } = await import("node:fs/promises");
+async function readBaseline(path5) {
+  const { readFile: readFile5 } = await import("node:fs/promises");
   let raw;
   try {
-    raw = await readFile4(path4, "utf8");
+    raw = await readFile5(path5, "utf8");
   } catch (cause) {
-    throw new Error(`could not read baseline file "${path4}": ${errMessage(cause)}`);
+    throw new Error(`could not read baseline file "${path5}": ${errMessage(cause)}`);
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    throw new Error(`baseline file "${path4}" is not valid JSON: ${errMessage(cause)}`);
+    throw new Error(`baseline file "${path5}" is not valid JSON: ${errMessage(cause)}`);
   }
   if (!isBaselineFile(parsed)) {
-    throw new Error(`baseline file "${path4}" is missing a string "fingerprints" array`);
+    throw new Error(`baseline file "${path5}" is missing a string "fingerprints" array`);
   }
   return new Set(parsed.fingerprints);
 }
@@ -4029,6 +4093,8 @@ function toScanOptions(options) {
   if (options.disabledRules && options.disabledRules.length > 0) {
     scanOptions.disabledRules = options.disabledRules;
   }
+  if (options.cacheFile)
+    scanOptions.cacheFile = options.cacheFile;
   return scanOptions;
 }
 async function runQscan(opts, hooks = {}) {
@@ -4258,7 +4324,7 @@ async function readPullRequestContext(env = process.env) {
     if (!repository || !eventPath) return void 0;
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) return void 0;
-    const payload = JSON.parse(await readFile3(eventPath, "utf8"));
+    const payload = JSON.parse(await readFile4(eventPath, "utf8"));
     const prNumber = payload.pull_request?.number ?? payload.number;
     if (typeof prNumber !== "number") return void 0;
     const apiUrl = env["GITHUB_API_URL"] || "https://api.github.com";
@@ -4344,8 +4410,8 @@ async function run(env = process.env) {
   const baseline = inputs.baseline ? await loadBaselineSet(inputs.baseline, env) : { version: 1, fingerprints: [] };
   const { newFindings } = applyBaseline(result.findings, baseline);
   const outputPath = resolveInWorkspace(inputs.output, env);
-  await mkdir(dirname3(outputPath), { recursive: true });
-  await writeFile2(
+  await mkdir2(dirname4(outputPath), { recursive: true });
+  await writeFile3(
     outputPath,
     renderReportWithOptions(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
     "utf8"

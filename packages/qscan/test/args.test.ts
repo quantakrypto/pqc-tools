@@ -10,6 +10,7 @@ import {
   asFormat,
   asInt,
   asSeverity,
+  DEFAULT_CACHE_FILE,
   defaultOptions,
   meetsThreshold,
   parseArgs,
@@ -27,6 +28,16 @@ test("--top parses a finding count (and defaults to undefined)", () => {
   assert.equal(runOptions([]).topN, undefined);
   assert.equal(runOptions(["--top", "25"]).topN, 25);
   assert.equal(runOptions(["--top=3"]).topN, 3);
+});
+
+test("--cache takes an optional path (default when bare, doesn't swallow a flag)", () => {
+  assert.equal(runOptions([]).cacheFile, undefined);
+  assert.equal(runOptions(["--cache"]).cacheFile, DEFAULT_CACHE_FILE);
+  assert.equal(runOptions(["--cache", ".mycache.json"]).cacheFile, ".mycache.json");
+  assert.equal(runOptions(["--cache=.x.json"]).cacheFile, ".x.json");
+  const o = runOptions(["--cache", "--quiet"]);
+  assert.equal(o.cacheFile, DEFAULT_CACHE_FILE, "bare --cache before a flag uses the default");
+  assert.equal(o.quiet, true);
 });
 
 test("defaults are applied when no args are given", () => {
