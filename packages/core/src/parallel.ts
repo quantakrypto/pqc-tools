@@ -21,6 +21,7 @@ import { walkFiles } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import { buildInventory } from "./inventory.js";
 import { compareFindings, filterExplicitFileList, scan } from "./scan.js";
+import { AbortError, BudgetExceededError } from "./errors.js";
 import { VERSION } from "./version.js";
 
 /** One unit of work dispatched to a worker. */
@@ -180,6 +181,20 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
 
   const files = await enumerateFiles(options, baseDir);
 
+  // Budget + cancellation parity with the serial path. The parallel path
+  // enumerates upfront, so budgets are enforced against the whole file set
+  // before any worker is dispatched.
+  if (options.signal?.aborted) throw new AbortError();
+  if (typeof options.maxFiles === "number" && files.length > options.maxFiles) {
+    throw new BudgetExceededError(`maxFiles budget exceeded (limit: ${options.maxFiles}).`);
+  }
+  if (typeof options.maxBytes === "number") {
+    const totalBytes = files.reduce((n, f) => n + f.size, 0);
+    if (totalBytes > options.maxBytes) {
+      throw new BudgetExceededError(`maxBytes budget exceeded (limit: ${options.maxBytes}).`);
+    }
+  }
+
   if (!shouldParallelize(options, files)) {
     // In-process: reuse the exact serial path over the same file list.
     return scan({ ...options, files: files.map((f) => f.rel) });
@@ -216,9 +231,12 @@ export async function scanParallel(options: ParallelScanOptions): Promise<ScanRe
       chunks,
       concurrency,
       options.onFile,
+      options.signal,
     );
-  } catch {
-    // Any worker failure → safe fallback to the serial path.
+  } catch (err) {
+    // Cancellation / budget overflow must propagate, not silently degrade.
+    if (err instanceof AbortError || err instanceof BudgetExceededError) throw err;
+    // Any other worker failure → safe fallback to the serial path.
     return scan({ ...options, files: files.map((f) => f.rel) });
   }
 
@@ -264,6 +282,7 @@ function runPool(
   chunks: ScanChunk[],
   concurrency: number,
   onFile?: (file: string) => void,
+  signal?: AbortSignal,
 ): Promise<ChunkResult[]> {
   return new Promise((resolve, reject) => {
     const results: ChunkResult[] = new Array(chunks.length);
@@ -272,9 +291,26 @@ function runPool(
     let failed = false;
     const workers: Array<NodeWorker> = [];
 
+    const onAbort = (): void => {
+      if (failed) return;
+      failed = true;
+      cleanup();
+      reject(new AbortError());
+    };
+
     const cleanup = () => {
+      if (signal) signal.removeEventListener("abort", onAbort);
       for (const w of workers) void w.terminate();
     };
+
+    // Cooperative cancellation: stop dispatching and tear down on abort.
+    if (signal) {
+      if (signal.aborted) {
+        reject(new AbortError());
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
 
     const dispatch = (w: NodeWorker): void => {
       if (failed) return;
