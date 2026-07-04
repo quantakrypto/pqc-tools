@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/mcp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "quantakrypto MCP — post-quantum readiness for AI coding agents via the Model Context Protocol. Zero runtime dependencies (stdio JSON-RPC implemented in-house).",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
@@ -38,7 +38,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@quantakrypto/core": "0.4.1"
+    "@quantakrypto/core": "0.4.2"
   },
   "scripts": {
     "build": "tsc -b",

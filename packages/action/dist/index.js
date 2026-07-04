@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.4.1";
+    VERSION = "0.4.2";
   }
 });
 
