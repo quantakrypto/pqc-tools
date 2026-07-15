@@ -264,7 +264,7 @@ async function loadLabels(): Promise<Labels> {
  * but the expected (documented) false negatives do not. Update when the corpus or
  * detectors change, per docs/validation/recall-benchmark.md.
  */
-const RECALL_FLOOR = 0.68; // measured 0.711; floor sits just below so real regressions fail.
+const RECALL_FLOOR = 0.78; // measured 0.813; floor sits just below so real regressions fail.
 
 test("recall benchmark: detection recall over real-world idioms", async () => {
   const labels = await loadLabels();

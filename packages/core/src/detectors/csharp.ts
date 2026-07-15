@@ -35,6 +35,21 @@ const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
 // Microsoft.IdentityModel passes the alg as an IDENTIFIER, not a string literal:
 // SecurityAlgorithms.RsaSha256 / SecurityAlgorithms.EcdsaSha256.
 const RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
+// BouncyCastle (Org.BouncyCastle) modern-curve and finite-field DH primitives,
+// which System.Security.Cryptography does not expose directly. Each regex is
+// anchored to the distinctive BouncyCastle class names for one family so it
+// can't misfire on unrelated identifiers:
+//   - Ed25519KeyPairGenerator / Ed25519Signer / Ed25519PrivateKeyParameters → EdDSA
+//   - X25519KeyPairGenerator / X25519Agreement / X25519PrivateKeyParameters → X25519
+//   - X448KeyPairGenerator / X448Agreement / X448PrivateKeyParameters → X448
+//   - DHParametersGenerator / DHBasicAgreement / DH(Basic)KeyPairGenerator / DHParameters → DH
+// The trailing \b keeps each token whole (e.g. Ed25519KeyGenerationParameters,
+// X25519PublicKeyParameters and DHKeyGenerationParameters are NOT matched).
+const RE_CS_BC_EDDSA = /\bEd25519(?:KeyPairGenerator|Signer|PrivateKeyParameters)\b/g;
+const RE_CS_BC_X25519 = /\bX25519(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
+const RE_CS_BC_X448 = /\bX448(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
+const RE_CS_BC_DH =
+  /\bDH(?:ParametersGenerator|BasicAgreement|BasicKeyPairGenerator|KeyPairGenerator|Parameters)\b/g;
 
 const RULE_CS_RSA: RuleMeta = {
   id: "csharp-rsa",
@@ -128,6 +143,61 @@ const RULE_CS_JWT_ALG: RuleMeta = {
     "A classical JWT/JOSE signature algorithm (.NET, identifier form) is used, forgeable by a quantum attacker.",
   remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
 };
+const RULE_CS_BC_EDDSA: RuleMeta = {
+  id: "csharp-bouncycastle-eddsa",
+  title: "C# Ed25519 signature (BouncyCastle)",
+  description:
+    "Org.BouncyCastle Ed25519KeyPairGenerator / Ed25519Signer / Ed25519PrivateKeyParameters",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical Ed25519 signing (BouncyCastle) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_CS_BC_X25519: RuleMeta = {
+  id: "csharp-bouncycastle-x25519",
+  title: "C# X25519 key agreement (BouncyCastle)",
+  description:
+    "Org.BouncyCastle X25519KeyPairGenerator / X25519Agreement / X25519PrivateKeyParameters",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "X25519 Diffie-Hellman key agreement (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_CS_BC_X448: RuleMeta = {
+  id: "csharp-bouncycastle-x448",
+  title: "C# X448 key agreement (BouncyCastle)",
+  description: "Org.BouncyCastle X448KeyPairGenerator / X448Agreement / X448PrivateKeyParameters",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "X448",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "X448 Diffie-Hellman key agreement (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_CS_BC_DH: RuleMeta = {
+  id: "csharp-bouncycastle-dh",
+  title: "C# finite-field Diffie-Hellman (BouncyCastle)",
+  description:
+    "Org.BouncyCastle DHParametersGenerator / DHBasicAgreement / DHKeyPairGenerator / DHParameters",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Finite-field Diffie-Hellman (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
 
 /** Detects classical asymmetric crypto in C# (System.Security.Cryptography). */
 export const csharpDetector: Detector = {
@@ -144,6 +214,10 @@ export const csharpDetector: Detector = {
     RULE_CS_TLS_CERT,
     RULE_CS_TLS_LEGACY,
     RULE_CS_JWT_ALG,
+    RULE_CS_BC_EDDSA,
+    RULE_CS_BC_X25519,
+    RULE_CS_BC_X448,
+    RULE_CS_BC_DH,
   ],
   appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -164,6 +238,12 @@ export const csharpDetector: Detector = {
     add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
     // Identifier-form JWT/JOSE signature algorithms (Microsoft.IdentityModel).
     add(RE_CS_JWT_ALG, RULE_CS_JWT_ALG);
+    // BouncyCastle (Org.BouncyCastle) curve / finite-field DH primitives that
+    // System.Security.Cryptography does not expose directly.
+    add(RE_CS_BC_EDDSA, RULE_CS_BC_EDDSA);
+    add(RE_CS_BC_X25519, RULE_CS_BC_X25519);
+    add(RE_CS_BC_X448, RULE_CS_BC_X448);
+    add(RE_CS_BC_DH, RULE_CS_BC_DH);
     return findings;
   },
 };

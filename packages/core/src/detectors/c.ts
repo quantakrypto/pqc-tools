@@ -30,8 +30,14 @@ const RE_C_EVP_KEYGEN = /\bEVP_PKEY_(?:Q_)?keygen\s*\(|\bEVP_PKEY_paramgen\s*\(/
 const RE_C_EVP_DERIVE = /\bEVP_PKEY_derive\s*\(/g;
 const RE_C_EVP_CRYPT = /\bEVP_PKEY_(?:encrypt|decrypt)\s*\(/g;
 const RE_C_EVP_SIGN = /\bEVP_DigestSign(?:Init)?\s*\(|\bEVP_DigestVerify(?:Init)?\s*\(/g;
-const RE_C_SODIUM_BOX = /\bcrypto_box_(?:seed_)?keypair\s*\(/g;
-const RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:seed_)?keypair\s*\(/g;
+// X25519: crypto_box / crypto_kx key pairs (incl. the fully-qualified
+// curve25519xsalsa20poly1305 form) plus the low-level crypto_scalarmult
+// primitive — all classical Curve25519 key agreement (audit recall gap).
+const RE_C_SODIUM_BOX =
+  /\bcrypto_box_(?:curve25519xsalsa20poly1305_)?(?:seed_)?keypair\s*\(|\bcrypto_kx_keypair\s*\(|\bcrypto_scalarmult_(?:curve25519|base)\s*\(/g;
+// EdDSA: crypto_sign key pairs, including the explicit _ed25519 forms and the
+// deterministic seed_keypair variants (audit recall gap: _ed25519_keypair).
+const RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:ed25519_)?(?:seed_)?keypair\s*\(/g;
 // Legacy verify / decrypt counterparts to the *_sign / *_encrypt rules above
 // (audit F4-c): the classic OpenSSL RSA/ECDSA verification and RSA raw
 // decryption call forms that the modern EVP + legacy keygen rules don't cover.
@@ -180,7 +186,8 @@ const RULE_C_EVP_SIGN: RuleMeta = {
 const RULE_C_SODIUM_BOX: RuleMeta = {
   id: "c-libsodium-box",
   title: "libsodium X25519 key pair",
-  description: "libsodium crypto_box_keypair (X25519 key agreement)",
+  description:
+    "libsodium crypto_box / crypto_kx keypair + crypto_scalarmult (X25519 key agreement)",
   category: "key-exchange",
   severity: "medium",
   confidence: "high",
@@ -193,7 +200,7 @@ const RULE_C_SODIUM_BOX: RuleMeta = {
 const RULE_C_SODIUM_SIGN: RuleMeta = {
   id: "c-libsodium-sign",
   title: "libsodium Ed25519 key pair",
-  description: "libsodium crypto_sign_keypair (Ed25519 signatures)",
+  description: "libsodium crypto_sign(_ed25519)(_seed)_keypair (Ed25519 signatures)",
   category: "signature",
   severity: "low",
   confidence: "high",

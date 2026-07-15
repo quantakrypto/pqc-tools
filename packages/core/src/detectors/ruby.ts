@@ -29,6 +29,10 @@ const RE_RB_DH_AGREE = /\bdh_compute_key\s*\(/g;
 const RE_RB_PKEY_READ = /\bOpenSSL::PKey\.read\s*\(/g;
 // Ed25519 signing key via the generic generate_key factory.
 const RE_RB_ED25519 = /\bOpenSSL::PKey\.generate_key\s*\(\s*["']ED25519["']/g;
+// `ed25519` gem — Ed25519::SigningKey / VerifyKey (signature keys).
+const RE_RB_ED25519_GEM = /\bEd25519::(?:SigningKey|VerifyKey)\b/g;
+// `rbnacl` (libsodium) — Curve25519/X25519 key agreement: PrivateKey, Box, GroupElement.
+const RE_RB_RBNACL = /\bRbNaCl::(?:PrivateKey|Box|GroupElement)\b/g;
 // TLS peer verification disabled (mirrors the JS tlsDetector rejectUnauthorized rule).
 const RE_RB_TLS_VERIFY_NONE = /\bOpenSSL::SSL::VERIFY_NONE\b/g;
 
@@ -140,6 +144,33 @@ const RULE_RB_ED25519: RuleMeta = {
     "Generates an Ed25519 signing key (Ruby/OpenSSL) — modern but classical, and forgeable by a quantum attacker.",
   remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
 };
+const RULE_RB_ED25519_GEM: RuleMeta = {
+  id: "ruby-ed25519-gem",
+  title: "Ruby Ed25519 signature (ed25519 gem)",
+  description: "ed25519 gem Ed25519::SigningKey / Ed25519::VerifyKey",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ed25519 signing/verification via the `ed25519` gem — modern but classical, and forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_RB_RBNACL: RuleMeta = {
+  id: "ruby-rbnacl",
+  title: "Ruby X25519 key agreement (rbnacl)",
+  description: "rbnacl (libsodium) RbNaCl::PrivateKey / Box / GroupElement",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Curve25519/X25519 key agreement via the `rbnacl` gem (libsodium) — modern but classical key agreement, harvest-now-decrypt-later exposed.",
+};
 const RULE_RB_TLS_VERIFY_NONE: RuleMeta = {
   id: "ruby-tls-verify-none",
   title: "Ruby TLS certificate verification disabled",
@@ -168,6 +199,8 @@ export const rubyDetector: Detector = {
     RULE_RB_DH_AGREE,
     RULE_RB_PKEY_READ,
     RULE_RB_ED25519,
+    RULE_RB_ED25519_GEM,
+    RULE_RB_RBNACL,
     RULE_RB_TLS_VERIFY_NONE,
   ],
   appliesTo: (f) => hasExtension(f, RUBY_EXTENSIONS),
@@ -187,6 +220,8 @@ export const rubyDetector: Detector = {
     add(RE_RB_DH_AGREE, RULE_RB_DH_AGREE);
     add(RE_RB_PKEY_READ, RULE_RB_PKEY_READ);
     add(RE_RB_ED25519, RULE_RB_ED25519);
+    add(RE_RB_ED25519_GEM, RULE_RB_ED25519_GEM);
+    add(RE_RB_RBNACL, RULE_RB_RBNACL);
     add(RE_RB_TLS_VERIFY_NONE, RULE_RB_TLS_VERIFY_NONE);
     return findings;
   },

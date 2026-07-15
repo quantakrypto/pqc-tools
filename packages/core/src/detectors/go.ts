@@ -56,6 +56,14 @@ const RE_GO_ECDH_CLASSIC = /\belliptic\.GenerateKey\s*\(|\.ScalarMult\s*\(/g;
 // certificate verification and a legacy TLS/SSL version floor.
 const RE_GO_TLS_SKIP_VERIFY = /InsecureSkipVerify:\s*true/g;
 const RE_GO_TLS_LEGACY_VERSION = /MinVersion:\s*tls\.Version(?:TLS1[01]|SSL30)/g;
+// Identifier-form golang-jwt signing methods (audit gap: the quoted "RS256" alg
+// token is caught by the language-agnostic jwt-jose detector, but golang-jwt
+// passes the alg as an EXPORTED IDENTIFIER — `jwt.SigningMethodRS256`,
+// `jwt.SigningMethodES256`, `jwt.SigningMethodEdDSA` — which the string rule
+// misses. RS*/PS* → RSA, ES* → ECDSA, EdDSA → EdDSA. The `\b`s keep it precise:
+// HS* HMAC methods and longer look-alikes (`SigningMethodRS2560`) do not match.
+const RE_GO_JWT_SIGNINGMETHOD =
+  /\bSigningMethod(RS|PS|ES)(?:256|384|512)\b|\bSigningMethodEdDSA\b/g;
 
 /* -------------------------------------------------------------------------- */
 /* Rule catalog                                                               */
@@ -252,6 +260,20 @@ const RULE_GO_TLS_LEGACY_VERSION: RuleMeta = {
     "MinVersion pins a deprecated TLS/SSL floor (TLS 1.0/1.1 or SSL 3.0) in Go; require TLS 1.3.",
   remediation: "Set MinVersion: tls.VersionTLS13 and prefer PQC-hybrid key exchange.",
 };
+const RULE_GO_JWT_SIGNINGMETHOD: RuleMeta = {
+  id: "go-jwt-signingmethod",
+  title: "Go identifier-form JWT signing method",
+  description: "golang-jwt SigningMethodRS/PS/ES* / SigningMethodEdDSA identifier",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown", // representative umbrella; refined per-match (RSA/ECDSA/EdDSA)
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A classical JWT signature algorithm (Go golang-jwt, identifier form) is used, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
+};
 
 /** Detects classical asymmetric crypto in Go source (crypto/* standard library). */
 export const goDetector: Detector = {
@@ -275,6 +297,7 @@ export const goDetector: Detector = {
     RULE_GO_ECDH_CLASSIC,
     RULE_GO_TLS_SKIP_VERIFY,
     RULE_GO_TLS_LEGACY_VERSION,
+    RULE_GO_JWT_SIGNINGMETHOD,
   ],
   appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -301,6 +324,21 @@ export const goDetector: Detector = {
     add(RE_GO_ECDH_CLASSIC, RULE_GO_ECDH_CLASSIC);
     add(RE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_SKIP_VERIFY);
     add(RE_GO_TLS_LEGACY_VERSION, RULE_GO_TLS_LEGACY_VERSION);
+
+    // Identifier-form golang-jwt signing methods (jwt.SigningMethodRS256, …).
+    // Refine the umbrella "unknown" algorithm per match: m[1] is the RS/PS/ES
+    // prefix (RS/PS → RSA, ES → ECDSA); when it is undefined the EdDSA branch
+    // matched, so the family is EdDSA.
+    eachMatch(RE_GO_JWT_SIGNINGMETHOD, content, (m) => {
+      const algorithm: Finding["algorithm"] = m[1] === "ES" ? "ECDSA" : m[1] ? "RSA" : "EdDSA";
+      findings.push(
+        findingFromRule(
+          RULE_GO_JWT_SIGNINGMETHOD,
+          { file, content, index: m.index, matchLength: m[0].length },
+          { algorithm },
+        ),
+      );
+    });
 
     return findings;
   },

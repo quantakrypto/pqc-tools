@@ -26,6 +26,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   cross-language TLS gap the legacy-*version* rule missed. Closes the first
   cluster the recall benchmark surfaced: **config recall 0.74 → 0.96, overall
   0.645 → 0.711**, tuned benchmark held at 1.000.
+- **Library-form detector coverage** — the second recall cluster, closed across
+  six detectors: Go `jwt.SigningMethod*` and Rust `Algorithm::RS256/ES256`
+  identifier forms; libsodium `crypto_sign_ed25519_keypair` / `crypto_kx` /
+  `scalarmult` (C); the `ed25519` + `rbnacl` Ruby gems; BouncyCastle
+  `Ed25519`/`X25519`/`X448`/DH lightweight classes (Java + C#, incl. the bare
+  Kotlin-constructor form); and the `cloudflare/circl` + decred `secp256k1/v4`
+  Go modules in the dependency catalog. **uncommon recall 0.66 → 0.90, overall
+  0.711 → 0.813**; tuned benchmark held at 1.000, no new false positives. The
+  residual 31 FNs are the lexical ceiling (runtime-constructed algorithm names,
+  import aliasing) — out of reach without dataflow.
 
 ## [0.4.3] — 2026-07-15
 

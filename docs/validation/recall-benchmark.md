@@ -61,27 +61,28 @@ guard; the enumerated false negatives are the point.
 
 ## Current measured results
 
-2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap
-(baseline before that fix was 0.645):
+2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap and the
+library-form gaps (initial baseline was 0.645):
 
-**Overall: detection recall 0.711** (118 / 166; 8 caught unclassified; 48 false
+**Overall: detection recall 0.813** (135 / 166; 8 caught unclassified; 31 false
 negatives).
 
 | By language | recall |     | By difficulty | recall |
 | ----------- | ------ | --- | ------------- | ------ |
-| python      | 0.952  |     | config        | 0.960  |
-| js          | 0.895  |     | canonical     | 0.811  |
-| c           | 0.867  |     | uncommon      | 0.659  |
-| rust        | 0.667  |     | adversarial   | 0.368  |
-| ruby        | 0.640  |     | aliased       | 0.316  |
-| go          | 0.609  |     |               |        |
-| csharp      | 0.611  |     |               |        |
-| java        | 0.556  |     |               |        |
+| python      | 0.952  |     | config        | 1.000  |
+| c           | 0.933  |     | uncommon      | 0.902  |
+| js          | 0.895  |     | canonical     | 0.892  |
+| csharp      | 0.833  |     | adversarial   | 0.474  |
+| ruby        | 0.800  |     | aliased       | 0.316  |
+| rust        | 0.778  |     |               |        |
+| go          | 0.739  |     |               |        |
+| java        | 0.667  |     |               |        |
 
-The shape is the finding: the scanner is strong on **canonical** (0.81) and
-**config** (0.96) idioms, and weak where the algorithm identity is **obscured** —
-`aliased` (0.32, renamed imports / wrappers) and `adversarial` (0.37, algorithm
-names assembled at runtime). Those two bands are the lexical ceiling.
+The shape is the finding: the scanner catches **config** (1.00), **uncommon**
+(0.90), and **canonical** (0.89) idioms well, and is bounded where the algorithm
+identity is **obscured** — `aliased` (0.32, renamed imports / wrappers) and
+`adversarial` (0.47, algorithm names assembled at runtime). Those two bands are
+the lexical ceiling, and they are where the residual 31 false negatives live.
 
 ## What the false negatives tell us
 
@@ -96,20 +97,27 @@ Grouping the 59 misses by root cause separates the *closable* gaps from the
   Shor-broken key exchange the legacy-*version* rule missed. This lifted config
   recall 0.74 → 0.96 and overall 0.645 → 0.711 (the audit's "cross-language TLS"
   gap).
-- **Library/identifier forms not yet covered** (next up): Go/Rust JWT `SigningMethodRS256` /
-  `Algorithm::RS256` identifier forms; libsodium `crypto_sign_ed25519_keypair`;
-  the `ed25519`/`rbnacl` Ruby gems; BouncyCastle `Ed25519`/`X25519`/`X448`/DH
-  agreement classes in Java/C#. Each is a bounded, additive rule.
+- ✅ **Library/identifier forms** (was ~15 misses, **closed**): Go/Rust JWT
+  `SigningMethodRS256` / `Algorithm::RS256` identifier forms; libsodium
+  `crypto_sign_ed25519_keypair`; the `ed25519`/`rbnacl` Ruby gems; BouncyCastle
+  `Ed25519`/`X25519`/`X448`/DH lightweight classes in Java/C#; and the
+  `cloudflare/circl` + decred `secp256k1/v4` Go modules in the dependency catalog.
+  This lifted uncommon recall 0.66 → 0.90 and overall 0.711 → 0.813.
 
-**The lexical ceiling (documented, not chased):**
+**The lexical ceiling (documented, not chased) — where the residual 31 FNs live:**
 
 - **Algorithm identity constructed at runtime** — `"Ed" + "25519"`, `append("R")
   .append("s").append("a")`, `const_get('DSA')`, `string.Concat(...)`, curve names
   resolved from a config table. A regex scanner cannot follow arbitrary string
   construction; catching these would need dataflow. Surfaced honestly as the
-  `adversarial` recall (0.37).
+  `adversarial` recall (0.47).
 - **Import aliasing / re-export** — `import rsa as _rsa`, `generateKeyPairSync as
   gk`, dot-imports. The call is renamed away from the token the rule keys on.
+- **Family-classification nuance** — a couple of residual FNs are cases where the
+  crypto *was* detected but under a sibling family: an EC key generated for ECDSA
+  signing is flagged as `ECDH` (EC keygen is ambiguous, so the scanner reports the
+  key-agreement/HNDL family). The metric counts these strictly as misses of the
+  labeled family; the underlying key was surfaced.
 
 The benchmark exists so these numbers move deliberately, with evidence, rather
 than being asserted.

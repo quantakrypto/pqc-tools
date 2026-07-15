@@ -37,6 +37,16 @@ const RE_JAVA_GETINSTANCE =
 const RE_JAVA_BC =
   /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
 
+// BouncyCastle lightweight-API curve/EdDSA classes as a BARE constructor call —
+// the Kotlin form (`X448KeyPairGenerator()`, no `new` keyword). RE_JAVA_BC above
+// only matches the Java `new <Class>(` form, so Kotlin sources that drive the
+// lightweight API directly are missed. The negative lookbehind `(?<!\bnew\s+)`
+// keeps this additive: `new X448Agreement(` stays with RE_JAVA_BC (java-xdh),
+// while bare `X448Agreement(` routes to the family-specific rules below. Scoped
+// to the exact X448/X25519/Ed448/Ed25519 class names to stay precise.
+const RE_JAVA_BC_CURVE =
+  /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
+
 // Insecure JSSE / TLS configuration expressed in Java source. Mirrors the JS
 // tlsDetector in source.ts (category "tls"): a legacy SSL/TLS protocol version
 // requested from SSLContext, and TLS hostname verification neutered via an
@@ -175,6 +185,49 @@ const RULE_JAVA_EDDSA: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   message: "Ed25519/Ed448 (Java/JCA) is a modern but still classical signature scheme.",
 };
+// BouncyCastle lightweight-API rules for bare (Kotlin-form) constructor calls.
+// Split by family so X448 and X25519 report their own algorithm string (java-xdh
+// lumps both under "X25519"). Severity/CWE copied from the JCA siblings above.
+const RULE_JAVA_BC_X448: RuleMeta = {
+  id: "java-bc-x448",
+  title: "Java/Kotlin X448 key agreement (BouncyCastle lightweight API)",
+  description: "BouncyCastle X448KeyPairGenerator / X448Agreement / X448PrivateKeyParameters",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X448",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "X448 (Java/Kotlin, BouncyCastle lightweight API) is modern but still classical key agreement — harvest-now-decrypt-later.",
+};
+const RULE_JAVA_BC_X25519: RuleMeta = {
+  id: "java-bc-x25519",
+  title: "Java/Kotlin X25519 key agreement (BouncyCastle lightweight API)",
+  description: "BouncyCastle X25519KeyPairGenerator / X25519Agreement",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "X25519 (Java/Kotlin, BouncyCastle lightweight API) is modern but still classical key agreement — harvest-now-decrypt-later.",
+};
+const RULE_JAVA_BC_EDDSA: RuleMeta = {
+  id: "java-bc-eddsa",
+  title: "Java/Kotlin Ed25519/Ed448 signature (BouncyCastle lightweight API)",
+  description:
+    "BouncyCastle Ed448KeyPairGenerator / Ed448Signer / Ed25519KeyPairGenerator / Ed25519Signer",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ed25519/Ed448 (Java/Kotlin, BouncyCastle lightweight API) is a modern but still classical signature scheme.",
+};
 const RULE_JAVA_TLS_LEGACY: RuleMeta = {
   id: "java-tls-legacy-version",
   title: "Legacy SSL/TLS version requested",
@@ -259,6 +312,19 @@ const BC_CLASS_RULES: Record<string, RuleMeta> = {
   OAEPEncoding: RULE_JAVA_RSA,
 };
 
+/** BouncyCastle lightweight-API bare-constructor class name → family rule. */
+const BC_CURVE_CLASS_RULES: Record<string, RuleMeta> = {
+  X448KeyPairGenerator: RULE_JAVA_BC_X448,
+  X448Agreement: RULE_JAVA_BC_X448,
+  X448PrivateKeyParameters: RULE_JAVA_BC_X448,
+  X25519KeyPairGenerator: RULE_JAVA_BC_X25519,
+  X25519Agreement: RULE_JAVA_BC_X25519,
+  Ed448KeyPairGenerator: RULE_JAVA_BC_EDDSA,
+  Ed448Signer: RULE_JAVA_BC_EDDSA,
+  Ed25519KeyPairGenerator: RULE_JAVA_BC_EDDSA,
+  Ed25519Signer: RULE_JAVA_BC_EDDSA,
+};
+
 /** Detects classical asymmetric crypto in Java / Kotlin (JCA + BouncyCastle). */
 export const javaDetector: Detector = {
   id: "java-crypto",
@@ -275,6 +341,9 @@ export const javaDetector: Detector = {
     RULE_JAVA_DH,
     RULE_JAVA_XDH,
     RULE_JAVA_EDDSA,
+    RULE_JAVA_BC_X448,
+    RULE_JAVA_BC_X25519,
+    RULE_JAVA_BC_EDDSA,
     RULE_JAVA_TLS_LEGACY,
     RULE_JAVA_TLS_NOVERIFY,
     RULE_JAVA_JWT_ALG,
@@ -293,6 +362,18 @@ export const javaDetector: Detector = {
 
     eachMatch(RE_JAVA_BC, content, (m) => {
       const rule = BC_CLASS_RULES[m[1]];
+      if (!rule) return;
+      findings.push(
+        findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
+      );
+    });
+
+    // BouncyCastle lightweight-API classes as a bare constructor call (Kotlin
+    // form, no `new`). RE_JAVA_BC_CURVE's negative lookbehind excludes the
+    // `new <Class>(` form already handled above, so this only adds the missed
+    // 448/25519 Kotlin-style matches — no double-counting.
+    eachMatch(RE_JAVA_BC_CURVE, content, (m) => {
+      const rule = BC_CURVE_CLASS_RULES[m[1]];
       if (!rule) return;
       findings.push(
         findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),

@@ -498,6 +498,20 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["RSA", "ECDSA", "ECDH"],
     severity: "medium",
   },
+  {
+    name: "github.com/cloudflare/circl",
+    ecosystem: "go",
+    reason: "Cloudflare CIRCL — classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256).",
+    algorithms: ["ECDH", "EdDSA"],
+    severity: "medium",
+  },
+  {
+    name: "github.com/decred/dcrd/dcrec/secp256k1/v4",
+    ecosystem: "go",
+    reason: "decred secp256k1 — classical ECDSA/ECDH on the secp256k1 curve (blockchain keys).",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "medium",
+  },
 
   // --- Maven (Java) ---
   {

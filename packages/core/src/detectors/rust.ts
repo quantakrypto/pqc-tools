@@ -12,7 +12,7 @@
  * Rust TLS certificate-validation bypasses (reqwest / rustls) — not quantum but
  * mirrors the JS tlsDetector's cert-validation category.
  */
-import type { Detector, Finding, RuleMeta } from "../types.js";
+import type { AlgorithmFamily, Detector, Finding, RuleMeta } from "../types.js";
 import { RUST_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION } from "../cwe.js";
 
@@ -41,6 +41,13 @@ const RE_RUST_RING_X25519 = /\bagreement::X25519\b/g;
 // double-matching the qualified forms (e.g. `p256::ecdsa::SigningKey::random`).
 const RE_RUST_BARE_X25519 = /(?<![:\w])EphemeralSecret::new\s*\(/g;
 const RE_RUST_BARE_SIGNINGKEY = /(?<![:\w])SigningKey::(?:generate|random)\s*\(/g;
+// jsonwebtoken crate `Algorithm` enum variants selecting a classical JWT signer:
+// RSASSA-PKCS1 (RS*), RSASSA-PSS (PS*), ECDSA (ES*), and Ed25519 (EdDSA). The
+// `\s*` between `Algorithm` and `::` catches the variant split across lines /
+// routed through a helper (audit token_policy false-negative); the required
+// suffix keeps it off unrelated `Algorithm::` uses (e.g. `HS256` HMAC, which is
+// symmetric and not quantum-vulnerable, or `Algorithm::new`).
+const RE_RUST_JWT_ALG = /\bAlgorithm\s*::(RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\s*::EdDSA\b/g;
 // Rust TLS certificate-validation bypass: reqwest `danger_accept_invalid_certs`
 // and the rustls `.dangerous()` escape hatch. Mirrors the JS tlsDetector.
 const RE_RUST_TLS_ACCEPT_INVALID = /\bdanger_accept_invalid_certs\s*\(\s*true/g;
@@ -203,6 +210,21 @@ const RULE_RUST_BARE_SIGNINGKEY: RuleMeta = {
     "Classical signature key from an unqualified `SigningKey` (ed25519-dalek Ed25519 / k256 ECDSA) — forgeable by a quantum attacker.",
   remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
 };
+const RULE_RUST_JWT_ALGORITHM: RuleMeta = {
+  id: "rust-jwt-algorithm",
+  title: "Rust jsonwebtoken classical signature algorithm",
+  description: "jsonwebtoken Algorithm::{RS,PS,ES}* / Algorithm::EdDSA enum variant",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  // Representative family; refined per-finding (RS*/PS* → RSA, ES* → ECDSA, EdDSA).
+  algorithm: "RSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Selects a classical JWT signature algorithm (jsonwebtoken RS*/PS*/ES*/EdDSA), forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
 const RULE_RUST_TLS_ACCEPT_INVALID: RuleMeta = {
   id: "rust-tls-accept-invalid-certs",
   title: "Rust TLS certificate verification disabled",
@@ -248,6 +270,7 @@ export const rustDetector: Detector = {
     RULE_RUST_RING_X25519,
     RULE_RUST_BARE_X25519,
     RULE_RUST_BARE_SIGNINGKEY,
+    RULE_RUST_JWT_ALGORITHM,
     RULE_RUST_TLS_ACCEPT_INVALID,
     RULE_RUST_TLS_DANGEROUS,
   ],
@@ -272,6 +295,20 @@ export const rustDetector: Detector = {
     add(RE_RUST_RING_X25519, RULE_RUST_RING_X25519);
     add(RE_RUST_BARE_X25519, RULE_RUST_BARE_X25519);
     add(RE_RUST_BARE_SIGNINGKEY, RULE_RUST_BARE_SIGNINGKEY);
+    // jsonwebtoken Algorithm enum variants — resolve the family per match: the
+    // RS*/PS* variants are RSASSA (RSA), ES* is ECDSA, EdDSA is Ed25519.
+    eachMatch(RE_RUST_JWT_ALG, content, (m) => {
+      const prefix = m[1];
+      const algorithm: AlgorithmFamily =
+        prefix === undefined ? "EdDSA" : prefix === "ES" ? "ECDSA" : "RSA";
+      findings.push(
+        findingFromRule(
+          RULE_RUST_JWT_ALGORITHM,
+          { file, content, index: m.index, matchLength: m[0].length },
+          { algorithm },
+        ),
+      );
+    });
     add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
     add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
     return findings;
