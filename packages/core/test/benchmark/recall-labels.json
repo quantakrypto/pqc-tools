@@ -1,0 +1,1062 @@
+{
+  "$comment": "Ground truth for the recall (false-negative depth) benchmark — see docs/validation/recall-benchmark.md and packages/core/test/recall.test.ts. Each file maps to the quantum-vulnerable crypto it TRULY contains, labeled independently of what the detectors match, across a deliberate spread of difficulty (canonical/aliased/uncommon/config/adversarial). Family vocabulary: RSA, DH, ECDH, ECDSA, DSA, EDDSA, X25519, X448, SECP256K1, TLS, SSH, DEP.",
+
+  "recall/js/rsa-keypair-service.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "node:crypto generateKeyPairSync('rsa', {modulusLength:3072})"
+      }
+    ]
+  },
+  "recall/js/ecdh-key-agreement.js": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "ECDH",
+        "difficulty": "canonical",
+        "note": "node crypto createECDH('prime256v1') generateKeys/computeSecret"
+      }
+    ]
+  },
+  "recall/js/webcrypto-ecdsa-signing.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "WebCrypto subtle.generateKey/sign {name:'ECDSA', namedCurve:'P-384'}"
+      }
+    ]
+  },
+  "recall/js/jwt-tokens.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "aliased",
+        "note": "jsonwebtoken jwt.sign algorithm 'RS256'"
+      },
+      { "family": "EDDSA", "difficulty": "aliased", "note": "jose SignJWT alg 'EdDSA' (Ed25519)" }
+    ]
+  },
+  "recall/js/firmware-manifest-signer.js": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "adversarial",
+        "note": "dynamic require('crypto') crypto.sign(null, msg, key) Ed25519 one-shot, multi-line"
+      },
+      {
+        "family": "EDDSA",
+        "difficulty": "adversarial",
+        "note": "verify(null, msg, key, sig) Ed25519 one-shot, multi-line"
+      }
+    ]
+  },
+  "recall/js/ephemeral-x25519.mjs": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "aliased",
+        "note": "aliased import generateKeyPairSync as gk('x25519')"
+      }
+    ]
+  },
+  "recall/js/wallet-signer.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "uncommon",
+        "note": "elliptic new EC('secp256k1') keyFromPrivate().sign()"
+      }
+    ]
+  },
+  "recall/js/dh-modp-params.js": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "node crypto getDiffieHellman('modp14') finite-field DH named group"
+      },
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "node crypto createDiffieHellman(2048) generated params"
+      }
+    ]
+  },
+  "recall/js/tls-server-options.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "https ServerOptions ciphers ECDHE-RSA/DHE-RSA classical suites"
+      },
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "https ServerOptions minVersion/maxVersion pinned to TLSv1.2"
+      }
+    ]
+  },
+  "recall/js/deploy/authorized_keys": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "authorized_keys ssh-rsa public key entry"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "authorized_keys ssh-ed25519 public key entry"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "authorized_keys ecdsa-sha2-nistp256 public key entry"
+      }
+    ]
+  },
+  "recall/js/legacy-payment-gateway/package.json": {
+    "language": "js",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "package.json dependency node-forge" },
+      { "family": "DEP", "difficulty": "config", "note": "package.json dependency elliptic" },
+      { "family": "DEP", "difficulty": "config", "note": "package.json dependency jsonwebtoken" }
+    ]
+  },
+
+  "recall/python/internal_ca.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "cryptography rsa.generate_private_key(4096) + x509 self-sign"
+      }
+    ]
+  },
+  "recall/python/ecdsa_attestation.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "cryptography ec.generate_private_key(SECP256R1) + ec.ECDSA"
+      }
+    ]
+  },
+  "recall/python/modern_kex.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "canonical",
+        "note": "cryptography x25519.X25519PrivateKey.generate + exchange"
+      },
+      {
+        "family": "X448",
+        "difficulty": "uncommon",
+        "note": "cryptography x448.X448PrivateKey.generate + exchange"
+      },
+      {
+        "family": "ECDH",
+        "difficulty": "uncommon",
+        "note": "cryptography ec key.exchange(ec.ECDH(), peer)"
+      }
+    ]
+  },
+  "recall/python/aliased_keys.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "aliased",
+        "note": "import rsa as _rsa; _rsa.generate_private_key + OAEP"
+      },
+      {
+        "family": "EDDSA",
+        "difficulty": "aliased",
+        "note": "import ed25519 as _eddsa; Ed25519PrivateKey.generate"
+      }
+    ]
+  },
+  "recall/python/jwt_service.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "adversarial",
+        "note": "PyJWT RS256 via config dict indirection, jwt.encode"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "adversarial",
+        "note": "PyJWT ES256 via config dict indirection, jwt.encode"
+      }
+    ]
+  },
+  "recall/python/pycryptodome_pki.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "PyCryptodome Crypto.PublicKey.RSA.generate + pkcs1_15"
+      },
+      {
+        "family": "DSA",
+        "difficulty": "uncommon",
+        "note": "PyCryptodome Crypto.PublicKey.DSA.generate + DSS"
+      }
+    ]
+  },
+  "recall/python/dh_handshake.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "adversarial",
+        "note": "cryptography dh.DHParameterNumbers from MODP-2048 prime, generate_private_key + exchange"
+      }
+    ]
+  },
+  "recall/python/wallet_keys.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "uncommon",
+        "note": "cryptography ec.generate_private_key(ec.SECP256K1()) + ECDSA"
+      }
+    ]
+  },
+  "recall/python/tls_hardening.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "ssl.SSLContext set_ciphers ECDHE-RSA/ECDHE-ECDSA/DHE-RSA"
+      }
+    ]
+  },
+  "recall/python/ssh_deploy.py": {
+    "language": "python",
+    "expected": [
+      {
+        "family": "SSH",
+        "difficulty": "uncommon",
+        "note": "paramiko Ed25519Key.from_private_key_file SSH auth key"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "SSH kex/host-key algorithm strings ecdh-sha2/diffie-hellman-group14/ssh-rsa/ssh-ed25519"
+      }
+    ]
+  },
+  "recall/python/requirements.txt": {
+    "language": "python",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "cryptography dependency pin" },
+      { "family": "DEP", "difficulty": "config", "note": "pyOpenSSL dependency pin" },
+      { "family": "DEP", "difficulty": "config", "note": "pycryptodome dependency pin" },
+      { "family": "DEP", "difficulty": "config", "note": "PyJWT[crypto] dependency pin" },
+      { "family": "DEP", "difficulty": "config", "note": "paramiko dependency pin" }
+    ]
+  },
+
+  "recall/go/rsa-key-rotation.go": {
+    "language": "go",
+    "expected": [
+      { "family": "RSA", "difficulty": "canonical", "note": "rsa.GenerateKey(rand.Reader, 3072)" },
+      { "family": "RSA", "difficulty": "canonical", "note": "rsa.SignPSS with rsa.PSSOptions" }
+    ]
+  },
+  "recall/go/ecdsa-request-signer.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "ecdsa.GenerateKey(elliptic.P384(), rand.Reader)"
+      },
+      { "family": "ECDSA", "difficulty": "canonical", "note": "ecdsa.SignASN1 over SHA-384 digest" }
+    ]
+  },
+  "recall/go/ed25519-session-tokens.go": {
+    "language": "go",
+    "expected": [
+      { "family": "EDDSA", "difficulty": "canonical", "note": "ed25519.GenerateKey(rand.Reader)" },
+      { "family": "EDDSA", "difficulty": "canonical", "note": "ed25519.Sign(priv, claims)" }
+    ]
+  },
+  "recall/go/keyfactory.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "aliased",
+        "note": "crypto/rsa imported as pk; pk.GenerateKey(rand.Reader, 2048)"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "aliased",
+        "note": "crypto/ecdsa dot-imported; bare GenerateKey(elliptic.P256(), ...)"
+      }
+    ]
+  },
+  "recall/go/key-agreement.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "uncommon",
+        "note": "ecdh.X25519().GenerateKey — crypto/ecdh"
+      },
+      {
+        "family": "X448",
+        "difficulty": "uncommon",
+        "note": "cloudflare/circl dh/x448 KeyGen(&pub,&priv)"
+      },
+      {
+        "family": "ECDH",
+        "difficulty": "uncommon",
+        "note": "ecdh.P256().GenerateKey + priv.ECDH(peer)"
+      }
+    ]
+  },
+  "recall/go/legacy-discrete-log.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "config",
+        "note": "embedded BEGIN DH PARAMETERS PEM const (finite-field DH group)"
+      },
+      {
+        "family": "DSA",
+        "difficulty": "uncommon",
+        "note": "dsa.GenerateParameters(&params, rand.Reader, dsa.L2048N256)"
+      },
+      { "family": "DSA", "difficulty": "uncommon", "note": "dsa.GenerateKey(priv, rand.Reader)" }
+    ]
+  },
+  "recall/go/tls-gateway.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "tls.Config MinVersion TLS12 + classical ECDHE_RSA/ECDHE_ECDSA CipherSuites"
+      }
+    ]
+  },
+  "recall/go/api-jwt-auth.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "golang-jwt jwt.SigningMethodRS256 with *rsa.PrivateKey"
+      }
+    ]
+  },
+  "recall/go/wallet-secp256k1.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "adversarial",
+        "note": "decred/dcrd secp256k1 GeneratePrivateKey — split across lines via function seam"
+      }
+    ]
+  },
+  "recall/go/ssh-bastion.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "SSH",
+        "difficulty": "adversarial",
+        "note": "ssh.ParsePrivateKey(pemKey) into signer"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "adversarial",
+        "note": "HostKeyAlgorithms via append() ssh.KeyAlgoRSA/ECDSA256/ED25519"
+      }
+    ]
+  },
+  "recall/go/go.mod": {
+    "language": "go",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "require github.com/cloudflare/circl" },
+      {
+        "family": "DEP",
+        "difficulty": "config",
+        "note": "require github.com/decred/dcrd/dcrec/secp256k1/v4"
+      },
+      { "family": "DEP", "difficulty": "config", "note": "require github.com/golang-jwt/jwt/v5" },
+      {
+        "family": "DEP",
+        "difficulty": "config",
+        "note": "require golang.org/x/crypto (ssh/curves)"
+      }
+    ]
+  },
+
+  "recall/java/RsaJwtSigner.java": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "KeyPairGenerator.getInstance(\"RSA\") 2048-bit"
+      },
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "Signature.getInstance(\"SHA256withRSA\")"
+      }
+    ]
+  },
+  "recall/java/EcdsaTransactionVerifier.java": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "EC keygen secp256r1 via ECGenParameterSpec"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "Signature.getInstance(\"SHA256withECDSA\") verify"
+      }
+    ]
+  },
+  "recall/java/EcdhHandshake.java": {
+    "language": "java",
+    "expected": [
+      { "family": "ECDH", "difficulty": "canonical", "note": "EC keygen secp384r1 for ECDH" },
+      { "family": "ECDH", "difficulty": "canonical", "note": "KeyAgreement.getInstance(\"ECDH\")" }
+    ]
+  },
+  "recall/java/DsaLegacySigner.java": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "DSA",
+        "difficulty": "aliased",
+        "note": "KeyPairGenerator.getInstance(KEY_ALGORITHM) KEY_ALGORITHM=\"DSA\""
+      },
+      {
+        "family": "DSA",
+        "difficulty": "aliased",
+        "note": "Signature.getInstance(SIGNATURE_ALGORITHM) =\"SHA1withDSA\""
+      }
+    ]
+  },
+  "recall/java/EddsaIdentity.kt": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "aliased",
+        "note": "KeyPairGenerator.getInstance(signatureCurve) = \"Ed\"+\"25519\""
+      },
+      {
+        "family": "X25519",
+        "difficulty": "aliased",
+        "note": "KeyAgreement.getInstance(...) from when-expression \"X25519\""
+      }
+    ]
+  },
+  "recall/java/Secp256k1Wallet.java": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "uncommon",
+        "note": "BouncyCastle ECNamedCurveTable.getParameterSpec(\"secp256k1\")"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "uncommon",
+        "note": "KeyPairGenerator.getInstance(\"ECDSA\", \"BC\")"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "uncommon",
+        "note": "Signature.getInstance(\"SHA256withECDSA\", \"BC\")"
+      }
+    ]
+  },
+  "recall/java/Curve448Exchange.kt": {
+    "language": "java",
+    "expected": [
+      { "family": "X448", "difficulty": "uncommon", "note": "BouncyCastle X448KeyPairGenerator" },
+      { "family": "X448", "difficulty": "uncommon", "note": "BouncyCastle X448Agreement" },
+      { "family": "EDDSA", "difficulty": "uncommon", "note": "BouncyCastle Ed448KeyPairGenerator" }
+    ]
+  },
+  "recall/java/KeyBrokerFactory.java": {
+    "language": "java",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "adversarial",
+        "note": "getInstance(...) from StringBuilder append(\"R\").append(\"s\").append(\"a\").toUpperCase"
+      },
+      {
+        "family": "ECDH",
+        "difficulty": "adversarial",
+        "note": "KeyAgreement.getInstance(name) name from multi-line ternary \"ECDH\""
+      },
+      {
+        "family": "DH",
+        "difficulty": "adversarial",
+        "note": "KeyAgreement.getInstance(name) name=\"D\"+\"H\" (finite-field DH)"
+      }
+    ]
+  },
+  "recall/java/tls-server.properties": {
+    "language": "java",
+    "expected": [
+      { "family": "TLS", "difficulty": "config", "note": "server.ssl.enabled-protocols=TLSv1.2" },
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "server.ssl.ciphers TLS_ECDHE_RSA/ECDHE_ECDSA/DHE_RSA"
+      }
+    ]
+  },
+  "recall/java/authorized_keys": {
+    "language": "java",
+    "expected": [
+      { "family": "SSH", "difficulty": "config", "note": "ssh-rsa authorized public key" },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "ecdsa-sha2-nistp256 authorized public key"
+      },
+      { "family": "SSH", "difficulty": "config", "note": "ssh-ed25519 authorized public key" }
+    ]
+  },
+  "recall/java/pom.xml": {
+    "language": "java",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "org.bouncycastle:bcprov-jdk18on" },
+      { "family": "DEP", "difficulty": "config", "note": "org.bouncycastle:bcpkix-jdk18on" },
+      { "family": "DEP", "difficulty": "config", "note": "io.jsonwebtoken:jjwt-api" }
+    ]
+  },
+
+  "recall/csharp/RsaContentSigner.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "new RSACryptoServiceProvider(2048) + SignData"
+      }
+    ]
+  },
+  "recall/csharp/NistP256Ecdsa.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "ECDsa.Create(ECCurve.NamedCurves.nistP256)"
+      }
+    ]
+  },
+  "recall/csharp/EphemeralEcdh.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "ECDH",
+        "difficulty": "canonical",
+        "note": "ECDiffieHellman.Create(nistP384) + DeriveKeyFromHash"
+      }
+    ]
+  },
+  "recall/csharp/LegacyDsaSigner.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "DSA",
+        "difficulty": "aliased",
+        "note": "using Signer = DSACryptoServiceProvider; new Signer(1024)"
+      }
+    ]
+  },
+  "recall/csharp/KeyMaterialFactory.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "aliased",
+        "note": "using Asymmetric = RSA; creation via Func delegate"
+      }
+    ]
+  },
+  "recall/csharp/CngKeyVault.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "uncommon",
+        "note": "ECDsaCng via CngKey.Create(CngAlgorithm.ECDsaP384)"
+      },
+      { "family": "ECDH", "difficulty": "uncommon", "note": "new ECDiffieHellmanCng(521)" },
+      { "family": "RSA", "difficulty": "uncommon", "note": "new RSACng(2048)" }
+    ]
+  },
+  "recall/csharp/Ed25519Identity.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "uncommon",
+        "note": "BouncyCastle Ed25519KeyPairGenerator + Ed25519Signer"
+      },
+      { "family": "X25519", "difficulty": "uncommon", "note": "BouncyCastle X25519Agreement" },
+      { "family": "X448", "difficulty": "uncommon", "note": "BouncyCastle X448Agreement" }
+    ]
+  },
+  "recall/csharp/Secp256k1Wallet.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "adversarial",
+        "note": "curve name via string.Concat, SecNamedCurves.GetByName; ECDsaSigner secp256k1"
+      }
+    ]
+  },
+  "recall/csharp/FiniteFieldDh.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "BouncyCastle DHParametersGenerator + DHBasicAgreement"
+      }
+    ]
+  },
+  "recall/csharp/TransportCredentials.cs": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "SslProtocols.Tls12 + ECDHE-RSA TlsCipherSuite policy"
+      },
+      {
+        "family": "RSA",
+        "difficulty": "config",
+        "note": "embedded BEGIN RSA PRIVATE KEY PEM constant"
+      },
+      { "family": "SSH", "difficulty": "config", "note": "embedded ssh-rsa authorized_keys line" }
+    ]
+  },
+  "recall/csharp/Acme.Signing.csproj": {
+    "language": "csharp",
+    "expected": [
+      {
+        "family": "DEP",
+        "difficulty": "config",
+        "note": "PackageReference BouncyCastle.Cryptography"
+      },
+      {
+        "family": "DEP",
+        "difficulty": "config",
+        "note": "PackageReference System.IdentityModel.Tokens.Jwt"
+      }
+    ]
+  },
+
+  "recall/rust/rsa_keygen.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "rsa crate RsaPrivateKey::new 3072-bit"
+      }
+    ]
+  },
+  "recall/rust/ed25519_signer.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "canonical",
+        "note": "ed25519-dalek SigningKey::generate + sign"
+      }
+    ]
+  },
+  "recall/rust/p256_ecdsa.rs": {
+    "language": "rust",
+    "expected": [
+      { "family": "ECDSA", "difficulty": "canonical", "note": "p256::ecdsa::SigningKey over P-256" }
+    ]
+  },
+  "recall/rust/hybrid_handshake.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "aliased",
+        "note": "x25519-dalek EphemeralSecret imported as MontgomerySecret"
+      },
+      {
+        "family": "X448",
+        "difficulty": "uncommon",
+        "note": "x448 crate Secret::new + as_diffie_hellman renamed WideSecret"
+      }
+    ]
+  },
+  "recall/rust/wallet_keys.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "aliased",
+        "note": "secp256k1 crate braced+renamed imports, ECDSA on secp256k1"
+      }
+    ]
+  },
+  "recall/rust/ring_channel.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "ECDH",
+        "difficulty": "uncommon",
+        "note": "ring agreement ECDH_P256 EphemeralPrivateKey::generate"
+      },
+      {
+        "family": "EDDSA",
+        "difficulty": "uncommon",
+        "note": "ring signature Ed25519KeyPair::generate_pkcs8"
+      }
+    ]
+  },
+  "recall/rust/openssl_legacy.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "openssl Dh::generate_params finite-field MODP DH"
+      },
+      { "family": "DSA", "difficulty": "uncommon", "note": "openssl Dsa::generate host key" }
+    ]
+  },
+  "recall/rust/token_policy.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "adversarial",
+        "note": "jsonwebtoken Algorithm::ES256 split across lines via helper"
+      },
+      {
+        "family": "RSA",
+        "difficulty": "adversarial",
+        "note": "jsonwebtoken Algorithm::RS256 bound via helper indirection"
+      }
+    ]
+  },
+  "recall/rust/Cargo.toml": {
+    "language": "rust",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "rsa dependency" },
+      { "family": "DEP", "difficulty": "config", "note": "ed25519-dalek dependency" },
+      { "family": "DEP", "difficulty": "config", "note": "x25519-dalek dependency" },
+      { "family": "DEP", "difficulty": "config", "note": "openssl dependency" }
+    ]
+  },
+  "recall/rust/transport_config.rs": {
+    "language": "rust",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "rustls TLS 1.2 ECDHE_ECDSA/ECDHE_RSA cipher suite pins"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "SSH HostKeyAlgorithms ssh-rsa/ecdsa/ed25519 + pinned ssh-ed25519"
+      }
+    ]
+  },
+
+  "recall/ruby/jwt_auth.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "OpenSSL::PKey::RSA.new(File.read(...)) from PEM"
+      },
+      { "family": "RSA", "difficulty": "canonical", "note": "OpenSSL::PKey::RSA.new(2048) keygen" },
+      { "family": "RSA", "difficulty": "canonical", "note": "JWT.encode(..., 'RS256')" },
+      { "family": "RSA", "difficulty": "canonical", "note": "JWT.decode(..., algorithm: 'RS256')" }
+    ]
+  },
+  "recall/ruby/receipt_signer.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "OpenSSL::PKey::EC.generate('prime256v1')"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "@key.sign(SHA256, ...) ECDSA over P-256"
+      },
+      { "family": "ECDSA", "difficulty": "canonical", "note": "@key.verify(...) ECDSA over P-256" }
+    ]
+  },
+  "recall/ruby/audit_trail.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "canonical",
+        "note": "Ed25519::SigningKey.generate (ed25519 gem)"
+      },
+      { "family": "EDDSA", "difficulty": "canonical", "note": "@signing_key.sign(message) Ed25519" }
+    ]
+  },
+  "recall/ruby/token_bridge.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "aliased",
+        "note": "EC.generate(@curve) @curve='secp256k1' from CONFIG constant"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "aliased",
+        "note": "JWT.encode(..., @alg) @alg='ES256' from CONFIG"
+      }
+    ]
+  },
+  "recall/ruby/key_agreement.rb": {
+    "language": "ruby",
+    "expected": [
+      { "family": "ECDH", "difficulty": "canonical", "note": "EC.generate('secp384r1') for ECDH" },
+      { "family": "ECDH", "difficulty": "uncommon", "note": "@ec.dh_compute_key(peer.public_key)" },
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "OpenSSL::PKey::DH.new(File.read(params_pem))"
+      },
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "dh.compute_key(peer_pub_bn) finite-field DH"
+      }
+    ]
+  },
+  "recall/ruby/secure_channel.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "uncommon",
+        "note": "RbNaCl::PrivateKey.generate Curve25519/X25519"
+      },
+      {
+        "family": "X25519",
+        "difficulty": "uncommon",
+        "note": "RbNaCl::Box.new(peer, priv) X25519 DH"
+      }
+    ]
+  },
+  "recall/ruby/https_pool.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "SSLContext ciphers ECDHE-RSA/ECDHE-ECDSA/DHE-RSA + version pin"
+      }
+    ]
+  },
+  "recall/ruby/deployer.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "net-ssh host_key/hostkeys_algorithms ssh-rsa/ecdsa/ssh-ed25519"
+      }
+    ]
+  },
+  "recall/ruby/Gemfile": {
+    "language": "ruby",
+    "expected": [
+      { "family": "DEP", "difficulty": "config", "note": "gem 'jwt'" },
+      { "family": "DEP", "difficulty": "config", "note": "gem 'ed25519'" },
+      { "family": "DEP", "difficulty": "config", "note": "gem 'rbnacl'" },
+      { "family": "DEP", "difficulty": "config", "note": "gem 'net-ssh'" }
+    ]
+  },
+  "recall/ruby/crypto_factory.rb": {
+    "language": "ruby",
+    "expected": [
+      {
+        "family": "DSA",
+        "difficulty": "adversarial",
+        "note": "OpenSSL::PKey.const_get('DSA').new(3072) via const_get on reassembled name"
+      },
+      {
+        "family": "X448",
+        "difficulty": "adversarial",
+        "note": "OpenSSL::PKey.generate_key('X448') name reassembled from %w[X 4 4 8]"
+      }
+    ]
+  },
+
+  "recall/c/rsa_evp_keygen.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "canonical",
+        "note": "EVP_PKEY_CTX_new_id(EVP_PKEY_RSA) + EVP_PKEY_keygen RSA-3072"
+      }
+    ]
+  },
+  "recall/c/ecdsa_sign_helper.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "ECDSA",
+        "difficulty": "canonical",
+        "note": "ECDSA_sign() on a caller-provided EC_KEY"
+      }
+    ]
+  },
+  "recall/c/ed25519_sodium.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "EDDSA",
+        "difficulty": "canonical",
+        "note": "libsodium crypto_sign_ed25519_keypair"
+      }
+    ]
+  },
+  "recall/c/kex_keytype_alias.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "X25519",
+        "difficulty": "aliased",
+        "note": "EVP_PKEY_CTX_new_id(key_type) key_type=EVP_PKEY_X25519 const"
+      },
+      {
+        "family": "X448",
+        "difficulty": "aliased",
+        "note": "same EVP_PKEY_CTX_new_id fed from KEX_FALLBACK=EVP_PKEY_X448"
+      }
+    ]
+  },
+  "recall/c/ffdh_group.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "DH",
+        "difficulty": "uncommon",
+        "note": "finite-field DH via DH_get_2048_256() + DH_generate_key"
+      }
+    ]
+  },
+  "recall/c/dsa_sign.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "DSA",
+        "difficulty": "uncommon",
+        "note": "DSA_generate_parameters_ex + DSA_generate_key 2048-bit"
+      },
+      { "family": "DSA", "difficulty": "uncommon", "note": "DSA_sign() over the generated DSA key" }
+    ]
+  },
+  "recall/c/secp256k1_evp_sign.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "SECP256K1",
+        "difficulty": "adversarial",
+        "note": "EVP EC paramgen; NID_secp256k1 hidden behind CHAIN_CURVE macro + table"
+      },
+      {
+        "family": "SECP256K1",
+        "difficulty": "adversarial",
+        "note": "EVP_DigestSign one-shot ECDSA over the secp256k1 key, split across lines"
+      }
+    ]
+  },
+  "recall/c/ecdh_derive.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "ECDH",
+        "difficulty": "adversarial",
+        "note": "EVP_PKEY_derive via function-pointer dispatch; derive_init/set_peer split"
+      }
+    ]
+  },
+  "recall/c/pinned_keys.h": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "config",
+        "note": "pinned RSA-2048 public key as PEM string constant"
+      },
+      {
+        "family": "SSH",
+        "difficulty": "config",
+        "note": "ssh-ed25519 known_hosts line + SSH_HOSTKEY_ALGS ssh-ed25519/rsa-sha2-512/ecdsa"
+      }
+    ]
+  },
+  "recall/c/tls_client_config.c": {
+    "language": "c",
+    "expected": [
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "SSL_CTX_set_cipher_list ECDHE-RSA/ECDHE-ECDSA classical suites"
+      },
+      {
+        "family": "TLS",
+        "difficulty": "config",
+        "note": "SSL_CTX_set1_groups_list + set_min_proto_version TLS1_2"
+      }
+    ]
+  }
+}

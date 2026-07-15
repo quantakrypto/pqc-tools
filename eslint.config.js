@@ -24,6 +24,7 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/examples/**", // mock SUT / sample vulnerable trees, intentionally "bad"
       "**/test/benchmark/corpus/**", // labeled detector fixtures, intentionally "bad"
+      "**/test/benchmark/recall/**", // recall corpus: real-world crypto idioms, multi-language
     ],
   },
 

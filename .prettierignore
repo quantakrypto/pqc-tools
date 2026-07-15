@@ -22,3 +22,7 @@ REUSE.toml
 # material; their formatting is part of the test, so don't reflow them.
 **/test/benchmark/corpus/
 
+# Recall corpus: real-world crypto idioms across 8 languages, intentionally
+# messy / adversarially formatted; formatting is part of the measurement.
+**/test/benchmark/recall/
+

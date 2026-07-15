@@ -1,0 +1,20 @@
+# Runtime dependencies for the signer/deploy services.
+# Pins are conservative; bump only with a security review.
+
+# Web + config
+fastapi==0.110.1
+uvicorn[standard]==0.29.0
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+requests>=2.31,<3
+
+# Cryptography stack
+cryptography>=42.0.5
+pyOpenSSL>=24.1.0
+pycryptodome==3.20.0
+PyJWT[crypto]>=2.8.0
+paramiko~=3.4.0
+
+# Observability
+structlog==24.1.0
+prometheus-client==0.20.0

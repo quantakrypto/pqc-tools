@@ -1,0 +1,6 @@
+# ~/.ssh/authorized_keys for the deploy robot on gw-prod-01
+# Managed by ansible role acme.ssh -- do not edit by hand.
+
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7pM2Hs8bT0nQe4kLZr9vWc3xJf6yD1oR8uPqA2mKgV5hN7bXe0sT4wZ1nB9yD3fH6jL0pR5uV8cE2gN4mS7qXaYb1cD9eF2gH3iJ4kL5mN6oP7qR8sT9uV0wX1yZ2aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9 deploy@ci-runner
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBK9Xq2mQ8sT3wZ1nB7yD4fH6jL0pR5uV8cE2gN4mS7qXaYb1cD9eF2gH3iJ4kL5mN6oP7qR8sT9uV0wX1yZ2a= ops@bastion
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKv9Xq2mQ8sT3wZ1nB7yD4fH6jL0pR5uV8cE2gN4mS7 backup@vault

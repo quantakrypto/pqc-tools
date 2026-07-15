@@ -1,0 +1,8 @@
+# CI + deploy access for the payments edge fleet. Rotate quarterly (SEC-882).
+# Managed by config-mgmt; do not hand-edit on the host.
+
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vbqajDhA3sZ9v0kx2s5Xk3n8yT1pQ2rW4uMce8lN6oQh0YbT5fJ2kLpZmVn3sD8aQwErTyUiOpLkJhGfDsAzXcVbNmKlPoIuYtReWqAsDfGhJkLzXcVbNm1234567890abcdefGHIJKLmnopQRSTuvWXyz+/aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789 ci-runner@build01
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8kL2mNpQrStUvWxYz0123456789aBcDeFgHiJkLmNoP release-bot@deploy
+
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgHiJkLmNoPqRsTuVwXyZ01234= ops@bastion

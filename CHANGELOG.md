@@ -6,7 +6,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Recall (false-negative depth) benchmark** — the last open item from the
+  2026-07-15 audit backlog. A deliberately-hard, real-world crypto corpus across
+  all eight languages (`packages/core/test/benchmark/recall/`, **85 files / 166
+  occurrences**), labeled by what the crypto *truly is* — independent of, and
+  written blind to, the detectors. `recall.test.ts` measures **detection recall**
+  (family-level, greedy per file; `unknown`-classified findings count as
+  detections) and prints the exact false-negative list. Baseline **0.645**;
+  guarded by a floor (not gated at 1.000 like the tuned benchmark, since
+  real-world recall < 1 is expected). The per-difficulty split — `canonical`
+  0.81 vs `aliased` 0.32 / `adversarial` 0.37 — quantifies the lexical ceiling
+  and names the closable gaps (cross-language classical-TLS key-exchange config;
+  Go/Rust JWT identifier forms; libsodium/BouncyCastle/rbnacl library forms). See
+  [`docs/validation/recall-benchmark.md`](docs/validation/recall-benchmark.md).
 
 ## [0.4.3] — 2026-07-15
 

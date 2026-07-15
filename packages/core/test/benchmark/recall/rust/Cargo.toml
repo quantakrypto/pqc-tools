@@ -1,0 +1,28 @@
+# Manifest for the edge-agent workspace member.
+#
+# Pulls the classical crypto stack the agent uses for issuance, key agreement,
+# and interop with the legacy control plane.
+
+[package]
+name = "edge-agent"
+version = "0.4.2"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tracing = "0.1"
+
+# --- key material and signatures ---
+rsa = "0.9"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+
+# System OpenSSL bindings for legacy control-plane interop.
+openssl = { version = "0.10", features = ["vendored"] }
+
+[dev-dependencies]
+hex = "0.4"
