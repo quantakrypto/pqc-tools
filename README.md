@@ -69,6 +69,20 @@ Each package README has the full options reference and more examples:
 [core](packages/core/README.md) ·
 [agent](packages/agent/README.md).
 
+## Using quantakrypto alongside a PQC library (liboqs / OQS)
+
+quantakrypto **does not implement post-quantum cryptography, by design** — it is
+the scanner, the CI gate, and the conformance harness you wrap around a real PQC
+library like [liboqs / Open Quantum Safe](https://openquantumsafe.org/). They
+compose: quantakrypto **finds and gates** classical crypto (`qscan`, the Action),
+tells you **what to migrate to and in what order** (`qscan --tier`, MCP
+`plan_migration`, `qremediate`), and **proves the replacement is correct**
+(`sieve` conformance-tests any ML-KEM/ML-DSA/SLH-DSA implementation against
+FIPS 203/204/205). liboqs supplies the primitives.
+
+See the worked end-to-end walkthrough — scan → migrate → verify → gate — in
+**[`examples/liboqs-migration/`](examples/liboqs-migration/README.md)**.
+
 ## Workspace layout
 
 ```

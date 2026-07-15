@@ -8,6 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Worked liboqs / OQS composition example** (`examples/liboqs-migration/`) +
+  a README section. Makes the intended positioning concrete — quantakrypto is
+  the scanner / CI gate / conformance harness *around* a real PQC library, not a
+  replacement for one — with a full scan → migrate (hybrid X25519MLKEM768 via
+  liboqs) → verify (sieve conformance) → gate walkthrough. Directly answers the
+  "no full PQC library — use alongside liboqs" framing from external reviews.
 - **Embedded C crypto coverage (Mbed TLS + wolfSSL/wolfCrypt).** The C/C++
   detector previously covered only OpenSSL and libsodium; it now also detects the
   two dominant *embedded* libraries — `mbedtls_rsa_gen_key` / `mbedtls_ecp_gen_key`
