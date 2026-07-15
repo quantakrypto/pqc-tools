@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Terraform / OpenTofu (IaC) detection** — a new config-scope detector for the
+  classical keys and CMKs that infrastructure code provisions (never visible to
+  the language packs): hashicorp/tls `tls_private_key` (`algorithm = "RSA"/"ECDSA"`),
+  AWS KMS `customer_master_key_spec` (`RSA_*` / `ECC_*`), Google Cloud KMS
+  `RSA_SIGN_*` / `EC_SIGN_*` algorithm strings, and Azure Key Vault `key_type`
+  (`RSA`/`EC`, incl. `-HSM`). Matches both HCL and `.tf.json` syntax; gated to
+  `.tf` / `.tf.json` so it never fires on arbitrary files.
 - **JSON Web Key (JWK / JWKS) detection** — a new config-scope detector finds
   classical key material in JSON (`.json` / `.jwks`, OIDC discovery docs, config):
   `"kty":"RSA"` → RSA; `"crv":"P-256/384/521/secp256k1"` → EC (ECDSA+ECDH);

@@ -21,6 +21,7 @@ import { rubyDetector } from "./detectors/ruby.js";
 import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
 import { jwkDetector } from "./detectors/jwk.js";
+import { terraformDetector } from "./detectors/terraform.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -131,6 +132,7 @@ export const builtinDetectors: Detector[] = [
   cDetector,
   pemDetector,
   jwkDetector,
+  terraformDetector,
   statefulHbsDetector,
 ];
 

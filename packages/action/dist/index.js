@@ -4767,6 +4767,127 @@ var init_jwk = __esm({
   }
 });
 
+// ../core/dist/detectors/terraform.js
+var TF_EXTENSIONS, RE_TF_RSA, RE_TF_ECDSA, RE_TF_KMS_RSA, RE_TF_KMS_EC, RE_TF_AZ_RSA, RE_TF_AZ_EC, RULE_TF_RSA, RULE_TF_ECDSA, RULE_TF_KMS_RSA, RULE_TF_KMS_EC, RULE_TF_AZ_RSA, RULE_TF_AZ_EC, terraformDetector;
+var init_terraform = __esm({
+  "../core/dist/detectors/terraform.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    TF_EXTENSIONS = [".tf", ".tf.json"];
+    RE_TF_RSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"RSA(?:_[A-Z0-9_]+)?"/g;
+    RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9_]+)"/g;
+    RE_TF_KMS_RSA = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"RSA_\d+"/g;
+    RE_TF_KMS_EC = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
+    RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/g;
+    RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/g;
+    RULE_TF_RSA = {
+      id: "tf-rsa-key",
+      title: "Terraform RSA key",
+      description: "Terraform tls_private_key / KMS RSA key material",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_TF_ECDSA = {
+      id: "tf-ecdsa-key",
+      title: "Terraform ECDSA key",
+      description: "Terraform tls_private_key / KMS EC signing key",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical ECDSA key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_TF_KMS_RSA = {
+      id: "tf-kms-rsa",
+      title: "Terraform AWS KMS RSA CMK",
+      description: 'Terraform aws_kms_key customer_master_key_spec = "RSA_*"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA KMS customer master key (harvest-now-decrypt-later exposed for encryption CMKs).",
+      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
+    };
+    RULE_TF_KMS_EC = {
+      id: "tf-kms-ec",
+      title: "Terraform AWS KMS EC CMK",
+      description: 'Terraform aws_kms_key customer_master_key_spec = "ECC_*"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical EC KMS customer master key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_TF_AZ_RSA = {
+      id: "tf-keyvault-rsa",
+      title: "Terraform Azure Key Vault RSA key",
+      description: 'Terraform azurerm_key_vault_key key_type = "RSA"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA Azure Key Vault key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 / ML-DSA-65)."
+    };
+    RULE_TF_AZ_EC = {
+      id: "tf-keyvault-ec",
+      title: "Terraform Azure Key Vault EC key",
+      description: 'Terraform azurerm_key_vault_key key_type = "EC"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical EC Azure Key Vault key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    terraformDetector = {
+      id: "terraform-crypto",
+      description: "Classical asymmetric crypto provisioned by Terraform / OpenTofu (IaC)",
+      scope: "config",
+      language: "any",
+      rules: [
+        RULE_TF_RSA,
+        RULE_TF_ECDSA,
+        RULE_TF_KMS_RSA,
+        RULE_TF_KMS_EC,
+        RULE_TF_AZ_RSA,
+        RULE_TF_AZ_EC
+      ],
+      appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_TF_RSA, RULE_TF_RSA);
+        add(RE_TF_ECDSA, RULE_TF_ECDSA);
+        add(RE_TF_KMS_RSA, RULE_TF_KMS_RSA);
+        add(RE_TF_KMS_EC, RULE_TF_KMS_EC);
+        add(RE_TF_AZ_RSA, RULE_TF_AZ_RSA);
+        add(RE_TF_AZ_EC, RULE_TF_AZ_EC);
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/stateful-hbs.js
 var STATEFUL_HBS_REMEDIATION, HBS_RULES, statefulHbsDetector;
 var init_stateful_hbs = __esm({
@@ -4926,6 +5047,7 @@ var init_registry = __esm({
     init_c();
     init_pem();
     init_jwk();
+    init_terraform();
     init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
@@ -5003,6 +5125,7 @@ var init_registry = __esm({
       cDetector,
       pemDetector,
       jwkDetector,
+      terraformDetector,
       statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
