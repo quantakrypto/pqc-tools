@@ -9,6 +9,7 @@
 import type { CategoryResult, Status } from "./categories/types.js";
 import { PROTOCOL_VERSION } from "./protocol.js";
 import type { ParamSet } from "./sizes.js";
+import type { VectorFileProvenance } from "./vectors.js";
 
 /** Categories that are informational and must not change the overall verdict. */
 const ADVISORY_CATEGORIES = new Set<string>(["timing"]);
@@ -35,6 +36,11 @@ export interface SieveReport {
   overall: "PASS" | "FAIL";
   categories: CategoryResult[];
   counts: CategoryCounts;
+  /** ACVP vector-file provenance (raw-byte hashes + declared source) — present
+   * only when `--vectors` was supplied, so a `kat` PASS is traceable. */
+  provenance?: VectorFileProvenance[];
+  /** Whether the operator declared the vectors' source (vectors-manifest.json). */
+  provenanceDeclared?: boolean;
 }
 
 /** Tally check-level pass/fail/skip across all categories. */
@@ -64,6 +70,8 @@ export function buildReport(args: {
   startedAt: Date;
   durationMs: number;
   categories: CategoryResult[];
+  provenance?: VectorFileProvenance[];
+  provenanceDeclared?: boolean;
 }): SieveReport {
   return {
     tool: "sieve",
@@ -77,6 +85,10 @@ export function buildReport(args: {
     overall: overallVerdict(args.categories),
     categories: args.categories,
     counts: tally(args.categories),
+    ...(args.provenance ? { provenance: args.provenance } : {}),
+    ...(args.provenanceDeclared !== undefined
+      ? { provenanceDeclared: args.provenanceDeclared }
+      : {}),
   };
 }
 
@@ -95,6 +107,15 @@ export function formatHuman(report: SieveReport): string {
   lines.push(`  impl       : ${report.impl.join(" ")}`);
   lines.push(`  iterations : ${report.iterations}`);
   if (report.vectorsDir) lines.push(`  vectors    : ${report.vectorsDir}`);
+  if (report.provenance && report.provenance.length > 0) {
+    const flag = report.provenanceDeclared ? "source declared" : "SOURCE UNDECLARED";
+    lines.push(`  provenance : ${report.provenance.length} vector file(s), ${flag}`);
+    for (const p of report.provenance) {
+      lines.push(
+        `               ${p.path}  sha256:${p.sha256.slice(0, 12)}…  ${p.casesUsed} case(s)`,
+      );
+    }
+  }
   lines.push(`  duration   : ${report.durationMs} ms`);
   lines.push("");
 

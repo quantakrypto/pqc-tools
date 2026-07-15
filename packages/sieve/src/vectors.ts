@@ -14,6 +14,7 @@
  * Uses only node:fs. No cryptography.
  */
 
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -63,6 +64,26 @@ export interface DsaVerifyVector {
 /** Any normalized vector. */
 export type Vector = KemKeygenVector | KemEncapVector | KemDecapVector | DsaVerifyVector;
 
+/**
+ * Provenance of one ACVP vector file (docs/compliance/acvp-provenance.md): a
+ * content hash over the RAW bytes plus the declared source, so a passing `kat`
+ * run is traceable to the exact operator-supplied inputs. Sieve records what it
+ * was given; it never fetches or ships vectors (ADR-0004).
+ */
+export interface VectorFileProvenance {
+  path: string;
+  sha256: string;
+  sizeBytes: number;
+  algorithm: string | null;
+  mode: string | null;
+  /** Parameter sets seen in the file. */
+  parameterSets: string[];
+  /** Operator-declared origin, or "unknown (operator-supplied)". */
+  sourceUrl: string;
+  /** Recognized test cases consumed from this file. */
+  casesUsed: number;
+}
+
 /** Result of scanning a vectors directory. */
 export interface VectorSet {
   vectors: Vector[];
@@ -70,6 +91,10 @@ export interface VectorSet {
   files: string[];
   /** Non-fatal parse notes (unrecognized files/groups). */
   notes: string[];
+  /** Per-file provenance for every vector file used (kat traceability). */
+  provenance: VectorFileProvenance[];
+  /** True when the operator declared a source via `vectors-manifest.json`. */
+  provenanceDeclared: boolean;
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -224,12 +249,30 @@ function reqHex(t: Record<string, unknown>, ...keys: string[]): string {
  *
  * @throws if `dir` does not exist or contains no readable JSON files.
  */
+/** Operator-declared source manifest filename (not itself a vector file). */
+const VECTORS_MANIFEST = "vectors-manifest.json";
+
 export function loadVectors(dir: string): VectorSet {
   const st = statSync(dir); // throws ENOENT if missing
   if (!st.isDirectory()) {
     throw new Error(`--vectors path is not a directory: ${dir}`);
   }
-  const entries = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".json"));
+
+  // Optional provenance manifest: `{ "sourceUrl": "https://…" }` declaring where
+  // the operator obtained these vectors. Absent → provenance is undeclared.
+  let declaredSource: string | undefined;
+  try {
+    const m = JSON.parse(readFileSync(join(dir, VECTORS_MANIFEST), "utf8")) as {
+      sourceUrl?: unknown;
+    };
+    if (typeof m.sourceUrl === "string" && m.sourceUrl.trim()) declaredSource = m.sourceUrl.trim();
+  } catch {
+    /* no manifest — provenanceDeclared stays false */
+  }
+
+  const entries = readdirSync(dir).filter(
+    (f) => f.toLowerCase().endsWith(".json") && f.toLowerCase() !== VECTORS_MANIFEST,
+  );
   if (entries.length === 0) {
     throw new Error(`no .json vector files found in ${dir}`);
   }
@@ -237,23 +280,46 @@ export function loadVectors(dir: string): VectorSet {
   const vectors: Vector[] = [];
   const files: string[] = [];
   const notes: string[] = [];
+  const provenance: VectorFileProvenance[] = [];
 
   for (const name of entries) {
     const path = join(dir, name);
+    // Hash the RAW bytes as supplied, before parsing — proves exactly what was used.
+    const raw = readFileSync(path);
+    const sha256 = createHash("sha256").update(raw).digest("hex");
     let doc: unknown;
     try {
-      doc = JSON.parse(readFileSync(path, "utf8"));
+      doc = JSON.parse(raw.toString("utf8"));
     } catch (err) {
       notes.push(`${name}: not valid JSON (${(err as Error).message})`);
       continue;
     }
     files.push(name);
+    const before = vectors.length;
     // ACVP test-vector files may be a single object or an array of prompts.
     const docs = Array.isArray(doc) ? doc : [doc];
     for (const d of docs) {
       vectors.push(...parseAcvpDocument(d, notes, name));
     }
+
+    // Best-effort ACVP metadata for the provenance record.
+    const root = asObj(docs[0]);
+    const params = new Set<string>();
+    for (const g of asArray(root["testGroups"])) {
+      const p = str(asObj(g)["parameterSet"]);
+      if (p) params.add(p);
+    }
+    provenance.push({
+      path: name,
+      sha256,
+      sizeBytes: raw.length,
+      algorithm: str(root["algorithm"]) ?? null,
+      mode: str(root["mode"]) ?? null,
+      parameterSets: [...params],
+      sourceUrl: declaredSource ?? "unknown (operator-supplied)",
+      casesUsed: vectors.length - before,
+    });
   }
 
-  return { vectors, files, notes };
+  return { vectors, files, notes, provenance, provenanceDeclared: declaredSource !== undefined };
 }

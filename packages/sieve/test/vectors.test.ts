@@ -33,6 +33,61 @@ test("loadVectors throws when no .json files are present", () => {
   }
 });
 
+test("loadVectors records per-file provenance with a raw-byte hash + declared source", () => {
+  const dir = tmp({
+    "ml-kem.json": {
+      algorithm: "ML-KEM",
+      mode: "encapDecap",
+      testGroups: [
+        {
+          parameterSet: "ML-KEM-768",
+          function: "decapsulation",
+          tests: [{ dk: "0011", c: "2233", k: "4455" }],
+        },
+      ],
+    },
+    "vectors-manifest.json": { sourceUrl: "https://github.com/usnistgov/ACVP-Server" },
+  });
+  try {
+    const set = loadVectors(dir);
+    assert.equal(set.provenanceDeclared, true);
+    // the manifest is not itself treated as a vector file
+    assert.ok(!set.files.includes("vectors-manifest.json"));
+    const p = set.provenance.find((x) => x.path === "ml-kem.json");
+    assert.ok(p, "provenance recorded for the vector file");
+    assert.match(p.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(p.sizeBytes > 0);
+    assert.equal(p.algorithm, "ML-KEM");
+    assert.deepEqual(p.parameterSets, ["ML-KEM-768"]);
+    assert.equal(p.sourceUrl, "https://github.com/usnistgov/ACVP-Server");
+    assert.ok(p.casesUsed >= 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadVectors flags provenance as UNDECLARED when no manifest is present", () => {
+  const dir = tmp({
+    "ml-dsa.json": {
+      algorithm: "ML-DSA",
+      mode: "sigVer",
+      testGroups: [
+        {
+          parameterSet: "ML-DSA-65",
+          tests: [{ pk: "0011", message: "22", signature: "33", testPassed: true }],
+        },
+      ],
+    },
+  });
+  try {
+    const set = loadVectors(dir);
+    assert.equal(set.provenanceDeclared, false);
+    assert.equal(set.provenance[0]?.sourceUrl, "unknown (operator-supplied)");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("parses an ML-KEM decap ACVP group (field shape only)", () => {
   const dir = tmp({
     "kem-decap.json": {

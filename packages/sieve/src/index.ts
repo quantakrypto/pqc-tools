@@ -16,6 +16,8 @@
 
 import { categoriesFor } from "./categories/index.js";
 import type { CategoryResult } from "./categories/types.js";
+import { loadVectors } from "./vectors.js";
+import type { VectorFileProvenance } from "./vectors.js";
 import { Runner } from "./runner.js";
 import { buildReport, type SieveReport } from "./report.js";
 import { isParamSet, sizesFor, type ParamSet } from "./sizes.js";
@@ -160,6 +162,21 @@ export async function runSieve(opts: RunSieveOptions): Promise<SieveReport> {
     await runner.close();
   }
 
+  // Record vector-file provenance (raw-byte hashes + declared source) so a `kat`
+  // PASS is traceable to authentic inputs. Best-effort: an invalid/empty vectors
+  // dir is already surfaced by the kat category, so a load failure here is silent.
+  let provenance: VectorFileProvenance[] | undefined;
+  let provenanceDeclared: boolean | undefined;
+  if (opts.vectorsDir) {
+    try {
+      const vs = loadVectors(opts.vectorsDir);
+      provenance = vs.provenance;
+      provenanceDeclared = vs.provenanceDeclared;
+    } catch {
+      /* invalid/empty vectors dir — the kat category reports it */
+    }
+  }
+
   return buildReport({
     param: opts.param,
     impl: [...opts.command],
@@ -168,5 +185,6 @@ export async function runSieve(opts: RunSieveOptions): Promise<SieveReport> {
     startedAt,
     durationMs: Math.round(performance.now() - t0),
     categories: results,
+    ...(provenance ? { provenance, provenanceDeclared } : {}),
   });
 }

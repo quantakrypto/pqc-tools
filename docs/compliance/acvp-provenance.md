@@ -1,10 +1,16 @@
 # Sieve — ACVP Vector Provenance Design
 
-**Status: DESIGN ONLY.** This document designs how `@quantakrypto/sieve` should record
-the **provenance** of any official NIST ACVP test vectors an operator supplies, so
-a passing `kat` (Known-Answer-Test) run is **traceable to authentic NIST inputs**.
-It is the design for [ROADMAP COMPLIANCE #10 / P2-8](../ROADMAP.md); nothing here is
-implemented.
+**Status: IMPLEMENTED (2026-07-15).** `@quantakrypto/sieve` records the
+**provenance** of every operator-supplied ACVP vector file it uses — a SHA-256 over
+the **raw file bytes**, size, ACVP `algorithm`/`mode`/`parameterSet`, cases used,
+and the declared `sourceUrl` — in the report's `provenance` block
+(`loadVectors` → `VectorFileProvenance`; `SieveReport.provenance` /
+`provenanceDeclared`). Source is declared via an optional **`vectors-manifest.json`**
+(`{ "sourceUrl": "…" }`) in the vectors directory; without it the report records
+`sourceUrl: "unknown (operator-supplied)"` and `provenanceDeclared: false`, so a
+`kat` PASS says whether it is source-attributable. Strengthens (never relaxes)
+[ADR-0004](../adr/0004-sieve-no-fabricated-vectors.md) — Sieve still ships and
+fetches no vectors. [ROADMAP COMPLIANCE #10 / P2-8](../ROADMAP.md).
 
 It exists to strengthen — never relax —
 [ADR-0004](../adr/0004-sieve-no-fabricated-vectors.md): Sieve ships no vectors and
