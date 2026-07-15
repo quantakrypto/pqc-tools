@@ -5947,6 +5947,12 @@ function toSarif(result, opts) {
       ruleIndex: ruleIndex.get(f.ruleId),
       level: sarifLevel(f.severity),
       message: { text: f.message },
+      // Line-INSENSITIVE fingerprint (the same one the baseline uses:
+      // sha256 of ruleId|file|normalizedSnippet). GitHub code scanning keys
+      // alert identity + dedup off partialFingerprints, so a finding survives
+      // line shifts and reformatting instead of re-alerting as "new" on every
+      // edit above it. `quantakrypto/v1` names our scheme.
+      partialFingerprints: { "quantakrypto/v1": fingerprintFinding(f) },
       properties: {
         category: f.category,
         severity: f.severity,
@@ -6088,6 +6094,7 @@ var init_report = __esm({
     init_severity();
     init_detect_utils();
     init_remediation();
+    init_baseline();
     SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json";
     INFORMATION_URI = "https://github.com/quantakrypto/pqc-tools";
   }
@@ -6942,6 +6949,8 @@ function renderHuman(result, opts = {}) {
   const { findings, inventory, filesScanned } = result;
   const analyzedFiles = result.analyzedFiles;
   const noAnalyzable = analyzedFiles === 0;
+  const lowCoverage = analyzedFiles !== void 0 && analyzedFiles > 0 && filesScanned > 0 && analyzedFiles / filesScanned < 0.25;
+  const coverageCaveat = lowCoverage ? `${c.dim}Note: the score covers only ${analyzedFiles} analyzable of ${filesScanned} scanned files (${ANALYZABLE_LANGUAGES_LABEL}); crypto in unsupported languages is not reflected.${c.reset}` : "";
   const lines = [];
   lines.push(`${c.bold}qScan \u2014 quantum-vulnerable cryptography report${c.reset}`);
   const coverage = analyzedFiles === void 0 ? "" : `  \u2022  analyzed: ${analyzedFiles} (${ANALYZABLE_LANGUAGES_LABEL})`;
@@ -6967,6 +6976,8 @@ function renderHuman(result, opts = {}) {
     }
     lines.push(`${c.green}No quantum-vulnerable cryptography detected.${c.reset}`);
     lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
+    if (coverageCaveat)
+      lines.push(coverageCaveat);
     lines.push("");
     lines.push(`${c.dim}Next step:${c.reset} keep scanning in CI to catch regressions.`);
     return lines.join("\n");
@@ -6980,6 +6991,8 @@ function renderHuman(result, opts = {}) {
     lines.push(`${c.yellow}${inventory.hndlCount}${c.reset} exposed to harvest-now-decrypt-later (HNDL).`);
   }
   lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
+  if (coverageCaveat)
+    lines.push(coverageCaveat);
   lines.push("");
   const top = [...findings].sort(compareFindings2).slice(0, topN);
   lines.push(`${c.bold}Top findings${c.reset}`);

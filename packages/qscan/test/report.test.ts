@@ -68,6 +68,28 @@ test("renderHuman is unchanged (no coverage line) for results without analyzedFi
   assert.doesNotMatch(out, /analyzed:/);
 });
 
+test("renderHuman warns when the analyzable subset is a small slice of the scan", () => {
+  // 200 scanned, only 8 analyzable (4%) with a finding present → the score
+  // covers only that slice; say so.
+  const result = {
+    ...makeResult([makeFinding({ algorithm: "RSA" })]),
+    filesScanned: 200,
+    analyzedFiles: 8,
+  };
+  const out = renderHuman(result);
+  assert.match(out, /score covers only 8 analyzable of 200 scanned files/);
+  assert.match(out, /not reflected/);
+});
+
+test("renderHuman shows no partial-coverage caveat when most files are analyzable", () => {
+  const result = {
+    ...makeResult([makeFinding({ algorithm: "RSA" })]),
+    filesScanned: 10,
+    analyzedFiles: 9,
+  };
+  assert.doesNotMatch(renderHuman(result), /score covers only/);
+});
+
 test("renderHuman surfaces coverage diagnostics when files were skipped", () => {
   const result = {
     ...makeResult([]),

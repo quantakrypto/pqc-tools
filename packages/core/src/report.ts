@@ -9,6 +9,7 @@ import { SEVERITY_ORDER, sarifLevel } from "./severity.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "./detect-utils.js";
 import { remediationFor, remediationForTier } from "./remediation.js";
 import type { SecurityTier } from "./remediation.js";
+import { fingerprintFinding } from "./baseline.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
 export interface SarifLog {
@@ -162,6 +163,12 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
       ruleIndex: ruleIndex.get(f.ruleId),
       level: sarifLevel(f.severity),
       message: { text: f.message },
+      // Line-INSENSITIVE fingerprint (the same one the baseline uses:
+      // sha256 of ruleId|file|normalizedSnippet). GitHub code scanning keys
+      // alert identity + dedup off partialFingerprints, so a finding survives
+      // line shifts and reformatting instead of re-alerting as "new" on every
+      // edit above it. `quantakrypto/v1` names our scheme.
+      partialFingerprints: { "quantakrypto/v1": fingerprintFinding(f) },
       properties: {
         category: f.category,
         severity: f.severity,

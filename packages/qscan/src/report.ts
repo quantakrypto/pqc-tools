@@ -110,6 +110,19 @@ export function renderHuman(
   // readiness score reflects no analyzable code — say so rather than imply safe.
   const analyzedFiles = result.analyzedFiles;
   const noAnalyzable = analyzedFiles === 0;
+  // Partial-coverage honesty: when the analyzable subset is only a small slice of
+  // what was scanned, a high score reflects that slice, not the whole tree. We
+  // surface a one-line caveat next to the score so the number isn't over-trusted.
+  // Skips the zero case (handled explicitly below) and normal repos where most
+  // files are analyzable.
+  const lowCoverage =
+    analyzedFiles !== undefined &&
+    analyzedFiles > 0 &&
+    filesScanned > 0 &&
+    analyzedFiles / filesScanned < 0.25;
+  const coverageCaveat = lowCoverage
+    ? `${c.dim}Note: the score covers only ${analyzedFiles} analyzable of ${filesScanned} scanned files (${ANALYZABLE_LANGUAGES_LABEL}); crypto in unsupported languages is not reflected.${c.reset}`
+    : "";
   const lines: string[] = [];
 
   lines.push(`${c.bold}qScan — quantum-vulnerable cryptography report${c.reset}`);
@@ -155,6 +168,7 @@ export function renderHuman(
     }
     lines.push(`${c.green}No quantum-vulnerable cryptography detected.${c.reset}`);
     lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
+    if (coverageCaveat) lines.push(coverageCaveat);
     lines.push("");
     lines.push(`${c.dim}Next step:${c.reset} keep scanning in CI to catch regressions.`);
     return lines.join("\n");
@@ -175,6 +189,7 @@ export function renderHuman(
     );
   }
   lines.push(`${c.bold}Readiness score: ${readiness(inventory.readinessScore, c)}/100${c.reset}`);
+  if (coverageCaveat) lines.push(coverageCaveat);
   lines.push("");
 
   // Top findings, sorted by severity then file/line for determinism.

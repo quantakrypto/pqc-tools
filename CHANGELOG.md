@@ -8,6 +8,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **SARIF results now carry `partialFingerprints`** (`quantakrypto/v1` = the same
+  line-insensitive sha256 the baseline uses). GitHub code scanning keys alert
+  identity and dedup off this, so a finding survives line shifts and reformatting
+  instead of re-alerting as "new" every time code moves above it.
+- **Partial-coverage honesty caveat on the readiness score.** When the analyzable
+  subset is only a small slice (<25%) of the files scanned, the human report now
+  notes that the score covers only that slice — a high score on a mostly-unsupported
+  tree no longer reads as a clean bill of health. (Complements the existing
+  zero-analyzable guard.)
 - **Worked liboqs / OQS composition example** (`examples/liboqs-migration/`) +
   a README section. Makes the intended positioning concrete — quantakrypto is
   the scanner / CI gate / conformance harness *around* a real PQC library, not a

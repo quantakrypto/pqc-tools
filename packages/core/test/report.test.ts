@@ -82,6 +82,32 @@ test("toSarif produces a valid 2.1.0 log shape", () => {
   assert.equal(cert.level, "note");
 });
 
+test("toSarif attaches a stable, line-insensitive partialFingerprints to each result", () => {
+  const run = toSarif(sampleResult()).runs[0] as Record<string, any>;
+  for (const res of run.results) {
+    const fp = res.partialFingerprints?.["quantakrypto/v1"];
+    assert.match(fp, /^[0-9a-f]{64}$/, "each result carries a sha256 fingerprint");
+  }
+  // The fingerprint is line-INSENSITIVE: the same finding moved to another line
+  // (same rule/file/snippet) keeps its identity, so GitHub won't re-alert it.
+  const base: Finding = {
+    ruleId: "node-crypto-ecdh",
+    title: "ECDH key exchange",
+    category: "key-exchange",
+    severity: "high",
+    confidence: "high",
+    algorithm: "ECDH",
+    hndl: true,
+    message: "ECDH is broken by Shor's algorithm.",
+    location: { file: "src/x.ts", line: 5, snippet: "createECDH('secp256k1')" },
+  };
+  const moved: Finding = { ...base, location: { ...base.location, line: 999 } };
+  const fpOf = (f: Finding) =>
+    (toSarif({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) }).runs[0] as any)
+      .results[0].partialFingerprints["quantakrypto/v1"];
+  assert.equal(fpOf(base), fpOf(moved), "fingerprint survives a line move");
+});
+
 test("toSarif with a catalog advertises rules that did not fire", () => {
   const catalog = defaultRegistry.ruleCatalog();
   const log = toSarif(sampleResult(), { catalog });
