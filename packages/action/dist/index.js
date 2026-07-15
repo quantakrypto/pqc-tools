@@ -1456,26 +1456,43 @@ function commentStyleForFile(file) {
     return "hash";
   return null;
 }
-function commentSpans(content, style) {
+function skipQuoted(content, i, n, rawBacktick) {
+  const quote = content[i];
+  if (quote === "'") {
+    const limit = Math.min(n, i + 1 + 12);
+    let j2 = i + 1;
+    while (j2 < limit) {
+      if (content[j2] === "\\") {
+        j2 += 2;
+        continue;
+      }
+      if (content[j2] === "'")
+        return j2 + 1;
+      j2++;
+    }
+    return i + 1;
+  }
+  const escapes = !(quote === "`" && rawBacktick);
+  let j = i + 1;
+  while (j < n) {
+    if (escapes && content[j] === "\\") {
+      j += 2;
+      continue;
+    }
+    if (content[j] === quote)
+      return j + 1;
+    j++;
+  }
+  return n;
+}
+function commentSpans(content, style, rawBacktick = false) {
   const spans = [];
   const n = content.length;
   let i = 0;
   while (i < n) {
     const c = content[i];
     if (c === '"' || c === "'" || c === "`") {
-      const quote = c;
-      i++;
-      while (i < n) {
-        if (content[i] === "\\") {
-          i += 2;
-          continue;
-        }
-        if (content[i] === quote) {
-          i++;
-          break;
-        }
-        i++;
-      }
+      i = skipQuoted(content, i, n, rawBacktick);
       continue;
     }
     if (style === "c" && c === "/" && content[i + 1] === "/") {
@@ -1589,7 +1606,7 @@ function stripCommentFindings(findings, content, file) {
   const style = commentStyleForFile(file);
   if (!style)
     return findings;
-  const spans = commentSpans(content, style);
+  const spans = commentSpans(content, style, /\.go$/i.test(file));
   const docSpans = style === "hash" ? pythonDocstringSpans(content) : [];
   if (spans.length === 0 && docSpans.length === 0)
     return findings;
@@ -1609,7 +1626,7 @@ function stripCommentFindings(findings, content, file) {
     return true;
   });
 }
-function stringSpans(content, style) {
+function stringSpans(content, style, rawBacktick = false) {
   const spans = [];
   const n = content.length;
   let i = 0;
@@ -1635,21 +1652,11 @@ function stringSpans(content, style) {
       continue;
     }
     if (c === '"' || c === "'" || c === "`") {
-      const quote = c;
       const start = i;
-      i++;
-      while (i < n) {
-        if (content[i] === "\\") {
-          i += 2;
-          continue;
-        }
-        if (content[i] === quote) {
-          i++;
-          break;
-        }
-        i++;
-      }
-      spans.push([start, i]);
+      const end = skipQuoted(content, i, n, rawBacktick);
+      if (c !== "'" || end > start + 1)
+        spans.push([start, end]);
+      i = end;
       continue;
     }
     i++;
@@ -1662,7 +1669,7 @@ function stripStringLiteralFindings(findings, content, file, ruleIds) {
   const style = commentStyleForFile(file);
   if (!style)
     return findings;
-  const spans = stringSpans(content, style);
+  const spans = stringSpans(content, style, /\.go$/i.test(file));
   if (spans.length === 0)
     return findings;
   const lineStarts = [0];
@@ -1792,7 +1799,7 @@ var init_source = __esm({
     RE_JSRSASIGN_KEYGEN = /KEYUTIL\.generateKeypair\s*\(/g;
     RE_JSRSASIGN_SIGN = /KJUR\.crypto\.(?:Signature|ECDSA)\b/g;
     RE_NODE_RSA = /new\s+NodeRSA\s*\(/g;
-    RE_SECP256K1 = /\b(?:secp(?:256k1)?|secp)\s*\.\s*(?:sign|verify|getPublicKey|getSharedSecret|ecdh|recoverPublicKey)\s*\(/g;
+    RE_SECP256K1 = /\b(?:secp(?:256k1)?|secp)\s*\.\s*(sign|verify|getPublicKey|getSharedSecret|ecdh|recoverPublicKey)\s*\(/g;
     RE_JWT_ALG = /['"`](RS(?:256|384|512)|PS(?:256|384|512)|ES(?:256|384|512|256K)|EdDSA)['"`]/g;
     RE_JOSE_ECDH = /['"`](ECDH-ES(?:\+A(?:128|192|256)KW)?)['"`]/g;
     RE_TLS_LEGACY_VERSION = /(?:minVersion|maxVersion)\s*:\s*['"`]TLSv1(?:\.1)?['"`]|secureProtocol\s*:\s*['"`]TLSv1(?:_1)?_method['"`]/g;
@@ -2193,7 +2200,16 @@ var init_source = __esm({
         add(RE_FORGE_RSA, RULE_FORGE_RSA);
         add(RE_FORGE_ED25519, RULE_FORGE_ED25519);
         add(RE_ELLIPTIC_EC, RULE_ELLIPTIC_EC);
-        add(RE_SECP256K1, RULE_SECP256K1);
+        eachMatch(RE_SECP256K1, content, (m) => {
+          const kex = m[1] === "getSharedSecret" || m[1] === "ecdh";
+          findings.push(findingFromRule(RULE_SECP256K1, { file, content, index: m.index, matchLength: m[0].length }, kex ? {
+            title: "secp256k1 ECDH key agreement",
+            category: "key-exchange",
+            algorithm: "ECDH",
+            hndl: true,
+            message: `secp256k1 ECDH key agreement (.${m[1]}()) is classical and harvest-now-decrypt-later exposed.`
+          } : void 0));
+        });
         add(RE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_KEYGEN);
         add(RE_JSRSASIGN_SIGN, RULE_JSRSASIGN_SIGN);
         add(RE_NODE_RSA, RULE_NODE_RSA_LIB);
@@ -5208,11 +5224,15 @@ var init_registry2 = __esm({
 });
 
 // ../core/dist/remediate-pipeline.js
+var SINK_MODULES, NEW_SINK_RE, NEW_SINK_LINE_RE;
 var init_remediate_pipeline = __esm({
   "../core/dist/remediate-pipeline.js"() {
     "use strict";
     init_patch_policy();
     init_verify();
+    SINK_MODULES = "child_process|http|https|http2|net|tls|dns|dgram";
+    NEW_SINK_RE = new RegExp(`\\b(?:fetch|XMLHttpRequest|WebSocket|navigator\\.sendBeacon|child_process|execSync|execFileSync|spawnSync|exec(?:File)?\\s*\\(|spawn\\s*\\(|eval\\s*\\(|new\\s+Function|os\\.system|subprocess|Runtime\\.getRuntime|require\\s*\\(\\s*['"](?:node:)?(?:${SINK_MODULES})['"]|import\\s*\\(\\s*['"](?:node:)?(?:${SINK_MODULES})['"]|import\\s+[^;\\n]{0,200}?from\\s*['"](?:node:)?(?:${SINK_MODULES})['"])`, "g");
+    NEW_SINK_LINE_RE = new RegExp(NEW_SINK_RE.source);
   }
 });
 

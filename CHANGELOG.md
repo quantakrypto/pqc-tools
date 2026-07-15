@@ -6,7 +6,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed (security & correctness — from a post-release 5-lens audit)
+
+- **Agent-line exfiltration-guard bypass** — the `qremediate` blast-radius guard
+  (`NEW_SINK_RE`) matched only bare `require("http")` / dynamic `import("http")`,
+  so a hostile or prompt-injected LLM patch adding `require("node:https")` or a
+  **static** `import { request } from "node:net"` sink was accepted (verified
+  end-to-end). It now matches the `node:` prefix, static-import forms, and
+  `tls`/`http2`, and **rejects any sink on a newly-added line** (robust to
+  sink-swaps), covered by a red-team fixture suite.
+- **Comment/string lexer bugs (introduced in 0.4.3)** — the filter now handles
+  **Go raw strings** (`` `C:\` `` no longer swallows the code after it, which had
+  hidden a real finding) and **Rust lifetimes** (`'a` no longer starts an
+  unterminated char-literal scan that silently disabled comment-based
+  false-positive suppression for the rest of the file). Both verified and
+  regression-tested.
+- **`secp256k1` key agreement mis-classified** — `secp.getSharedSecret()` / `.ecdh()`
+  were flagged as non-HNDL ECDSA signatures; they are now **ECDH key agreement
+  (`hndl: true`)**, so a genuine harvest-now-decrypt-later surface is no longer
+  deprioritized.
+- **MCP `score_delta` NaN** — validates its `before`/`after` findings arrays
+  (mirroring the triage/remediate tools) instead of emitting `NaN` readiness
+  scores on malformed input.
 
 ## [0.4.3] — 2026-07-15
 

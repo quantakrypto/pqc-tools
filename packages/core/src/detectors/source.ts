@@ -82,7 +82,7 @@ const RE_JSRSASIGN_SIGN = /KJUR\.crypto\.(?:Signature|ECDSA)\b/g;
 const RE_NODE_RSA = /new\s+NodeRSA\s*\(/g;
 // secp256k1 — direct @noble/secp256k1 / secp256k1-style API usage in source.
 const RE_SECP256K1 =
-  /\b(?:secp(?:256k1)?|secp)\s*\.\s*(?:sign|verify|getPublicKey|getSharedSecret|ecdh|recoverPublicKey)\s*\(/g;
+  /\b(?:secp(?:256k1)?|secp)\s*\.\s*(sign|verify|getPublicKey|getSharedSecret|ecdh|recoverPublicKey)\s*\(/g;
 
 // JWT/JOSE.
 const RE_JWT_ALG = /['"`](RS(?:256|384|512)|PS(?:256|384|512)|ES(?:256|384|512|256K)|EdDSA)['"`]/g;
@@ -611,7 +611,27 @@ const libraryDetector: Detector = {
     add(RE_FORGE_RSA, RULE_FORGE_RSA); // node-forge: pki.rsa.generateKeyPair(...)
     add(RE_FORGE_ED25519, RULE_FORGE_ED25519); // node-forge: forge.ed25519.*
     add(RE_ELLIPTIC_EC, RULE_ELLIPTIC_EC); // elliptic: new EC('secp256k1')
-    add(RE_SECP256K1, RULE_SECP256K1); // secp.sign / getPublicKey / getSharedSecret
+    // secp256k1: classify per method — getSharedSecret/ecdh are key AGREEMENT
+    // (ECDH, harvest-now-decrypt-later); sign/verify/getPublicKey/recover are
+    // ECDSA signatures (not HNDL). The old rule flagged everything as ECDSA.
+    eachMatch(RE_SECP256K1, content, (m) => {
+      const kex = m[1] === "getSharedSecret" || m[1] === "ecdh";
+      findings.push(
+        findingFromRule(
+          RULE_SECP256K1,
+          { file, content, index: m.index, matchLength: m[0].length },
+          kex
+            ? {
+                title: "secp256k1 ECDH key agreement",
+                category: "key-exchange",
+                algorithm: "ECDH",
+                hndl: true,
+                message: `secp256k1 ECDH key agreement (.${m[1]}()) is classical and harvest-now-decrypt-later exposed.`,
+              }
+            : undefined,
+        ),
+      );
+    });
     add(RE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_KEYGEN); // jsrsasign: KEYUTIL.generateKeypair(...)
     add(RE_JSRSASIGN_SIGN, RULE_JSRSASIGN_SIGN); // jsrsasign: KJUR.crypto.*
     add(RE_NODE_RSA, RULE_NODE_RSA_LIB); // node-rsa: new NodeRSA(...)

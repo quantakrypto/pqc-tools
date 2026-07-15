@@ -982,8 +982,13 @@ const scoreDeltaTool: ToolDefinition = {
     if (!Array.isArray(args.before) || !Array.isArray(args.after)) {
       return errorResult("score_delta requires 'before' and 'after' arrays of findings.");
     }
-    const before = args.before as Finding[];
-    const after = args.after as Finding[];
+    // Validate element shape too (mirrors triage/remediate) — a malformed
+    // `severity` otherwise yields a NaN readiness score rendered as authoritative.
+    if (!areFindings(args.before) || !areFindings(args.after)) {
+      return errorResult("score_delta: 'before' and 'after' must be arrays of valid findings.");
+    }
+    const before = args.before;
+    const after = args.after;
     const invBefore = await safe<CryptoInventory>("buildInventory", () => buildInventory(before));
     if (!invBefore.ok) return invBefore.result;
     const invAfter = await safe<CryptoInventory>("buildInventory", () => buildInventory(after));

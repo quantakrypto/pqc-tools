@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { detectFile, detectors } from "../src/index.js";
+import { commentSpans, stringSpans } from "../src/comments.js";
 import type { Finding } from "../src/index.js";
 
 function scan1(file: string, content: string): Finding[] {
@@ -103,5 +104,29 @@ test("qscan-ignore is language-agnostic (works with # comments)", () => {
       "python-rsa-keygen",
     ),
     false,
+  );
+});
+
+test("commentSpans handles Rust lifetimes without swallowing the file (verified lexer bug)", () => {
+  // `<'a>` / `&'a` are lifetimes, not char literals; the old lexer started an
+  // unterminated string on the ' and consumed the rest of the file, so the
+  // trailing // comment was never recognized (FP suppression silently no-op'd).
+  const src = "fn parse<'a>(x: &'a str) { let z = 1; } // migrated off createECDH()";
+  const spans = commentSpans(src, "c");
+  assert.ok(
+    spans.some(([s, e]) => src.slice(s, e).includes("migrated off createECDH")),
+    "the trailing line comment is found despite the lifetimes",
+  );
+});
+
+test("stringSpans treats Go raw strings as raw, no escapes (verified lexer bug)", () => {
+  // `C:\` is a Go RAW string; the old escape-aware scan treated \` as escaped and
+  // consumed past the close, hiding the identifier after it from CODE_ONLY rules.
+  const src = "x := " + "`" + "C:\\" + "`" + "\nSigningMethodRS256";
+  const idIdx = src.indexOf("SigningMethodRS256");
+  const spans = stringSpans(src, "c", true);
+  assert.ok(
+    !spans.some(([s, e]) => idIdx >= s && idIdx < e),
+    "the identifier after the raw string is not inside a string span",
   );
 });

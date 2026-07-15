@@ -55,31 +55,63 @@ export function commentStyleForFile(file: string): CommentStyle | null {
 }
 
 /**
+ * Advance past a string / char literal starting at `content[i]` (a quote char);
+ * returns the index just after it. Two correctness rules a naive escape-scan got
+ * wrong (both verified as real bugs):
+ *   - a `'` char literal must close within a short window (`'\u{10FFFF}'` is ~11
+ *     chars); otherwise it is a Rust lifetime (`'a`) or a stray apostrophe, NOT a
+ *     literal — return `i + 1` so the scan continues instead of consuming the
+ *     rest of the file.
+ *   - Go raw strings (backtick, when `rawBacktick`) do NOT process escapes, so a
+ *     trailing backslash (`` `C:\` ``) must not swallow the closing delimiter.
+ */
+function skipQuoted(content: string, i: number, n: number, rawBacktick: boolean): number {
+  const quote = content[i];
+  if (quote === "'") {
+    const limit = Math.min(n, i + 1 + 12);
+    let j = i + 1;
+    while (j < limit) {
+      if (content[j] === "\\") {
+        j += 2;
+        continue;
+      }
+      if (content[j] === "'") return j + 1;
+      j++;
+    }
+    return i + 1; // a lifetime / stray apostrophe, not a char literal
+  }
+  const escapes = !(quote === "`" && rawBacktick);
+  let j = i + 1;
+  while (j < n) {
+    if (escapes && content[j] === "\\") {
+      j += 2;
+      continue;
+    }
+    if (content[j] === quote) return j + 1;
+    j++;
+  }
+  return n;
+}
+
+/**
  * Compute the comment spans (`[start, end)` offsets) of `content`, skipping over
  * string literals so a comment marker inside a string is not treated as a
- * comment. Spans are returned sorted and non-overlapping.
+ * comment. Spans are returned sorted and non-overlapping. `rawBacktick` (Go)
+ * makes backtick strings raw (no escapes).
  */
-export function commentSpans(content: string, style: CommentStyle): Array<[number, number]> {
+export function commentSpans(
+  content: string,
+  style: CommentStyle,
+  rawBacktick = false,
+): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   const n = content.length;
   let i = 0;
   while (i < n) {
     const c = content[i];
-    // String / template literal: skip to the matching unescaped delimiter.
+    // String / char literal: skip past it (lexically correct for lifetimes + raw strings).
     if (c === '"' || c === "'" || c === "`") {
-      const quote = c;
-      i++;
-      while (i < n) {
-        if (content[i] === "\\") {
-          i += 2;
-          continue;
-        }
-        if (content[i] === quote) {
-          i++;
-          break;
-        }
-        i++;
-      }
+      i = skipQuoted(content, i, n, rawBacktick);
       continue;
     }
     if (style === "c" && c === "/" && content[i + 1] === "/") {
@@ -210,7 +242,7 @@ export function stripCommentFindings(
   if (findings.length === 0) return findings;
   const style = commentStyleForFile(file);
   if (!style) return findings;
-  const spans = commentSpans(content, style);
+  const spans = commentSpans(content, style, /\.go$/i.test(file));
   // Python docstrings suppress prose *token* rules but keep real PEM material.
   const docSpans = style === "hash" ? pythonDocstringSpans(content) : [];
   if (spans.length === 0 && docSpans.length === 0) return findings;
@@ -239,7 +271,11 @@ export function stripCommentFindings(
  * suppress findings from IDENTIFIER-only rules (e.g. a Go `SigningMethodRS256`
  * mentioned inside an error-message string) — the mirror of {@link commentSpans}.
  */
-export function stringSpans(content: string, style: CommentStyle): Array<[number, number]> {
+export function stringSpans(
+  content: string,
+  style: CommentStyle,
+  rawBacktick = false,
+): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   const n = content.length;
   let i = 0;
@@ -262,21 +298,11 @@ export function stringSpans(content: string, style: CommentStyle): Array<[number
       continue;
     }
     if (c === '"' || c === "'" || c === "`") {
-      const quote = c;
       const start = i;
-      i++;
-      while (i < n) {
-        if (content[i] === "\\") {
-          i += 2;
-          continue;
-        }
-        if (content[i] === quote) {
-          i++;
-          break;
-        }
-        i++;
-      }
-      spans.push([start, i]);
+      const end = skipQuoted(content, i, n, rawBacktick);
+      // A lone `'` (Rust lifetime, end === start+1) is not a string; skip it.
+      if (c !== "'" || end > start + 1) spans.push([start, end]);
+      i = end;
       continue;
     }
     i++;
@@ -302,7 +328,7 @@ export function stripStringLiteralFindings(
   if (findings.length === 0 || !findings.some((f) => ruleIds.has(f.ruleId))) return findings;
   const style = commentStyleForFile(file);
   if (!style) return findings;
-  const spans = stringSpans(content, style);
+  const spans = stringSpans(content, style, /\.go$/i.test(file));
   if (spans.length === 0) return findings;
 
   const lineStarts: number[] = [0];
