@@ -24,6 +24,14 @@ const RE_C_ECDSA = /\bECDSA_do_sign\s*\(|\bECDSA_sign\s*\(/g;
 const RE_C_ECDH = /\bECDH_compute_key\s*\(/g;
 const RE_C_DSA = /\bDSA_generate_key\s*\(|\bDSA_generate_parameters(?:_ex)?\s*\(/g;
 const RE_C_DH = /\bDH_generate_key\s*\(|\bDH_generate_parameters(?:_ex)?\s*\(/g;
+// Modern OpenSSL 3.x EVP API (the legacy *_generate_key forms above are
+// deprecated) + libsodium — the biggest C false-negative surface (audit F1).
+const RE_C_EVP_KEYGEN = /\bEVP_PKEY_(?:Q_)?keygen\s*\(|\bEVP_PKEY_paramgen\s*\(/g;
+const RE_C_EVP_DERIVE = /\bEVP_PKEY_derive\s*\(/g;
+const RE_C_EVP_CRYPT = /\bEVP_PKEY_(?:encrypt|decrypt)\s*\(/g;
+const RE_C_EVP_SIGN = /\bEVP_DigestSign(?:Init)?\s*\(|\bEVP_DigestVerify(?:Init)?\s*\(/g;
+const RE_C_SODIUM_BOX = /\bcrypto_box_(?:seed_)?keypair\s*\(/g;
+const RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:seed_)?keypair\s*\(/g;
 
 const RULE_C_RSA: RuleMeta = {
   id: "c-rsa-keygen",
@@ -104,6 +112,87 @@ const RULE_C_DH: RuleMeta = {
   message:
     "Finite-field Diffie-Hellman (C/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later).",
 };
+const RULE_C_EVP_KEYGEN: RuleMeta = {
+  id: "c-evp-keygen",
+  title: "C/OpenSSL EVP key generation",
+  description: "OpenSSL 3.x EVP_PKEY_keygen / EVP_PKEY_Q_keygen / paramgen",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Generates an asymmetric key via the OpenSSL 3.x EVP API (the key type — RSA/EC/DH/X25519 — is set on the CTX). Treated conservatively as key-exchange-capable (harvest-now-decrypt-later).",
+  remediation:
+    "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204).",
+};
+const RULE_C_EVP_DERIVE: RuleMeta = {
+  id: "c-evp-derive",
+  title: "C/OpenSSL EVP key agreement",
+  description: "OpenSSL 3.x EVP_PKEY_derive (ECDH / DH shared secret)",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Derives an (EC)DH shared secret via the OpenSSL EVP API — broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_C_EVP_CRYPT: RuleMeta = {
+  id: "c-evp-pkey-crypt",
+  title: "C/OpenSSL EVP public-key encryption",
+  description: "OpenSSL 3.x EVP_PKEY_encrypt / EVP_PKEY_decrypt (RSA)",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "RSA public-key encryption/decryption via the OpenSSL EVP API is harvest-now-decrypt-later exposed.",
+};
+const RULE_C_EVP_SIGN: RuleMeta = {
+  id: "c-evp-sign",
+  title: "C/OpenSSL EVP signing",
+  description: "OpenSSL 3.x EVP_DigestSign* / EVP_DigestVerify*",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Classical signature via the OpenSSL EVP API (RSA/ECDSA/EdDSA) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_C_SODIUM_BOX: RuleMeta = {
+  id: "c-libsodium-box",
+  title: "libsodium X25519 key pair",
+  description: "libsodium crypto_box_keypair (X25519 key agreement)",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "libsodium crypto_box uses X25519 key agreement — modern but classical, and harvest-now-decrypt-later exposed.",
+};
+const RULE_C_SODIUM_SIGN: RuleMeta = {
+  id: "c-libsodium-sign",
+  title: "libsodium Ed25519 key pair",
+  description: "libsodium crypto_sign_keypair (Ed25519 signatures)",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "libsodium crypto_sign uses Ed25519 signatures — classical and forgeable by a quantum attacker.",
+};
 
 /** Detects classical asymmetric crypto in C/C++ (OpenSSL). */
 export const cDetector: Detector = {
@@ -111,7 +200,20 @@ export const cDetector: Detector = {
   description: "Classical asymmetric crypto in C/C++ (OpenSSL)",
   scope: "source",
   language: "c",
-  rules: [RULE_C_RSA, RULE_C_EC, RULE_C_ECDSA, RULE_C_ECDH, RULE_C_DSA, RULE_C_DH],
+  rules: [
+    RULE_C_RSA,
+    RULE_C_EC,
+    RULE_C_ECDSA,
+    RULE_C_ECDH,
+    RULE_C_DSA,
+    RULE_C_DH,
+    RULE_C_EVP_KEYGEN,
+    RULE_C_EVP_DERIVE,
+    RULE_C_EVP_CRYPT,
+    RULE_C_EVP_SIGN,
+    RULE_C_SODIUM_BOX,
+    RULE_C_SODIUM_SIGN,
+  ],
   appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -127,6 +229,12 @@ export const cDetector: Detector = {
     add(RE_C_ECDH, RULE_C_ECDH);
     add(RE_C_DSA, RULE_C_DSA);
     add(RE_C_DH, RULE_C_DH);
+    add(RE_C_EVP_KEYGEN, RULE_C_EVP_KEYGEN);
+    add(RE_C_EVP_DERIVE, RULE_C_EVP_DERIVE);
+    add(RE_C_EVP_CRYPT, RULE_C_EVP_CRYPT);
+    add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
+    add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
+    add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
     return findings;
   },
 };

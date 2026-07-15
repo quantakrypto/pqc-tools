@@ -630,6 +630,51 @@
       }
     ]
   },
+  "positive/c-evp.c": {
+    "category": "c",
+    "expected": [
+      {
+        "ruleId": "c-evp-keygen",
+        "algorithm": "unknown",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-evp-derive",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-evp-pkey-crypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-evp-sign",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "c-libsodium-box",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-libsodium-sign",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/python-ecdh.py": {
+    "category": "python",
+    "expected": [
+      {
+        "ruleId": "python-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      }
+    ]
+  },
   "negative/python-clean.py": {
     "category": "negative",
     "expected": []

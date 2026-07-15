@@ -38,6 +38,9 @@ const RE_PY_RSA_ENCRYPT = /\bpadding\.OAEP\s*\(|\bPKCS1_OAEP\.new\s*\(/g;
 const RE_PY_EC_KEYGEN = /\bec\.generate_private_key\s*\(|\bECC\.generate\s*\(/g;
 // ECDSA signatures: cryptography `ec.ECDSA(`, paramiko ECDSAKey.
 const RE_PY_ECDSA = /\bec\.ECDSA\s*\(|\bparamiko\.ECDSAKey\b|\bECDSAKey\.generate\s*\(/g;
+// ECDH key agreement: cryptography `ec.ECDH(` — the actual harvest-now event in
+// `private_key.exchange(ec.ECDH(), peer)`; previously missed entirely (audit F3).
+const RE_PY_ECDH = /\bec\.ECDH\s*\(/g;
 // DSA: PyCryptodome `DSA.generate(`, paramiko DSSKey.
 const RE_PY_DSA = /\bDSA\.generate\s*\(|\bparamiko\.DSSKey\b|\bDSSKey\.generate\s*\(/g;
 // Finite-field Diffie-Hellman (cryptography `dh`).
@@ -105,6 +108,19 @@ const RULE_PY_ECDSA: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   message: "Classical ECDSA signing (Python) is forgeable by a quantum attacker.",
   remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_PY_ECDH: RuleMeta = {
+  id: "python-ecdh",
+  title: "Python ECDH key agreement",
+  description: "cryptography ec.ECDH() exchange",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Elliptic-curve Diffie-Hellman key agreement (Python) is broken by Shor's algorithm (harvest-now-decrypt-later).",
 };
 const RULE_PY_DSA: RuleMeta = {
   id: "python-dsa",
@@ -181,6 +197,7 @@ export const pythonDetector: Detector = {
     RULE_PY_RSA_ENCRYPT,
     RULE_PY_EC_KEYGEN,
     RULE_PY_ECDSA,
+    RULE_PY_ECDH,
     RULE_PY_DSA,
     RULE_PY_DH,
     RULE_PY_X25519,
@@ -201,6 +218,7 @@ export const pythonDetector: Detector = {
     add(RE_PY_RSA_ENCRYPT, RULE_PY_RSA_ENCRYPT);
     add(RE_PY_EC_KEYGEN, RULE_PY_EC_KEYGEN);
     add(RE_PY_ECDSA, RULE_PY_ECDSA);
+    add(RE_PY_ECDH, RULE_PY_ECDH);
     add(RE_PY_DSA, RULE_PY_DSA);
     add(RE_PY_DH, RULE_PY_DH);
     add(RE_PY_X25519, RULE_PY_X25519);
