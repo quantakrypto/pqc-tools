@@ -21,7 +21,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { JAVA_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { CWE_BROKEN_CRYPTO } from "../cwe.js";
+import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 /* -------------------------------------------------------------------------- */
 /* Regexes                                                                    */
@@ -35,7 +35,15 @@ const RE_JAVA_GETINSTANCE =
 
 // BouncyCastle lightweight-API class instantiations.
 const RE_JAVA_BC =
-  /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement)\s*\(/g;
+  /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
+
+// Insecure JSSE / TLS configuration expressed in Java source. Mirrors the JS
+// tlsDetector in source.ts (category "tls"): a legacy SSL/TLS protocol version
+// requested from SSLContext, and TLS hostname verification neutered via an
+// all-trusting verifier (Apache HttpClient's NoopHostnameVerifier /
+// ALLOW_ALL_HOSTNAME_VERIFIER).
+const RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
+const RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
 
 /* -------------------------------------------------------------------------- */
 /* Rule catalog                                                               */
@@ -158,6 +166,30 @@ const RULE_JAVA_EDDSA: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   message: "Ed25519/Ed448 (Java/JCA) is a modern but still classical signature scheme.",
 };
+const RULE_JAVA_TLS_LEGACY: RuleMeta = {
+  id: "java-tls-legacy-version",
+  title: "Legacy SSL/TLS version requested",
+  description: 'SSLContext.getInstance("SSL" | "SSLv3" | "TLSv1")',
+  category: "tls",
+  severity: "medium",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message: "SSL/SSLv3/TLS 1.0 are deprecated and insecure (Java/JSSE); require TLS 1.3.",
+  remediation: 'Use SSLContext.getInstance("TLSv1.3") and prefer PQC-hybrid key exchange.',
+};
+const RULE_JAVA_TLS_NOVERIFY: RuleMeta = {
+  id: "java-tls-hostname-verification-disabled",
+  title: "TLS hostname verification disabled",
+  description: "NoopHostnameVerifier / ALLOW_ALL_HOSTNAME_VERIFIER",
+  category: "tls",
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_CERT_VALIDATION,
+  message: "An all-trusting hostname verifier (Java) disables TLS hostname checking (MITM risk).",
+  remediation: "Remove the all-trusting verifier; rely on the default hostname verifier.",
+};
 
 /**
  * Classify a `<factory>.getInstance("<alg>")` pair into a rule, or null when the
@@ -175,6 +207,11 @@ function classifyGetInstance(factory: string, rawAlg: string): RuleMeta | null {
   if (alg.includes("ED25519") || alg.includes("ED448") || alg.includes("EDDSA"))
     return RULE_JAVA_EDDSA;
   if (alg.includes("X25519") || alg.includes("X448") || alg === "XDH") return RULE_JAVA_XDH;
+  // RSASSA-PSS is an RSA *signature* scheme, not encryption/KEM. The string
+  // contains "RSA", so it must be caught here — BEFORE the generic RSA branch
+  // below, which would otherwise (mis)classify it as HNDL-exposed RSA
+  // encryption (java-rsa / hndl:true). Signatures are hndl:false. (Fixes F8.)
+  if (alg.includes("PSS")) return RULE_JAVA_RSA_SIGN;
   if (alg.includes("RSA")) return isSignature ? RULE_JAVA_RSA_SIGN : RULE_JAVA_RSA;
   if (alg.includes("DSA")) return RULE_JAVA_DSA; // ECDSA already handled above
   if (alg.includes("DH") || alg.includes("DIFFIEHELLMAN")) return RULE_JAVA_DH;
@@ -191,6 +228,12 @@ const BC_CLASS_RULES: Record<string, RuleMeta> = {
   Ed448Signer: RULE_JAVA_EDDSA,
   X25519Agreement: RULE_JAVA_XDH,
   X448Agreement: RULE_JAVA_XDH,
+  ECDHBasicAgreement: RULE_JAVA_ECDH,
+  DHBasicAgreement: RULE_JAVA_DH,
+  X25519KeyPairGenerator: RULE_JAVA_XDH,
+  Ed25519KeyPairGenerator: RULE_JAVA_EDDSA,
+  RSAEngine: RULE_JAVA_RSA,
+  OAEPEncoding: RULE_JAVA_RSA,
 };
 
 /** Detects classical asymmetric crypto in Java / Kotlin (JCA + BouncyCastle). */
@@ -209,6 +252,8 @@ export const javaDetector: Detector = {
     RULE_JAVA_DH,
     RULE_JAVA_XDH,
     RULE_JAVA_EDDSA,
+    RULE_JAVA_TLS_LEGACY,
+    RULE_JAVA_TLS_NOVERIFY,
   ],
   appliesTo: (f) => hasExtension(f, JAVA_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -227,6 +272,30 @@ export const javaDetector: Detector = {
       if (!rule) return;
       findings.push(
         findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
+      );
+    });
+
+    // Legacy SSL/TLS protocol version requested from SSLContext.
+    eachMatch(RE_JAVA_TLS_LEGACY, content, (m) => {
+      findings.push(
+        findingFromRule(RULE_JAVA_TLS_LEGACY, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
+      );
+    });
+
+    // All-trusting hostname verifier — disables TLS hostname verification.
+    eachMatch(RE_JAVA_TLS_NOVERIFY, content, (m) => {
+      findings.push(
+        findingFromRule(RULE_JAVA_TLS_NOVERIFY, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
       );
     });
 

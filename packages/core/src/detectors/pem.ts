@@ -158,6 +158,57 @@ const PEM_RULES: PemRule[] = [
       remediation: "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature.",
     },
   },
+  {
+    re: /-----BEGIN (?:RSA )?PUBLIC KEY-----/g,
+    meta: {
+      id: "pem-public-key",
+      title: "Classical public key (PEM)",
+      description: "SubjectPublicKeyInfo / PKCS#1 RSA public key block",
+      category: "certificate",
+      severity: "low",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message:
+        "Embedded classical public key (RSA/EC/DSA); its key pair is not quantum-safe — forgeable signatures or classical key exchange.",
+      remediation: "Re-issue with PQC keys (ML-DSA / ML-KEM) as the ecosystem adopts them.",
+    },
+  },
+  {
+    re: /-----BEGIN DH PARAMETERS-----/g,
+    meta: {
+      id: "pem-dh-parameters",
+      title: "Diffie-Hellman parameters (PEM)",
+      description: "Finite-field DH group parameters block",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message:
+        "Embedded finite-field Diffie-Hellman parameters; classical DH key exchange is harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key exchange to hybrid X25519MLKEM768 (ML-KEM-768).",
+    },
+  },
+  {
+    re: /-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----/g,
+    meta: {
+      id: "pem-cert-request",
+      title: "Certificate signing request (PEM)",
+      description: "PKCS#10 certificate request block",
+      category: "certificate",
+      severity: "low",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message:
+        "Embedded PKCS#10 CSR; carries a classical public key and will be signed with classical crypto.",
+      remediation: "Re-generate with PQC keys as PQC-capable CAs mature.",
+    },
+  },
 ];
 
 /** Detects PEM key/certificate material in arbitrary files. */

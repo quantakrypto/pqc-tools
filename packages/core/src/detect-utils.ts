@@ -240,11 +240,19 @@ export const C_EXTENSIONS: readonly string[] = [".c", ".h", ".cc", ".cpp", ".cxx
 /**
  * File-literal surfaces where a JWT/JOSE algorithm string (`"RS256"`, `"ES256"`)
  * is the same evidence regardless of language. Used to un-gate the JWT detector
- * from JS-only. Kept to JS/TS + Python for now (both quote the alg token, so the
- * regex stays precise); YAML/JSON config carry unquoted tokens and higher FP
- * risk, so they wait for a config-aware pass.
+ * from JS-only. Covers the languages whose JWT libraries pass the alg as a quoted
+ * token — JS/TS, Python, Go (`jwt.GetSigningMethod("RS256")`) and Ruby
+ * (`JWT.encode(payload, key, 'RS256')`) — so the regex stays precise (`HS*` HMAC
+ * tokens are excluded by `RE_JWT_ALG`). Java/C# pass the alg as an *identifier*
+ * (`SignatureAlgorithm.RS256`), which needs its own pattern — a later pass.
+ * YAML/JSON config carry unquoted tokens and higher FP risk, so they wait too.
  */
-export const JWT_HOST_EXTENSIONS: readonly string[] = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
+export const JWT_HOST_EXTENSIONS: readonly string[] = [
+  ...JS_TS_EXTENSIONS,
+  ...PYTHON_EXTENSIONS,
+  ...GO_EXTENSIONS,
+  ...RUBY_EXTENSIONS,
+];
 
 /**
  * Extensions the scanner can actually analyze for inline crypto usage today

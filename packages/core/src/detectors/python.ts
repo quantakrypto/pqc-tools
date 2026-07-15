@@ -22,7 +22,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { PYTHON_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { CWE_BROKEN_CRYPTO } from "../cwe.js";
+import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 /* -------------------------------------------------------------------------- */
 /* Precompiled regexes (module scope)                                         */
@@ -43,6 +43,10 @@ const RE_PY_ECDSA = /\bec\.ECDSA\s*\(|\bparamiko\.ECDSAKey\b|\bECDSAKey\.generat
 const RE_PY_ECDH = /\bec\.ECDH\s*\(/g;
 // DSA: PyCryptodome `DSA.generate(`, paramiko DSSKey.
 const RE_PY_DSA = /\bDSA\.generate\s*\(|\bparamiko\.DSSKey\b|\bDSSKey\.generate\s*\(/g;
+// hazmat DSA: cryptography `dsa.generate_private_key(` — the `cryptography` DSA
+// keygen path (lowercase module) that RE_PY_DSA's uppercase `DSA.generate` misses
+// (audit F9-python).
+const RE_PY_HAZMAT_DSA = /\bdsa\.generate_private_key\s*\(/g;
 // Finite-field Diffie-Hellman (cryptography `dh`).
 const RE_PY_DH = /\bdh\.generate_parameters\s*\(|\bdh\.DHParameterNumbers\s*\(/g;
 // Modern-but-classical curve primitives (cryptography). `.generate(` anchors so
@@ -50,6 +54,15 @@ const RE_PY_DH = /\bdh\.generate_parameters\s*\(|\bdh\.DHParameterNumbers\s*\(/g
 const RE_PY_X25519 = /\bX25519PrivateKey\.generate\s*\(/g;
 const RE_PY_X448 = /\bX448PrivateKey\.generate\s*\(/g;
 const RE_PY_EDDSA = /\b(?:Ed25519|Ed448)PrivateKey\.generate\s*\(|\bparamiko\.Ed25519Key\b/g;
+
+// Python TLS misconfiguration. Mirrors the JS `tlsDetector` split of source.ts:
+// certificate-verification bypass (requests `verify=False`, `ssl.CERT_NONE`,
+// `check_hostname=False`, `ssl._create_unverified_context(`) is the high-severity
+// MITM surface (CWE-295); a pinned legacy protocol (`ssl.PROTOCOL_TLSv1`) is the
+// medium-severity weak-strength surface (CWE-326).
+const RE_PY_TLS_REJECT =
+  /\bverify\s*=\s*False\b|\bssl\.CERT_NONE\b|\bcheck_hostname\s*=\s*False\b|\bssl\._create_unverified_context\s*\(/g;
+const RE_PY_TLS_LEGACY = /\bPROTOCOL_TLSv1\b/g;
 
 /* -------------------------------------------------------------------------- */
 /* Rule catalog                                                               */
@@ -135,6 +148,20 @@ const RULE_PY_DSA: RuleMeta = {
   message: "Classical DSA (Python) is deprecated and forgeable by a quantum attacker.",
   remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204).",
 };
+const RULE_PY_HAZMAT_DSA: RuleMeta = {
+  id: "python-hazmat-dsa",
+  title: "Python DSA key generation (cryptography)",
+  description: "cryptography dsa.generate_private_key",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "cryptography dsa.generate_private_key (Python) creates a classical DSA key; DSA is deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204).",
+};
 const RULE_PY_DH: RuleMeta = {
   id: "python-dh",
   title: "Python Diffie-Hellman key exchange",
@@ -185,6 +212,34 @@ const RULE_PY_EDDSA: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   message: "Ed25519/Ed448 (Python) is a modern but still classical signature scheme.",
 };
+const RULE_PY_TLS_REJECT: RuleMeta = {
+  id: "python-tls-reject",
+  title: "Python TLS certificate verification disabled",
+  description:
+    "requests verify=False / ssl.CERT_NONE / check_hostname=False / _create_unverified_context",
+  category: "tls",
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_CERT_VALIDATION,
+  message:
+    "TLS certificate verification is disabled (verify=False / CERT_NONE / check_hostname=False / _create_unverified_context), which allows man-in-the-middle attacks.",
+  remediation:
+    "Enable certificate verification (verify=True, ssl.CERT_REQUIRED, check_hostname=True) and verify certificates properly.",
+};
+const RULE_PY_TLS_LEGACY: RuleMeta = {
+  id: "python-tls-legacy-version",
+  title: "Python legacy TLS version pinned",
+  description: "ssl.PROTOCOL_TLSv1 (TLS 1.0)",
+  category: "tls",
+  severity: "medium",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message: "TLS 1.0 (ssl.PROTOCOL_TLSv1) is deprecated and insecure; require TLS 1.3.",
+  remediation:
+    "Use ssl.PROTOCOL_TLS_CLIENT with minimum_version = ssl.TLSVersion.TLSv1_3 and prefer PQC-hybrid key exchange.",
+};
 
 /** Detects classical asymmetric crypto in Python source. */
 export const pythonDetector: Detector = {
@@ -199,10 +254,13 @@ export const pythonDetector: Detector = {
     RULE_PY_ECDSA,
     RULE_PY_ECDH,
     RULE_PY_DSA,
+    RULE_PY_HAZMAT_DSA,
     RULE_PY_DH,
     RULE_PY_X25519,
     RULE_PY_X448,
     RULE_PY_EDDSA,
+    RULE_PY_TLS_REJECT,
+    RULE_PY_TLS_LEGACY,
   ],
   appliesTo: (f) => hasExtension(f, PYTHON_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -220,10 +278,13 @@ export const pythonDetector: Detector = {
     add(RE_PY_ECDSA, RULE_PY_ECDSA);
     add(RE_PY_ECDH, RULE_PY_ECDH);
     add(RE_PY_DSA, RULE_PY_DSA);
+    add(RE_PY_HAZMAT_DSA, RULE_PY_HAZMAT_DSA);
     add(RE_PY_DH, RULE_PY_DH);
     add(RE_PY_X25519, RULE_PY_X25519);
     add(RE_PY_X448, RULE_PY_X448);
     add(RE_PY_EDDSA, RULE_PY_EDDSA);
+    add(RE_PY_TLS_REJECT, RULE_PY_TLS_REJECT);
+    add(RE_PY_TLS_LEGACY, RULE_PY_TLS_LEGACY);
 
     return findings;
   },

@@ -16,7 +16,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { C_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { CWE_BROKEN_CRYPTO } from "../cwe.js";
+import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 const RE_C_RSA = /\bRSA_generate_key(?:_ex)?\s*\(|\bEVP_RSA_gen\s*\(/g;
 const RE_C_EC = /\bEC_KEY_generate_key\s*\(|\bEC_KEY_new_by_curve_name\s*\(/g;
@@ -32,6 +32,16 @@ const RE_C_EVP_CRYPT = /\bEVP_PKEY_(?:encrypt|decrypt)\s*\(/g;
 const RE_C_EVP_SIGN = /\bEVP_DigestSign(?:Init)?\s*\(|\bEVP_DigestVerify(?:Init)?\s*\(/g;
 const RE_C_SODIUM_BOX = /\bcrypto_box_(?:seed_)?keypair\s*\(/g;
 const RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:seed_)?keypair\s*\(/g;
+// Legacy verify / decrypt counterparts to the *_sign / *_encrypt rules above
+// (audit F4-c): the classic OpenSSL RSA/ECDSA verification and RSA raw
+// decryption call forms that the modern EVP + legacy keygen rules don't cover.
+const RE_C_ECDSA_VERIFY = /\bECDSA_verify\s*\(/g;
+const RE_C_RSA_VERIFY = /\bRSA_verify\s*\(/g;
+const RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
+// C/OpenSSL legacy TLS configuration (mirrors source.ts tlsDetector): forcing a
+// deprecated protocol version or disabling certificate verification.
+const RE_C_TLS_VERSION = /\bTLSv1_method\b|\bSSLv3_method\b/g;
+const RE_C_TLS_VERIFY_NONE = /\bSSL_VERIFY_NONE\b/g;
 
 const RULE_C_RSA: RuleMeta = {
   id: "c-rsa-keygen",
@@ -193,6 +203,71 @@ const RULE_C_SODIUM_SIGN: RuleMeta = {
   message:
     "libsodium crypto_sign uses Ed25519 signatures — classical and forgeable by a quantum attacker.",
 };
+const RULE_C_ECDSA_VERIFY: RuleMeta = {
+  id: "c-ecdsa-verify",
+  title: "C/OpenSSL ECDSA signature verification",
+  description: "OpenSSL ECDSA_verify",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Classical ECDSA verification (C/OpenSSL) trusts signatures forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_C_RSA_VERIFY: RuleMeta = {
+  id: "c-rsa-verify",
+  title: "C/OpenSSL RSA signature verification",
+  description: "OpenSSL RSA_verify",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Classical RSA signature verification (C/OpenSSL) trusts signatures forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_C_RSA_CRYPT: RuleMeta = {
+  id: "c-rsa-crypt",
+  title: "C/OpenSSL RSA public-key encryption",
+  description: "OpenSSL RSA_public_encrypt / RSA_private_decrypt",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Legacy RSA public-key encryption/decryption (C/OpenSSL) is harvest-now-decrypt-later exposed.",
+};
+const RULE_C_TLS_VERSION: RuleMeta = {
+  id: "c-tls-legacy-version",
+  title: "Legacy TLS/SSL version pinned (C/OpenSSL)",
+  description: "OpenSSL TLSv1_method / SSLv3_method",
+  category: "tls",
+  severity: "medium",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message: "TLS 1.0 / SSLv3 are deprecated and insecure; require TLS 1.3.",
+  remediation: "Use TLS_method() with a minimum of TLS 1.3 and prefer PQC-hybrid key exchange.",
+};
+const RULE_C_TLS_VERIFY_NONE: RuleMeta = {
+  id: "c-tls-verify-none",
+  title: "TLS certificate verification disabled (C/OpenSSL)",
+  description: "OpenSSL SSL_VERIFY_NONE",
+  category: "tls",
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_CERT_VALIDATION,
+  message: "SSL_VERIFY_NONE disables TLS certificate verification (MITM risk).",
+  remediation: "Use SSL_VERIFY_PEER and verify certificates properly.",
+};
 
 /** Detects classical asymmetric crypto in C/C++ (OpenSSL). */
 export const cDetector: Detector = {
@@ -213,6 +288,11 @@ export const cDetector: Detector = {
     RULE_C_EVP_SIGN,
     RULE_C_SODIUM_BOX,
     RULE_C_SODIUM_SIGN,
+    RULE_C_ECDSA_VERIFY,
+    RULE_C_RSA_VERIFY,
+    RULE_C_RSA_CRYPT,
+    RULE_C_TLS_VERSION,
+    RULE_C_TLS_VERIFY_NONE,
   ],
   appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -235,6 +315,11 @@ export const cDetector: Detector = {
     add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
     add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
     add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
+    add(RE_C_ECDSA_VERIFY, RULE_C_ECDSA_VERIFY);
+    add(RE_C_RSA_VERIFY, RULE_C_RSA_VERIFY);
+    add(RE_C_RSA_CRYPT, RULE_C_RSA_CRYPT);
+    add(RE_C_TLS_VERSION, RULE_C_TLS_VERSION);
+    add(RE_C_TLS_VERIFY_NONE, RULE_C_TLS_VERIFY_NONE);
     return findings;
   },
 };

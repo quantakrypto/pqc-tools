@@ -434,8 +434,8 @@
         "hndl": false
       },
       {
-        "ruleId": "go-ecdh",
-        "algorithm": "ECDH",
+        "ruleId": "go-x25519",
+        "algorithm": "X25519",
         "hndl": true
       },
       {
@@ -734,5 +734,280 @@
   "negative/crypto-words-in-comment.ts": {
     "category": "negative",
     "expected": []
+  },
+  "positive/c-legacy-verify.c": {
+    "category": "c",
+    "expected": [
+      {
+        "ruleId": "c-ecdsa-verify",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "c-rsa-verify",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "c-rsa-crypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-rsa-crypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "c-tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "c-tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "c-tls-verify-none",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/csharp-parity.cs": {
+    "category": "csharp",
+    "expected": [
+      {
+        "ruleId": "csharp-tls-cert-validation",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/ruby-parity.rb": {
+    "category": "ruby",
+    "expected": [
+      {
+        "ruleId": "ruby-rsa-crypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "ruby-dh-agree",
+        "algorithm": "DH",
+        "hndl": true
+      },
+      {
+        "ruleId": "ruby-pkey-read",
+        "algorithm": "unknown",
+        "hndl": true
+      },
+      {
+        "ruleId": "ruby-ed25519",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "ruby-tls-verify-none",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/python-parity.py": {
+    "category": "python",
+    "expected": [
+      {
+        "ruleId": "python-hazmat-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "python-tls-reject",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "python-tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/go-parity.go": {
+    "category": "go",
+    "expected": [
+      {
+        "ruleId": "go-rsa-decrypt",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "go-rsa-verify",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "go-ecdsa-verify",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "go-ed25519-verify",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "go-ecdh-classic",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "go-tls-insecure-skip-verify",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "go-tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/rust-parity.rs": {
+    "category": "rust",
+    "expected": [
+      {
+        "ruleId": "rust-openssl-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-openssl-ec",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-openssl-dsa",
+        "algorithm": "DSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "rust-openssl-dh",
+        "algorithm": "DH",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-ring-x25519",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-x25519-bare",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "rust-signingkey-bare",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "rust-tls-accept-invalid-certs",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "rust-tls-rustls-dangerous",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/java-parity.java": {
+    "category": "java",
+    "expected": [
+      {
+        "ruleId": "java-rsa-sign",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-ecdh",
+        "algorithm": "ECDH",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-dh",
+        "algorithm": "DH",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-xdh",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-eddsa",
+        "algorithm": "EdDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "java-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "java-tls-legacy-version",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "java-tls-hostname-verification-disabled",
+        "algorithm": null,
+        "hndl": false
+      },
+      {
+        "ruleId": "java-tls-hostname-verification-disabled",
+        "algorithm": null,
+        "hndl": false
+      }
+    ]
+  },
+  "positive/go-jwt.go": {
+    "category": "jwt-jose",
+    "expected": [
+      {
+        "ruleId": "jwt-classical-alg",
+        "algorithm": "RSA",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/pem-public-material.pem": {
+    "category": "pem",
+    "expected": [
+      {
+        "ruleId": "pem-public-key",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "pem-dh-parameters",
+        "algorithm": "DH",
+        "hndl": true
+      },
+      {
+        "ruleId": "pem-cert-request",
+        "algorithm": "unknown",
+        "hndl": false
+      }
+    ]
   }
 }

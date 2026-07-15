@@ -256,7 +256,12 @@ var init_detect_utils = __esm({
     RUST_EXTENSIONS = [".rs"];
     RUBY_EXTENSIONS = [".rb"];
     C_EXTENSIONS = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
-    JWT_HOST_EXTENSIONS = [...JS_TS_EXTENSIONS, ...PYTHON_EXTENSIONS];
+    JWT_HOST_EXTENSIONS = [
+      ...JS_TS_EXTENSIONS,
+      ...PYTHON_EXTENSIONS,
+      ...GO_EXTENSIONS,
+      ...RUBY_EXTENSIONS
+    ];
     ANALYZABLE_SOURCE_EXTENSIONS = [
       ...JS_TS_EXTENSIONS,
       ...PYTHON_EXTENSIONS,
@@ -2142,7 +2147,7 @@ var init_source = __esm({
 });
 
 // ../core/dist/detectors/python.js
-var RE_PY_RSA_KEYGEN, RE_PY_RSA_ENCRYPT, RE_PY_EC_KEYGEN, RE_PY_ECDSA, RE_PY_ECDH, RE_PY_DSA, RE_PY_DH, RE_PY_X25519, RE_PY_X448, RE_PY_EDDSA, RULE_PY_RSA_KEYGEN, RULE_PY_RSA_ENCRYPT, RULE_PY_EC_KEYGEN, RULE_PY_ECDSA, RULE_PY_ECDH, RULE_PY_DSA, RULE_PY_DH, RULE_PY_X25519, RULE_PY_X448, RULE_PY_EDDSA, pythonDetector;
+var RE_PY_RSA_KEYGEN, RE_PY_RSA_ENCRYPT, RE_PY_EC_KEYGEN, RE_PY_ECDSA, RE_PY_ECDH, RE_PY_DSA, RE_PY_HAZMAT_DSA, RE_PY_DH, RE_PY_X25519, RE_PY_X448, RE_PY_EDDSA, RE_PY_TLS_REJECT, RE_PY_TLS_LEGACY, RULE_PY_RSA_KEYGEN, RULE_PY_RSA_ENCRYPT, RULE_PY_EC_KEYGEN, RULE_PY_ECDSA, RULE_PY_ECDH, RULE_PY_DSA, RULE_PY_HAZMAT_DSA, RULE_PY_DH, RULE_PY_X25519, RULE_PY_X448, RULE_PY_EDDSA, RULE_PY_TLS_REJECT, RULE_PY_TLS_LEGACY, pythonDetector;
 var init_python = __esm({
   "../core/dist/detectors/python.js"() {
     "use strict";
@@ -2154,10 +2159,13 @@ var init_python = __esm({
     RE_PY_ECDSA = /\bec\.ECDSA\s*\(|\bparamiko\.ECDSAKey\b|\bECDSAKey\.generate\s*\(/g;
     RE_PY_ECDH = /\bec\.ECDH\s*\(/g;
     RE_PY_DSA = /\bDSA\.generate\s*\(|\bparamiko\.DSSKey\b|\bDSSKey\.generate\s*\(/g;
+    RE_PY_HAZMAT_DSA = /\bdsa\.generate_private_key\s*\(/g;
     RE_PY_DH = /\bdh\.generate_parameters\s*\(|\bdh\.DHParameterNumbers\s*\(/g;
     RE_PY_X25519 = /\bX25519PrivateKey\.generate\s*\(/g;
     RE_PY_X448 = /\bX448PrivateKey\.generate\s*\(/g;
     RE_PY_EDDSA = /\b(?:Ed25519|Ed448)PrivateKey\.generate\s*\(|\bparamiko\.Ed25519Key\b/g;
+    RE_PY_TLS_REJECT = /\bverify\s*=\s*False\b|\bssl\.CERT_NONE\b|\bcheck_hostname\s*=\s*False\b|\bssl\._create_unverified_context\s*\(/g;
+    RE_PY_TLS_LEGACY = /\bPROTOCOL_TLSv1\b/g;
     RULE_PY_RSA_KEYGEN = {
       id: "python-rsa-keygen",
       title: "Python RSA key generation",
@@ -2233,6 +2241,19 @@ var init_python = __esm({
       message: "Classical DSA (Python) is deprecated and forgeable by a quantum attacker.",
       remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
     };
+    RULE_PY_HAZMAT_DSA = {
+      id: "python-hazmat-dsa",
+      title: "Python DSA key generation (cryptography)",
+      description: "cryptography dsa.generate_private_key",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "cryptography dsa.generate_private_key (Python) creates a classical DSA key; DSA is deprecated and forgeable by a quantum attacker.",
+      remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+    };
     RULE_PY_DH = {
       id: "python-dh",
       title: "Python Diffie-Hellman key exchange",
@@ -2281,6 +2302,30 @@ var init_python = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "Ed25519/Ed448 (Python) is a modern but still classical signature scheme."
     };
+    RULE_PY_TLS_REJECT = {
+      id: "python-tls-reject",
+      title: "Python TLS certificate verification disabled",
+      description: "requests verify=False / ssl.CERT_NONE / check_hostname=False / _create_unverified_context",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "TLS certificate verification is disabled (verify=False / CERT_NONE / check_hostname=False / _create_unverified_context), which allows man-in-the-middle attacks.",
+      remediation: "Enable certificate verification (verify=True, ssl.CERT_REQUIRED, check_hostname=True) and verify certificates properly."
+    };
+    RULE_PY_TLS_LEGACY = {
+      id: "python-tls-legacy-version",
+      title: "Python legacy TLS version pinned",
+      description: "ssl.PROTOCOL_TLSv1 (TLS 1.0)",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "TLS 1.0 (ssl.PROTOCOL_TLSv1) is deprecated and insecure; require TLS 1.3.",
+      remediation: "Use ssl.PROTOCOL_TLS_CLIENT with minimum_version = ssl.TLSVersion.TLSv1_3 and prefer PQC-hybrid key exchange."
+    };
     pythonDetector = {
       id: "python-crypto",
       description: "Classical asymmetric crypto in Python (cryptography, PyCryptodome, paramiko)",
@@ -2293,10 +2338,13 @@ var init_python = __esm({
         RULE_PY_ECDSA,
         RULE_PY_ECDH,
         RULE_PY_DSA,
+        RULE_PY_HAZMAT_DSA,
         RULE_PY_DH,
         RULE_PY_X25519,
         RULE_PY_X448,
-        RULE_PY_EDDSA
+        RULE_PY_EDDSA,
+        RULE_PY_TLS_REJECT,
+        RULE_PY_TLS_LEGACY
       ],
       appliesTo: (f) => hasExtension(f, PYTHON_EXTENSIONS),
       detect({ file, content }) {
@@ -2308,10 +2356,13 @@ var init_python = __esm({
         add(RE_PY_ECDSA, RULE_PY_ECDSA);
         add(RE_PY_ECDH, RULE_PY_ECDH);
         add(RE_PY_DSA, RULE_PY_DSA);
+        add(RE_PY_HAZMAT_DSA, RULE_PY_HAZMAT_DSA);
         add(RE_PY_DH, RULE_PY_DH);
         add(RE_PY_X25519, RULE_PY_X25519);
         add(RE_PY_X448, RULE_PY_X448);
         add(RE_PY_EDDSA, RULE_PY_EDDSA);
+        add(RE_PY_TLS_REJECT, RULE_PY_TLS_REJECT);
+        add(RE_PY_TLS_LEGACY, RULE_PY_TLS_LEGACY);
         return findings;
       }
     };
@@ -2319,7 +2370,7 @@ var init_python = __esm({
 });
 
 // ../core/dist/detectors/go.js
-var RE_GO_RSA_KEYGEN, RE_GO_RSA_ENCRYPT, RE_GO_RSA_SIGN, RE_GO_ECDSA, RE_GO_ECDH, RE_GO_ED25519, RE_GO_DSA, RULE_GO_RSA_KEYGEN, RULE_GO_RSA_ENCRYPT, RULE_GO_RSA_SIGN, RULE_GO_ECDSA, RULE_GO_ECDH, RULE_GO_ED25519, RULE_GO_DSA, goDetector;
+var RE_GO_RSA_KEYGEN, RE_GO_RSA_ENCRYPT, RE_GO_RSA_SIGN, RE_GO_ECDSA, RE_GO_ECDH, RE_GO_X25519, RE_GO_ED25519, RE_GO_DSA, RE_GO_RSA_DECRYPT, RE_GO_RSA_VERIFY, RE_GO_ECDSA_VERIFY, RE_GO_ED25519_VERIFY, RE_GO_ECDH_CLASSIC, RE_GO_TLS_SKIP_VERIFY, RE_GO_TLS_LEGACY_VERSION, RULE_GO_RSA_KEYGEN, RULE_GO_RSA_ENCRYPT, RULE_GO_RSA_SIGN, RULE_GO_ECDSA, RULE_GO_ECDH, RULE_GO_X25519, RULE_GO_ED25519, RULE_GO_DSA, RULE_GO_RSA_DECRYPT, RULE_GO_RSA_VERIFY, RULE_GO_ECDSA_VERIFY, RULE_GO_ED25519_VERIFY, RULE_GO_ECDH_CLASSIC, RULE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_LEGACY_VERSION, goDetector;
 var init_go = __esm({
   "../core/dist/detectors/go.js"() {
     "use strict";
@@ -2329,9 +2380,17 @@ var init_go = __esm({
     RE_GO_RSA_ENCRYPT = /\brsa\.EncryptOAEP\s*\(|\brsa\.EncryptPKCS1v15\s*\(/g;
     RE_GO_RSA_SIGN = /\brsa\.SignPKCS1v15\s*\(|\brsa\.SignPSS\s*\(/g;
     RE_GO_ECDSA = /\becdsa\.GenerateKey\s*\(|\becdsa\.SignASN1\s*\(|\becdsa\.Sign\s*\(/g;
-    RE_GO_ECDH = /\becdh\.(?:P256|P384|P521|X25519)\s*\(/g;
+    RE_GO_ECDH = /\becdh\.(?:P256|P384|P521)\s*\(/g;
+    RE_GO_X25519 = /\becdh\.X25519\s*\(/g;
     RE_GO_ED25519 = /\bed25519\.GenerateKey\s*\(|\bed25519\.Sign\s*\(/g;
     RE_GO_DSA = /\bdsa\.GenerateKey\s*\(|\bdsa\.GenerateParameters\s*\(/g;
+    RE_GO_RSA_DECRYPT = /\brsa\.DecryptOAEP\s*\(/g;
+    RE_GO_RSA_VERIFY = /\brsa\.VerifyPKCS1v15\s*\(|\brsa\.VerifyPSS\s*\(/g;
+    RE_GO_ECDSA_VERIFY = /\becdsa\.Verify(?:ASN1)?\s*\(/g;
+    RE_GO_ED25519_VERIFY = /\bed25519\.Verify\s*\(/g;
+    RE_GO_ECDH_CLASSIC = /\belliptic\.GenerateKey\s*\(|\.ScalarMult\s*\(/g;
+    RE_GO_TLS_SKIP_VERIFY = /InsecureSkipVerify:\s*true/g;
+    RE_GO_TLS_LEGACY_VERSION = /MinVersion:\s*tls\.Version(?:TLS1[01]|SSL30)/g;
     RULE_GO_RSA_KEYGEN = {
       id: "go-rsa-keygen",
       title: "Go RSA key generation",
@@ -2385,7 +2444,7 @@ var init_go = __esm({
     RULE_GO_ECDH = {
       id: "go-ecdh",
       title: "Go ECDH key exchange",
-      description: "crypto/ecdh P256/P384/P521/X25519 key agreement",
+      description: "crypto/ecdh P256/P384/P521 key agreement",
       category: "key-exchange",
       severity: "high",
       confidence: "high",
@@ -2393,6 +2452,18 @@ var init_go = __esm({
       hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message: "Elliptic-curve Diffie-Hellman (Go crypto/ecdh) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_GO_X25519 = {
+      id: "go-x25519",
+      title: "Go X25519 key exchange",
+      description: "crypto/ecdh X25519 key agreement",
+      category: "key-exchange",
+      severity: "low",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 (Go crypto/ecdh) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
     };
     RULE_GO_ED25519 = {
       id: "go-ed25519",
@@ -2419,6 +2490,92 @@ var init_go = __esm({
       message: "Classical DSA (Go) is deprecated and forgeable by a quantum attacker.",
       remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
     };
+    RULE_GO_RSA_DECRYPT = {
+      id: "go-rsa-decrypt",
+      title: "Go RSA public-key decryption",
+      description: "crypto/rsa DecryptOAEP",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "RSA public-key decryption (Go) recovers data protected by a classical KEM \u2014 harvest-now-decrypt-later exposed."
+    };
+    RULE_GO_RSA_VERIFY = {
+      id: "go-rsa-verify",
+      title: "Go RSA signature verification",
+      description: "crypto/rsa VerifyPKCS1v15 / VerifyPSS",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Verifies classical RSA signatures (Go), which are forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_GO_ECDSA_VERIFY = {
+      id: "go-ecdsa-verify",
+      title: "Go ECDSA signature verification",
+      description: "crypto/ecdsa Verify / VerifyASN1",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Verifies classical ECDSA signatures (Go), which are forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_GO_ED25519_VERIFY = {
+      id: "go-ed25519-verify",
+      title: "Go Ed25519 signature verification",
+      description: "crypto/ed25519 Verify",
+      category: "signature",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Verifies Ed25519 signatures (Go) \u2014 modern but still classical and quantum-forgeable."
+    };
+    RULE_GO_ECDH_CLASSIC = {
+      id: "go-ecdh-classic",
+      title: "Go classic EC key agreement (crypto/elliptic)",
+      description: "crypto/elliptic GenerateKey / ScalarMult (pre-1.20 ECDH)",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "medium",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Low-level elliptic-curve key agreement (Go crypto/elliptic) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_GO_TLS_SKIP_VERIFY = {
+      id: "go-tls-insecure-skip-verify",
+      title: "Go TLS certificate verification disabled",
+      description: "crypto/tls Config InsecureSkipVerify: true",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "InsecureSkipVerify:true disables TLS certificate verification (Go) \u2014 MITM risk.",
+      remediation: "Remove InsecureSkipVerify:true; verify certificates properly."
+    };
+    RULE_GO_TLS_LEGACY_VERSION = {
+      id: "go-tls-legacy-version",
+      title: "Go legacy TLS version pinned",
+      description: "crypto/tls MinVersion pinned to TLS 1.0/1.1 or SSL 3.0",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "MinVersion pins a deprecated TLS/SSL floor (TLS 1.0/1.1 or SSL 3.0) in Go; require TLS 1.3.",
+      remediation: "Set MinVersion: tls.VersionTLS13 and prefer PQC-hybrid key exchange."
+    };
     goDetector = {
       id: "go-crypto",
       description: "Classical asymmetric crypto in Go (crypto/rsa, ecdsa, ecdh, ed25519, dsa)",
@@ -2430,8 +2587,16 @@ var init_go = __esm({
         RULE_GO_RSA_SIGN,
         RULE_GO_ECDSA,
         RULE_GO_ECDH,
+        RULE_GO_X25519,
         RULE_GO_ED25519,
-        RULE_GO_DSA
+        RULE_GO_DSA,
+        RULE_GO_RSA_DECRYPT,
+        RULE_GO_RSA_VERIFY,
+        RULE_GO_ECDSA_VERIFY,
+        RULE_GO_ED25519_VERIFY,
+        RULE_GO_ECDH_CLASSIC,
+        RULE_GO_TLS_SKIP_VERIFY,
+        RULE_GO_TLS_LEGACY_VERSION
       ],
       appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
       detect({ file, content }) {
@@ -2442,8 +2607,16 @@ var init_go = __esm({
         add(RE_GO_RSA_SIGN, RULE_GO_RSA_SIGN);
         add(RE_GO_ECDSA, RULE_GO_ECDSA);
         add(RE_GO_ECDH, RULE_GO_ECDH);
+        add(RE_GO_X25519, RULE_GO_X25519);
         add(RE_GO_ED25519, RULE_GO_ED25519);
         add(RE_GO_DSA, RULE_GO_DSA);
+        add(RE_GO_RSA_DECRYPT, RULE_GO_RSA_DECRYPT);
+        add(RE_GO_RSA_VERIFY, RULE_GO_RSA_VERIFY);
+        add(RE_GO_ECDSA_VERIFY, RULE_GO_ECDSA_VERIFY);
+        add(RE_GO_ED25519_VERIFY, RULE_GO_ED25519_VERIFY);
+        add(RE_GO_ECDH_CLASSIC, RULE_GO_ECDH_CLASSIC);
+        add(RE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_SKIP_VERIFY);
+        add(RE_GO_TLS_LEGACY_VERSION, RULE_GO_TLS_LEGACY_VERSION);
         return findings;
       }
     };
@@ -2464,6 +2637,8 @@ function classifyGetInstance(factory, rawAlg) {
     return RULE_JAVA_EDDSA;
   if (alg.includes("X25519") || alg.includes("X448") || alg === "XDH")
     return RULE_JAVA_XDH;
+  if (alg.includes("PSS"))
+    return RULE_JAVA_RSA_SIGN;
   if (alg.includes("RSA"))
     return isSignature ? RULE_JAVA_RSA_SIGN : RULE_JAVA_RSA;
   if (alg.includes("DSA"))
@@ -2472,14 +2647,16 @@ function classifyGetInstance(factory, rawAlg) {
     return RULE_JAVA_DH;
   return null;
 }
-var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, BC_CLASS_RULES, javaDetector;
+var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, BC_CLASS_RULES, javaDetector;
 var init_java = __esm({
   "../core/dist/detectors/java.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
     RE_JAVA_GETINSTANCE = /\b(KeyPairGenerator|Signature|Cipher|KeyAgreement|KeyFactory)\s*\.\s*getInstance\s*\(\s*"([^"]+)"/g;
-    RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement)\s*\(/g;
+    RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
+    RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
+    RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
     RULE_JAVA_RSA = {
       id: "java-rsa",
       title: "Java RSA key/encryption",
@@ -2592,6 +2769,30 @@ var init_java = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "Ed25519/Ed448 (Java/JCA) is a modern but still classical signature scheme."
     };
+    RULE_JAVA_TLS_LEGACY = {
+      id: "java-tls-legacy-version",
+      title: "Legacy SSL/TLS version requested",
+      description: 'SSLContext.getInstance("SSL" | "SSLv3" | "TLSv1")',
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "SSL/SSLv3/TLS 1.0 are deprecated and insecure (Java/JSSE); require TLS 1.3.",
+      remediation: 'Use SSLContext.getInstance("TLSv1.3") and prefer PQC-hybrid key exchange.'
+    };
+    RULE_JAVA_TLS_NOVERIFY = {
+      id: "java-tls-hostname-verification-disabled",
+      title: "TLS hostname verification disabled",
+      description: "NoopHostnameVerifier / ALLOW_ALL_HOSTNAME_VERIFIER",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "An all-trusting hostname verifier (Java) disables TLS hostname checking (MITM risk).",
+      remediation: "Remove the all-trusting verifier; rely on the default hostname verifier."
+    };
     BC_CLASS_RULES = {
       RSAKeyPairGenerator: RULE_JAVA_RSA,
       DSAKeyPairGenerator: RULE_JAVA_DSA,
@@ -2600,7 +2801,13 @@ var init_java = __esm({
       Ed25519Signer: RULE_JAVA_EDDSA,
       Ed448Signer: RULE_JAVA_EDDSA,
       X25519Agreement: RULE_JAVA_XDH,
-      X448Agreement: RULE_JAVA_XDH
+      X448Agreement: RULE_JAVA_XDH,
+      ECDHBasicAgreement: RULE_JAVA_ECDH,
+      DHBasicAgreement: RULE_JAVA_DH,
+      X25519KeyPairGenerator: RULE_JAVA_XDH,
+      Ed25519KeyPairGenerator: RULE_JAVA_EDDSA,
+      RSAEngine: RULE_JAVA_RSA,
+      OAEPEncoding: RULE_JAVA_RSA
     };
     javaDetector = {
       id: "java-crypto",
@@ -2616,7 +2823,9 @@ var init_java = __esm({
         RULE_JAVA_DSA,
         RULE_JAVA_DH,
         RULE_JAVA_XDH,
-        RULE_JAVA_EDDSA
+        RULE_JAVA_EDDSA,
+        RULE_JAVA_TLS_LEGACY,
+        RULE_JAVA_TLS_NOVERIFY
       ],
       appliesTo: (f) => hasExtension(f, JAVA_EXTENSIONS),
       detect({ file, content }) {
@@ -2633,6 +2842,22 @@ var init_java = __esm({
             return;
           findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
         });
+        eachMatch(RE_JAVA_TLS_LEGACY, content, (m) => {
+          findings.push(findingFromRule(RULE_JAVA_TLS_LEGACY, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          }));
+        });
+        eachMatch(RE_JAVA_TLS_NOVERIFY, content, (m) => {
+          findings.push(findingFromRule(RULE_JAVA_TLS_NOVERIFY, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          }));
+        });
         return findings;
       }
     };
@@ -2640,7 +2865,7 @@ var init_java = __esm({
 });
 
 // ../core/dist/detectors/csharp.js
-var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, csharpDetector;
+var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RE_CS_TLS_CERT_VALIDATION, RE_CS_TLS_LEGACY_VERSION, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY, csharpDetector;
 var init_csharp = __esm({
   "../core/dist/detectors/csharp.js"() {
     "use strict";
@@ -2650,6 +2875,8 @@ var init_csharp = __esm({
     RE_CS_ECDSA = /\bECDsa\.Create\s*\(|\bnew\s+ECDsaCng\s*\(|\bnew\s+ECDsaOpenSsl\s*\(/g;
     RE_CS_ECDH = /\bECDiffieHellman\.Create\s*\(|\bnew\s+ECDiffieHellmanCng\s*\(|\bnew\s+ECDiffieHellmanOpenSsl\s*\(/g;
     RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bnew\s+DSACng\s*\(/g;
+    RE_CS_TLS_CERT_VALIDATION = /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
+    RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
     RULE_CS_RSA = {
       id: "csharp-rsa",
       title: "C# RSA key/usage",
@@ -2700,12 +2927,36 @@ var init_csharp = __esm({
       message: "Classical DSA (.NET) is deprecated and forgeable by a quantum attacker.",
       remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
     };
+    RULE_CS_TLS_CERT = {
+      id: "csharp-tls-cert-validation",
+      title: "C# TLS certificate verification disabled",
+      description: "DangerousAcceptAnyServerCertificateValidator / ServerCertificateCustomValidationCallback override",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "Accepting any server certificate disables TLS certificate verification (MITM risk).",
+      remediation: "Remove the custom validator and verify certificates properly; prefer PQC-hybrid key exchange."
+    };
+    RULE_CS_TLS_LEGACY = {
+      id: "csharp-tls-legacy-version",
+      title: "C# legacy TLS/SSL version pinned",
+      description: "SslProtocols pinned to Ssl3 / TLS 1.0 / TLS 1.1",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "SSL 3.0 / TLS 1.0 / TLS 1.1 are deprecated and insecure; require TLS 1.2+ (prefer 1.3).",
+      remediation: "Use SslProtocols.Tls13 (or Tls12) and prefer PQC-hybrid key exchange."
+    };
     csharpDetector = {
       id: "csharp-crypto",
-      description: "Classical asymmetric crypto in C#/.NET (System.Security.Cryptography)",
+      description: "Classical asymmetric crypto (System.Security.Cryptography) and insecure TLS config in C#/.NET",
       scope: "source",
       language: "csharp",
-      rules: [RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA],
+      rules: [RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY],
       appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
@@ -2714,6 +2965,8 @@ var init_csharp = __esm({
         add(RE_CS_ECDH, RULE_CS_ECDH);
         add(RE_CS_RSA, RULE_CS_RSA);
         add(RE_CS_DSA, RULE_CS_DSA);
+        add(RE_CS_TLS_CERT_VALIDATION, RULE_CS_TLS_CERT);
+        add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
         return findings;
       }
     };
@@ -2721,7 +2974,7 @@ var init_csharp = __esm({
 });
 
 // ../core/dist/detectors/rust.js
-var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, rustDetector;
+var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, rustDetector;
 var init_rust = __esm({
   "../core/dist/detectors/rust.js"() {
     "use strict";
@@ -2732,6 +2985,15 @@ var init_rust = __esm({
     RE_RUST_ECDH = /\becdh::EphemeralSecret\b|\bagreement::ECDH_P(?:256|384)\b/g;
     RE_RUST_ED25519 = /\bed25519_dalek::(?:SigningKey|Keypair|SecretKey)\b|\bEd25519KeyPair::/g;
     RE_RUST_X25519 = /\bx25519_dalek::(?:EphemeralSecret|StaticSecret)\b/g;
+    RE_RUST_OPENSSL_RSA = /\bRsa::generate\s*\(/g;
+    RE_RUST_OPENSSL_EC = /\bEcKey::generate\s*\(/g;
+    RE_RUST_OPENSSL_DSA = /\bDsa::generate\s*\(/g;
+    RE_RUST_OPENSSL_DH = /\bDh::/g;
+    RE_RUST_RING_X25519 = /\bagreement::X25519\b/g;
+    RE_RUST_BARE_X25519 = /(?<![:\w])EphemeralSecret::new\s*\(/g;
+    RE_RUST_BARE_SIGNINGKEY = /(?<![:\w])SigningKey::(?:generate|random)\s*\(/g;
+    RE_RUST_TLS_ACCEPT_INVALID = /\bdanger_accept_invalid_certs\s*\(\s*true/g;
+    RE_RUST_TLS_DANGEROUS = /\.dangerous\s*\(\s*\)/g;
     RULE_RUST_RSA = {
       id: "rust-rsa",
       title: "Rust RSA key/usage",
@@ -2793,12 +3055,138 @@ var init_rust = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "X25519 (Rust) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
     };
+    RULE_RUST_OPENSSL_RSA = {
+      id: "rust-openssl-rsa",
+      title: "Rust openssl RSA key generation",
+      description: "openssl crate Rsa::generate",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates a classical RSA key pair via the Rust `openssl` crate \u2014 not quantum-safe and RSA encryption is HNDL-exposed."
+    };
+    RULE_RUST_OPENSSL_EC = {
+      id: "rust-openssl-ec",
+      title: "Rust openssl EC key generation",
+      description: "openssl crate EcKey::generate",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates a classical EC key pair via the Rust `openssl` crate. EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_RUST_OPENSSL_DSA = {
+      id: "rust-openssl-dsa",
+      title: "Rust openssl DSA key/usage",
+      description: "openssl crate Dsa::generate",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical DSA via the Rust `openssl` crate is deprecated and forgeable by a quantum attacker.",
+      remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204)."
+    };
+    RULE_RUST_OPENSSL_DH = {
+      id: "rust-openssl-dh",
+      title: "Rust openssl Diffie-Hellman key exchange",
+      description: "openssl crate Dh params / key generation",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Finite-field Diffie-Hellman via the Rust `openssl` crate is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_RUST_RING_X25519 = {
+      id: "rust-ring-x25519",
+      title: "Rust ring X25519 key agreement",
+      description: "ring agreement::X25519",
+      category: "key-exchange",
+      severity: "low",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 key agreement via ring (Rust) is modern but still classical \u2014 harvest-now-decrypt-later."
+    };
+    RULE_RUST_BARE_X25519 = {
+      id: "rust-x25519-bare",
+      title: "Rust X25519 key agreement (unqualified)",
+      description: "bare EphemeralSecret::new (x25519-dalek imported via `use`)",
+      category: "key-exchange",
+      severity: "low",
+      confidence: "medium",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 key agreement (x25519-dalek, imported unqualified) is modern but still classical \u2014 harvest-now-decrypt-later."
+    };
+    RULE_RUST_BARE_SIGNINGKEY = {
+      id: "rust-signingkey-bare",
+      title: "Rust signature key (unqualified)",
+      description: "bare SigningKey::generate/random (ed25519-dalek / k256 via `use`)",
+      category: "signature",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical signature key from an unqualified `SigningKey` (ed25519-dalek Ed25519 / k256 ECDSA) \u2014 forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_RUST_TLS_ACCEPT_INVALID = {
+      id: "rust-tls-accept-invalid-certs",
+      title: "Rust TLS certificate verification disabled",
+      description: "reqwest danger_accept_invalid_certs(true)",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "danger_accept_invalid_certs(true) disables TLS certificate verification in reqwest (MITM risk).",
+      remediation: "Remove danger_accept_invalid_certs(true); verify certificates properly."
+    };
+    RULE_RUST_TLS_DANGEROUS = {
+      id: "rust-tls-rustls-dangerous",
+      title: "Rust rustls dangerous certificate config",
+      description: "rustls ClientConfig .dangerous() escape hatch",
+      category: "tls",
+      severity: "high",
+      confidence: "medium",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "rustls `.dangerous()` opts into disabling certificate verification (MITM risk).",
+      remediation: "Avoid the dangerous() escape hatch; keep the default certificate verifier."
+    };
     rustDetector = {
       id: "rust-crypto",
       description: "Classical asymmetric crypto in Rust (rsa, ring, *-dalek, p256/k256)",
       scope: "source",
       language: "rust",
-      rules: [RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519],
+      rules: [
+        RULE_RUST_RSA,
+        RULE_RUST_ECDSA,
+        RULE_RUST_ECDH,
+        RULE_RUST_ED25519,
+        RULE_RUST_X25519,
+        RULE_RUST_OPENSSL_RSA,
+        RULE_RUST_OPENSSL_EC,
+        RULE_RUST_OPENSSL_DSA,
+        RULE_RUST_OPENSSL_DH,
+        RULE_RUST_RING_X25519,
+        RULE_RUST_BARE_X25519,
+        RULE_RUST_BARE_SIGNINGKEY,
+        RULE_RUST_TLS_ACCEPT_INVALID,
+        RULE_RUST_TLS_DANGEROUS
+      ],
       appliesTo: (f) => hasExtension(f, RUST_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
@@ -2808,6 +3196,15 @@ var init_rust = __esm({
         add(RE_RUST_ECDH, RULE_RUST_ECDH);
         add(RE_RUST_ED25519, RULE_RUST_ED25519);
         add(RE_RUST_X25519, RULE_RUST_X25519);
+        add(RE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_RSA);
+        add(RE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_EC);
+        add(RE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DSA);
+        add(RE_RUST_OPENSSL_DH, RULE_RUST_OPENSSL_DH);
+        add(RE_RUST_RING_X25519, RULE_RUST_RING_X25519);
+        add(RE_RUST_BARE_X25519, RULE_RUST_BARE_X25519);
+        add(RE_RUST_BARE_SIGNINGKEY, RULE_RUST_BARE_SIGNINGKEY);
+        add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
+        add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
         return findings;
       }
     };
@@ -2815,7 +3212,7 @@ var init_rust = __esm({
 });
 
 // ../core/dist/detectors/ruby.js
-var RE_RB_RSA, RE_RB_EC, RE_RB_DSA, RE_RB_DH, RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH, rubyDetector;
+var RE_RB_RSA, RE_RB_EC, RE_RB_DSA, RE_RB_DH, RE_RB_RSA_CRYPT, RE_RB_DH_AGREE, RE_RB_PKEY_READ, RE_RB_ED25519, RE_RB_TLS_VERIFY_NONE, RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH, RULE_RB_RSA_CRYPT, RULE_RB_DH_AGREE, RULE_RB_PKEY_READ, RULE_RB_ED25519, RULE_RB_TLS_VERIFY_NONE, rubyDetector;
 var init_ruby = __esm({
   "../core/dist/detectors/ruby.js"() {
     "use strict";
@@ -2825,6 +3222,11 @@ var init_ruby = __esm({
     RE_RB_EC = /\bOpenSSL::PKey::EC\.(?:new|generate)\s*\(/g;
     RE_RB_DSA = /\bOpenSSL::PKey::DSA\.(?:new|generate)\s*\(/g;
     RE_RB_DH = /\bOpenSSL::PKey::DH\.new\s*\(/g;
+    RE_RB_RSA_CRYPT = /\.public_encrypt\b|\.private_decrypt\b/g;
+    RE_RB_DH_AGREE = /\bdh_compute_key\s*\(/g;
+    RE_RB_PKEY_READ = /\bOpenSSL::PKey\.read\s*\(/g;
+    RE_RB_ED25519 = /\bOpenSSL::PKey\.generate_key\s*\(\s*["']ED25519["']/g;
+    RE_RB_TLS_VERIFY_NONE = /\bOpenSSL::SSL::VERIFY_NONE\b/g;
     RULE_RB_RSA = {
       id: "ruby-rsa",
       title: "Ruby RSA key/usage",
@@ -2875,12 +3277,84 @@ var init_ruby = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "Finite-field Diffie-Hellman (Ruby/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later)."
     };
+    RULE_RB_RSA_CRYPT = {
+      id: "ruby-rsa-crypt",
+      title: "Ruby RSA public-key encryption",
+      description: "OpenSSL::PKey::RSA#public_encrypt / #private_decrypt",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "RSA public-key encryption/decryption (Ruby/OpenSSL) is harvest-now-decrypt-later exposed."
+    };
+    RULE_RB_DH_AGREE = {
+      id: "ruby-dh-agree",
+      title: "Ruby Diffie-Hellman key agreement",
+      description: "OpenSSL DH compute_key shared-secret agreement",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Finite-field Diffie-Hellman key agreement (Ruby/OpenSSL) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_RB_PKEY_READ = {
+      id: "ruby-pkey-read",
+      title: "Ruby PKey loaded from serialized key",
+      description: "OpenSSL::PKey.read (type-agnostic key loader)",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Loads a classical asymmetric key of unknown type (RSA/EC/DSA/DH) via OpenSSL::PKey.read. Treated conservatively as key-exchange-capable (harvest-now-decrypt-later).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_RB_ED25519 = {
+      id: "ruby-ed25519",
+      title: "Ruby Ed25519 key generation",
+      description: 'OpenSSL::PKey.generate_key("ED25519")',
+      category: "signature",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates an Ed25519 signing key (Ruby/OpenSSL) \u2014 modern but classical, and forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_RB_TLS_VERIFY_NONE = {
+      id: "ruby-tls-verify-none",
+      title: "Ruby TLS certificate verification disabled",
+      description: "OpenSSL::SSL::VERIFY_NONE",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "OpenSSL::SSL::VERIFY_NONE disables TLS peer certificate verification (MITM risk).",
+      remediation: "Use OpenSSL::SSL::VERIFY_PEER and verify the certificate chain."
+    };
     rubyDetector = {
       id: "ruby-crypto",
       description: "Classical asymmetric crypto in Ruby (OpenSSL::PKey::{RSA,EC,DSA,DH})",
       scope: "source",
       language: "ruby",
-      rules: [RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH],
+      rules: [
+        RULE_RB_RSA,
+        RULE_RB_EC,
+        RULE_RB_DSA,
+        RULE_RB_DH,
+        RULE_RB_RSA_CRYPT,
+        RULE_RB_DH_AGREE,
+        RULE_RB_PKEY_READ,
+        RULE_RB_ED25519,
+        RULE_RB_TLS_VERIFY_NONE
+      ],
       appliesTo: (f) => hasExtension(f, RUBY_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
@@ -2889,6 +3363,11 @@ var init_ruby = __esm({
         add(RE_RB_EC, RULE_RB_EC);
         add(RE_RB_DSA, RULE_RB_DSA);
         add(RE_RB_DH, RULE_RB_DH);
+        add(RE_RB_RSA_CRYPT, RULE_RB_RSA_CRYPT);
+        add(RE_RB_DH_AGREE, RULE_RB_DH_AGREE);
+        add(RE_RB_PKEY_READ, RULE_RB_PKEY_READ);
+        add(RE_RB_ED25519, RULE_RB_ED25519);
+        add(RE_RB_TLS_VERIFY_NONE, RULE_RB_TLS_VERIFY_NONE);
         return findings;
       }
     };
@@ -2896,7 +3375,7 @@ var init_ruby = __esm({
 });
 
 // ../core/dist/detectors/c.js
-var RE_C_RSA, RE_C_EC, RE_C_ECDSA, RE_C_ECDH, RE_C_DSA, RE_C_DH, RE_C_EVP_KEYGEN, RE_C_EVP_DERIVE, RE_C_EVP_CRYPT, RE_C_EVP_SIGN, RE_C_SODIUM_BOX, RE_C_SODIUM_SIGN, RULE_C_RSA, RULE_C_EC, RULE_C_ECDSA, RULE_C_ECDH, RULE_C_DSA, RULE_C_DH, RULE_C_EVP_KEYGEN, RULE_C_EVP_DERIVE, RULE_C_EVP_CRYPT, RULE_C_EVP_SIGN, RULE_C_SODIUM_BOX, RULE_C_SODIUM_SIGN, cDetector;
+var RE_C_RSA, RE_C_EC, RE_C_ECDSA, RE_C_ECDH, RE_C_DSA, RE_C_DH, RE_C_EVP_KEYGEN, RE_C_EVP_DERIVE, RE_C_EVP_CRYPT, RE_C_EVP_SIGN, RE_C_SODIUM_BOX, RE_C_SODIUM_SIGN, RE_C_ECDSA_VERIFY, RE_C_RSA_VERIFY, RE_C_RSA_CRYPT, RE_C_TLS_VERSION, RE_C_TLS_VERIFY_NONE, RULE_C_RSA, RULE_C_EC, RULE_C_ECDSA, RULE_C_ECDH, RULE_C_DSA, RULE_C_DH, RULE_C_EVP_KEYGEN, RULE_C_EVP_DERIVE, RULE_C_EVP_CRYPT, RULE_C_EVP_SIGN, RULE_C_SODIUM_BOX, RULE_C_SODIUM_SIGN, RULE_C_ECDSA_VERIFY, RULE_C_RSA_VERIFY, RULE_C_RSA_CRYPT, RULE_C_TLS_VERSION, RULE_C_TLS_VERIFY_NONE, cDetector;
 var init_c = __esm({
   "../core/dist/detectors/c.js"() {
     "use strict";
@@ -2914,6 +3393,11 @@ var init_c = __esm({
     RE_C_EVP_SIGN = /\bEVP_DigestSign(?:Init)?\s*\(|\bEVP_DigestVerify(?:Init)?\s*\(/g;
     RE_C_SODIUM_BOX = /\bcrypto_box_(?:seed_)?keypair\s*\(/g;
     RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:seed_)?keypair\s*\(/g;
+    RE_C_ECDSA_VERIFY = /\bECDSA_verify\s*\(/g;
+    RE_C_RSA_VERIFY = /\bRSA_verify\s*\(/g;
+    RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
+    RE_C_TLS_VERSION = /\bTLSv1_method\b|\bSSLv3_method\b/g;
+    RE_C_TLS_VERIFY_NONE = /\bSSL_VERIFY_NONE\b/g;
     RULE_C_RSA = {
       id: "c-rsa-keygen",
       title: "C/OpenSSL RSA key generation",
@@ -3063,6 +3547,68 @@ var init_c = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "libsodium crypto_sign uses Ed25519 signatures \u2014 classical and forgeable by a quantum attacker."
     };
+    RULE_C_ECDSA_VERIFY = {
+      id: "c-ecdsa-verify",
+      title: "C/OpenSSL ECDSA signature verification",
+      description: "OpenSSL ECDSA_verify",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical ECDSA verification (C/OpenSSL) trusts signatures forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_C_RSA_VERIFY = {
+      id: "c-rsa-verify",
+      title: "C/OpenSSL RSA signature verification",
+      description: "OpenSSL RSA_verify",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical RSA signature verification (C/OpenSSL) trusts signatures forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_C_RSA_CRYPT = {
+      id: "c-rsa-crypt",
+      title: "C/OpenSSL RSA public-key encryption",
+      description: "OpenSSL RSA_public_encrypt / RSA_private_decrypt",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Legacy RSA public-key encryption/decryption (C/OpenSSL) is harvest-now-decrypt-later exposed."
+    };
+    RULE_C_TLS_VERSION = {
+      id: "c-tls-legacy-version",
+      title: "Legacy TLS/SSL version pinned (C/OpenSSL)",
+      description: "OpenSSL TLSv1_method / SSLv3_method",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "TLS 1.0 / SSLv3 are deprecated and insecure; require TLS 1.3.",
+      remediation: "Use TLS_method() with a minimum of TLS 1.3 and prefer PQC-hybrid key exchange."
+    };
+    RULE_C_TLS_VERIFY_NONE = {
+      id: "c-tls-verify-none",
+      title: "TLS certificate verification disabled (C/OpenSSL)",
+      description: "OpenSSL SSL_VERIFY_NONE",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "SSL_VERIFY_NONE disables TLS certificate verification (MITM risk).",
+      remediation: "Use SSL_VERIFY_PEER and verify certificates properly."
+    };
     cDetector = {
       id: "c-crypto",
       description: "Classical asymmetric crypto in C/C++ (OpenSSL)",
@@ -3080,7 +3626,12 @@ var init_c = __esm({
         RULE_C_EVP_CRYPT,
         RULE_C_EVP_SIGN,
         RULE_C_SODIUM_BOX,
-        RULE_C_SODIUM_SIGN
+        RULE_C_SODIUM_SIGN,
+        RULE_C_ECDSA_VERIFY,
+        RULE_C_RSA_VERIFY,
+        RULE_C_RSA_CRYPT,
+        RULE_C_TLS_VERSION,
+        RULE_C_TLS_VERIFY_NONE
       ],
       appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
       detect({ file, content }) {
@@ -3098,6 +3649,11 @@ var init_c = __esm({
         add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
         add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
         add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
+        add(RE_C_ECDSA_VERIFY, RULE_C_ECDSA_VERIFY);
+        add(RE_C_RSA_VERIFY, RULE_C_RSA_VERIFY);
+        add(RE_C_RSA_CRYPT, RULE_C_RSA_CRYPT);
+        add(RE_C_TLS_VERSION, RULE_C_TLS_VERSION);
+        add(RE_C_TLS_VERIFY_NONE, RULE_C_TLS_VERIFY_NONE);
         return findings;
       }
     };
@@ -3244,6 +3800,54 @@ var init_pem = __esm({
           cwe: CWE_BROKEN_CRYPTO,
           message: "Embedded X.509 certificate; almost certainly signed with classical RSA/ECDSA.",
           remediation: "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature."
+        }
+      },
+      {
+        re: /-----BEGIN (?:RSA )?PUBLIC KEY-----/g,
+        meta: {
+          id: "pem-public-key",
+          title: "Classical public key (PEM)",
+          description: "SubjectPublicKeyInfo / PKCS#1 RSA public key block",
+          category: "certificate",
+          severity: "low",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Embedded classical public key (RSA/EC/DSA); its key pair is not quantum-safe \u2014 forgeable signatures or classical key exchange.",
+          remediation: "Re-issue with PQC keys (ML-DSA / ML-KEM) as the ecosystem adopts them."
+        }
+      },
+      {
+        re: /-----BEGIN DH PARAMETERS-----/g,
+        meta: {
+          id: "pem-dh-parameters",
+          title: "Diffie-Hellman parameters (PEM)",
+          description: "Finite-field DH group parameters block",
+          category: "key-exchange",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "DH",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Embedded finite-field Diffie-Hellman parameters; classical DH key exchange is harvest-now-decrypt-later exposed.",
+          remediation: "Migrate key exchange to hybrid X25519MLKEM768 (ML-KEM-768)."
+        }
+      },
+      {
+        re: /-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----/g,
+        meta: {
+          id: "pem-cert-request",
+          title: "Certificate signing request (PEM)",
+          description: "PKCS#10 certificate request block",
+          category: "certificate",
+          severity: "low",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Embedded PKCS#10 CSR; carries a classical public key and will be signed with classical crypto.",
+          remediation: "Re-generate with PQC keys as PQC-capable CAs mature."
         }
       }
     ];

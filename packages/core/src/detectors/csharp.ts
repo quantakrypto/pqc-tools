@@ -11,7 +11,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { CSHARP_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { CWE_BROKEN_CRYPTO } from "../cwe.js";
+import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 const RE_CS_RSA =
   /\bRSA\.Create\s*\(|\bnew\s+RSACryptoServiceProvider\s*\(|\bnew\s+RSACng\s*\(|\bnew\s+RSAOpenSsl\s*\(/g;
@@ -19,6 +19,17 @@ const RE_CS_ECDSA = /\bECDsa\.Create\s*\(|\bnew\s+ECDsaCng\s*\(|\bnew\s+ECDsaOpe
 const RE_CS_ECDH =
   /\bECDiffieHellman\.Create\s*\(|\bnew\s+ECDiffieHellmanCng\s*\(|\bnew\s+ECDiffieHellmanOpenSsl\s*\(/g;
 const RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bnew\s+DSACng\s*\(/g;
+// Insecure TLS configuration (.NET). Mirrors source.ts's tlsDetector split of a
+// cert-verification-disabled rule (tls-reject-unauthorized) and a legacy-version
+// rule (tls-legacy-version) for the equivalent C# idioms:
+//   - DangerousAcceptAnyServerCertificateValidator / a custom
+//     ServerCertificateCustomValidationCallback → accepts any cert (MITM).
+//   - SslProtocols.Ssl3 / .Tls / .Tls11 → deprecated SSL 3.0 / TLS 1.0 / 1.1.
+// `SslProtocols.Tls` (no suffix) is the legacy TLS 1.0 constant; `Tls12`/`Tls13`
+// are excluded by the trailing \b (the following digit is a word char).
+const RE_CS_TLS_CERT_VALIDATION =
+  /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
+const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
 
 const RULE_CS_RSA: RuleMeta = {
   id: "csharp-rsa",
@@ -71,14 +82,49 @@ const RULE_CS_DSA: RuleMeta = {
   message: "Classical DSA (.NET) is deprecated and forgeable by a quantum attacker.",
   remediation: "Rotate off DSA and migrate to ML-DSA-65 (FIPS 204).",
 };
+const RULE_CS_TLS_CERT: RuleMeta = {
+  id: "csharp-tls-cert-validation",
+  title: "C# TLS certificate verification disabled",
+  description:
+    "DangerousAcceptAnyServerCertificateValidator / ServerCertificateCustomValidationCallback override",
+  category: "tls",
+  severity: "high",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_CERT_VALIDATION,
+  message: "Accepting any server certificate disables TLS certificate verification (MITM risk).",
+  remediation:
+    "Remove the custom validator and verify certificates properly; prefer PQC-hybrid key exchange.",
+};
+const RULE_CS_TLS_LEGACY: RuleMeta = {
+  id: "csharp-tls-legacy-version",
+  title: "C# legacy TLS/SSL version pinned",
+  description: "SslProtocols pinned to Ssl3 / TLS 1.0 / TLS 1.1",
+  category: "tls",
+  severity: "medium",
+  confidence: "high",
+  hndl: false,
+  cwe: CWE_WEAK_STRENGTH,
+  message:
+    "SSL 3.0 / TLS 1.0 / TLS 1.1 are deprecated and insecure; require TLS 1.2+ (prefer 1.3).",
+  remediation: "Use SslProtocols.Tls13 (or Tls12) and prefer PQC-hybrid key exchange.",
+};
 
 /** Detects classical asymmetric crypto in C# (System.Security.Cryptography). */
 export const csharpDetector: Detector = {
   id: "csharp-crypto",
-  description: "Classical asymmetric crypto in C#/.NET (System.Security.Cryptography)",
+  description:
+    "Classical asymmetric crypto (System.Security.Cryptography) and insecure TLS config in C#/.NET",
   scope: "source",
   language: "csharp",
-  rules: [RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA],
+  rules: [
+    RULE_CS_RSA,
+    RULE_CS_ECDSA,
+    RULE_CS_ECDH,
+    RULE_CS_DSA,
+    RULE_CS_TLS_CERT,
+    RULE_CS_TLS_LEGACY,
+  ],
   appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -93,6 +139,9 @@ export const csharpDetector: Detector = {
     add(RE_CS_ECDH, RULE_CS_ECDH);
     add(RE_CS_RSA, RULE_CS_RSA);
     add(RE_CS_DSA, RULE_CS_DSA);
+    // Insecure TLS configuration (disjoint from the crypto factories above).
+    add(RE_CS_TLS_CERT_VALIDATION, RULE_CS_TLS_CERT);
+    add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
     return findings;
   },
 };

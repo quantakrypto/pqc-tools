@@ -44,10 +44,13 @@ test("crypto/ecdsa is signature-specific (hndl false)", () => {
   assert.equal(f.hndl, false);
 });
 
-test("crypto/ecdh is key agreement (hndl true)", () => {
+test("crypto/ecdh is key agreement (hndl true); X25519 is its own family", () => {
   assert.equal(byRule(run("m.go", "c := ecdh.P256()"), "go-ecdh")?.hndl, true);
-  const x = byRule(run("m.go", "c := ecdh.X25519()"), "go-ecdh");
-  assert.equal(x?.algorithm, "ECDH");
+  // X25519 is split out (audit F9) — its own family/severity, consistent with the
+  // other packs — but still key-exchange + hndl:true.
+  const x = byRule(run("m.go", "c := ecdh.X25519()"), "go-x25519");
+  assert.equal(x?.algorithm, "X25519");
+  assert.equal(x?.hndl, true);
   assert.equal(x?.category, "key-exchange");
 });
 
