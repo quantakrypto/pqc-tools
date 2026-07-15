@@ -8,6 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **GitHub Action now writes a job summary (`$GITHUB_STEP_SUMMARY`)** on every
+  run — the readiness score and the findings table (or the migration plan in
+  `comment-plan` mode) render on the workflow run's summary page with no PR
+  context and no token, so push builds and fork PRs surface results too. The PR
+  comment path is unchanged. Best-effort: a summary-write failure never breaks
+  the build.
 - **`qscan` human report now carries a "Standards & timeline" footer** whenever
   findings exist: the NIST IR 8547 deprecation deadlines (classical public-key
   crypto deprecated after 2030, disallowed after 2035) plus the standards worth

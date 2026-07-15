@@ -29,6 +29,7 @@ import type { AlgorithmFamily, Baseline, Finding, ScanResult, Severity } from "@
 import { renderReport, runQscan } from "@quantakrypto/qscan";
 
 import {
+  appendStepSummary,
   error as annotateError,
   getBooleanInput,
   getInput,
@@ -409,6 +410,8 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   if (inputs.mode === "comment-plan") {
     const { result: planResult } = await runQscan({ path: scanRoot });
     setOutput("readiness-score", String(planResult.inventory.readinessScore), env);
+    // Always render the plan on the run's summary page (no token needed).
+    appendStepSummary(buildPlanComment(planResult), env);
     if (inputs.githubToken) {
       const ctx = await readPullRequestContext(env);
       if (ctx) {
@@ -467,6 +470,12 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
   setOutput("sarif-file", inputs.output, env);
+
+  // Job summary: render the same Markdown table on the run's summary page. This
+  // shows the result on EVERY run — no PR context, no token — so a push build or
+  // a fork PR (where commenting needs a token it may not have) still surfaces the
+  // scan. Best-effort; a summary-write failure never breaks the build.
+  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold), env);
 
   // Optional PR comment (best-effort, never fatal).
   if (inputs.commentPr && inputs.githubToken) {

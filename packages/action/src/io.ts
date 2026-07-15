@@ -174,6 +174,26 @@ export function setOutput(name: string, value: string, env: NodeJS.ProcessEnv = 
 }
 
 /**
+ * Append Markdown to the GitHub Actions job summary (`$GITHUB_STEP_SUMMARY`),
+ * which renders on the workflow run's summary page. This surfaces the scan
+ * result on EVERY run — no PR context and no token required, unlike a PR comment.
+ *
+ * Best-effort: with no such file (local/test runs, or an older runner) it does
+ * nothing and returns false. Never throws — a summary-write failure must never
+ * break the scan. Returns true when the summary was written.
+ */
+export function appendStepSummary(markdown: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const filePath = env["GITHUB_STEP_SUMMARY"];
+  if (!filePath) return false;
+  try {
+    appendFileSync(filePath, markdown + EOL, { encoding: "utf8" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mark the action as failed: emit an `error` annotation and set the process
  * exit code to 1. (Does not call `process.exit`; the caller decides when.)
  */

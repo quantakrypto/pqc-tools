@@ -388,6 +388,43 @@ test("run honors redact-snippets: snippet text is omitted from the written repor
   assert.ok(!redacted.includes(marker), "expected the snippet text to be redacted out");
 });
 
+test("run writes the scan summary to $GITHUB_STEP_SUMMARY (no token/PR needed)", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `import { generateKeyPairSync } from "node:crypto";\nconst kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  const summaryFile = join(ws, "step-summary.md");
+  writeFileSync(summaryFile, "");
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    GITHUB_STEP_SUMMARY: summaryFile,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  await run(env);
+  const summary = readFileSync(summaryFile, "utf8");
+  assert.match(summary, /Quantum Readiness Scan/);
+  assert.match(summary, /Readiness score:/);
+  // The RSA finding lands in the table.
+  assert.match(summary, /\| high \|/);
+  assert.match(summary, /classical RSA/);
+});
+
+test("run does not throw when $GITHUB_STEP_SUMMARY is unset (local/older runner)", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(join(ws, "crypto.ts"), `const kp = generateKeyPairSync("rsa");\n`);
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  // No GITHUB_STEP_SUMMARY — the summary write is a silent no-op.
+  await run(env);
+});
+
 test("buildPlanComment orders HNDL/confidentiality families before signatures", () => {
   const rsa = makeFinding({
     ruleId: "rsa-keygen",

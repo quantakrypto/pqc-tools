@@ -7086,6 +7086,16 @@ function setOutput(name, value, env = process.env) {
   }
   process.stdout.write(formatCommand("set-output", value, { title: name }) + EOL);
 }
+function appendStepSummary(markdown, env = process.env) {
+  const filePath = env["GITHUB_STEP_SUMMARY"];
+  if (!filePath) return false;
+  try {
+    appendFileSync(filePath, markdown + EOL, { encoding: "utf8" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 function setFailed(message) {
   error(message);
   process.exitCode = 1;
@@ -7330,6 +7340,7 @@ async function run(env = process.env) {
   if (inputs.mode === "comment-plan") {
     const { result: planResult } = await runQscan({ path: scanRoot });
     setOutput("readiness-score", String(planResult.inventory.readinessScore), env);
+    appendStepSummary(buildPlanComment(planResult), env);
     if (inputs.githubToken) {
       const ctx = await readPullRequestContext(env);
       if (ctx) {
@@ -7365,6 +7376,7 @@ async function run(env = process.env) {
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
   setOutput("sarif-file", inputs.output, env);
+  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold), env);
   if (inputs.commentPr && inputs.githubToken) {
     const ctx = await readPullRequestContext(env);
     if (ctx) {

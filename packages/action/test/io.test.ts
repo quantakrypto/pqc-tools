@@ -4,7 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { formatCommand, getBooleanInput, getInput, setOutput } from "../src/io.js";
+import {
+  appendStepSummary,
+  formatCommand,
+  getBooleanInput,
+  getInput,
+  setOutput,
+} from "../src/io.js";
+
+test("appendStepSummary writes markdown to $GITHUB_STEP_SUMMARY and returns true", () => {
+  const dir = mkdtempSync(join(tmpdir(), "quantakrypto-summary-"));
+  const file = join(dir, "summary.md");
+  const wrote = appendStepSummary("## hello", { GITHUB_STEP_SUMMARY: file });
+  assert.equal(wrote, true);
+  assert.match(readFileSync(file, "utf8"), /## hello/);
+});
+
+test("appendStepSummary is a no-op returning false when the env var is unset", () => {
+  assert.equal(appendStepSummary("## nope", {}), false);
+});
 
 test("getInput reads INPUT_<UPPERCASED> and trims", () => {
   const env = { "INPUT_SEVERITY-THRESHOLD": "  high  " };
