@@ -30,6 +30,14 @@ and its remediation. Build clean; **~640 tests**; benchmark precision/recall
 - **`PQC_TRANSITION_NOTE`** — IR 8547 deprecation timeline + HQC / FN-DSA (FIPS
   206) / X-Wing forward-standards tracking. Dependency catalog: JOSE/JWT libs,
   pycrypto/jwcrypto/authlib, secp256k1 (cargo), net-ssh.
+- **`qscan --format evidence`** — ISO/IEC 27001 A.8.24 readiness report (findings
+  + inventory + CBOM + a deterministic content hash; external signer fills the
+  attestation). **NuGet** dependency ecosystem (`.csproj`/`packages.config`).
+  **SP 800-208** stateful-HBS detector (LMS/HSS/XMSS/XMSSMT). **Java/C# JWT
+  identifier-form** detection. **MCP `apply_verified_patch`** (runs the
+  patch-policy + verify + blast-radius gates offline). **ACVP vector-provenance**
+  in Sieve reports (raw-byte hashes + declared source, so a `kat` PASS is
+  traceable). Agent **entropy-based redactor catch-all**.
 
 ### Fixed / changed (security & correctness)
 
