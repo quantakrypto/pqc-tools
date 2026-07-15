@@ -6,10 +6,50 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
-Documentation refresh to v0.4 reality (roadmap, threat model). A dedicated
-adversarial audit of the BYOK agent line is in progress — see
-[`docs/ROADMAP.md`](docs/ROADMAP.md) §1 (Critical) and
-[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) §4.6/§6.5.
+_Nothing yet._
+
+## [0.4.3] — 2026-07-15
+
+The **2026-07-15 5-lens audit** ([`docs/audits/2026-07-15-v0.4-review.md`](docs/audits/2026-07-15-v0.4-review.md))
+and its remediation. Build clean; **~640 tests**; benchmark precision/recall
+**1.000** throughout; still zero runtime dependencies.
+
+### Added
+
+- **`qscan --tier category-3|category-5`** — CNSA security-tier migration targets
+  in the report footer (`formatTierGuidance`), making the previously library-only
+  `remediationForTier` reachable (category-5 → ML-KEM-1024 / ML-DSA-87).
+- **Cross-language detector parity** — TLS-config detection across all 7 non-JS
+  packs; verify/decrypt-only coverage (Go/C/Ruby); the Rust `openssl` crate +
+  ring X25519 + braced-import constructors; Python hazmat-DSA; Java BouncyCastle
+  agreement classes; the JWT detector extended to Go/Ruby; PEM public-key / DH-
+  parameters / CSR markers; C EVP API + libsodium; Python `ec.ECDH()`.
+- **Supply-chain CI** — OpenSSF Scorecard workflow; a zero-runtime-dependency
+  enforcement gate (`scripts/check-zero-deps.mjs`); `reuse lint` (advisory);
+  `dependabot.yml`; per-package `LICENSE`.
+- **`PQC_TRANSITION_NOTE`** — IR 8547 deprecation timeline + HQC / FN-DSA (FIPS
+  206) / X-Wing forward-standards tracking. Dependency catalog: JOSE/JWT libs,
+  pycrypto/jwcrypto/authlib, secp256k1 (cargo), net-ssh.
+
+### Fixed / changed (security & correctness)
+
+- **Agent line (from the adversarial audit):** `qremediate --llm` now rejects
+  LLM patches that add a network/exec sink or rewrite >60 lines and holds them
+  back from `apply` without `--apply-llm`; "verified" reworded to "crypto-verified,
+  not security-reviewed". Rubric moved to the provider `system` role + anti-injection
+  preamble. Spend caps (`--max-llm`, `--max-findings`). Provider host-pinning
+  (refuse plaintext non-local base URLs). `git add --` separator.
+- **Standards:** SSH guidance → `mlkem768x25519-sha256`; SLH-DSA ACVP loader fixed
+  (classify SLH before DSA); X448 → SecP384r1MLKEM1024; RSASSA-PSS keygen no longer
+  mis-classified as KEM (Java); Go `ecdh.X25519()` split into its own family.
+- **X25519 / X448 severity** `low` → `medium` (confidentiality/key-agreement, as
+  Shor-broken as P-256 ECDH; the largest HNDL surface).
+
+### Release
+
+- The `v1` Action tag is auto-moved to the released commit on publish (was stale);
+  per-job workflow permissions scoped; `persist-credentials: false` on CI checkouts;
+  `inlineSources` so published sourcemaps aren't dangling.
 
 ## [0.4.2] — 2026-07-04
 
