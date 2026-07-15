@@ -30,9 +30,37 @@ test("openai adapter reads choices[0].message.content", async () => {
 test("resolveClient dispatches by provider", () => {
   const a = resolveClient({ provider: "anthropic", model: "m", apiKey: "k" }, fakeFetch({}));
   const o = resolveClient(
-    { provider: "openai-compatible", baseURL: "http://x", model: "m", apiKey: "k" },
+    { provider: "openai-compatible", baseURL: "https://x", model: "m", apiKey: "k" },
     fakeFetch({}),
   );
   assert.equal(typeof a.complete, "function");
   assert.equal(typeof o.complete, "function");
+});
+
+test("resolveClient refuses a plaintext non-local baseURL (key-exfil guard)", () => {
+  assert.throws(
+    () =>
+      resolveClient(
+        {
+          provider: "openai-compatible",
+          baseURL: "http://evil.example/v1",
+          model: "m",
+          apiKey: "k",
+        },
+        fakeFetch({}),
+      ),
+    /https/,
+  );
+  // http is allowed for loopback (local LLM servers like Ollama/vLLM).
+  assert.doesNotThrow(() =>
+    resolveClient(
+      {
+        provider: "openai-compatible",
+        baseURL: "http://localhost:11434/v1",
+        model: "m",
+        apiKey: "k",
+      },
+      fakeFetch({}),
+    ),
+  );
 });

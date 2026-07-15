@@ -117,6 +117,7 @@ export {
   remediationForTier,
   TIER_PARAMS,
   STATEFUL_HBS_NOTE,
+  PQC_TRANSITION_NOTE,
   statefulHbsApplies,
 } from "./remediation.js";
 export type { SecurityTier } from "./remediation.js";

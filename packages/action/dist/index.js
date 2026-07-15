@@ -104,13 +104,13 @@ var init_remediation = __esm({
       },
       X448: {
         algorithm: "X448",
-        recommendation: "hybrid X25519MLKEM768 (ML-KEM-768)",
-        detail: "X448 (Goldilocks curve) is a modern classical key-agreement primitive at a higher classical security level, but it is still broken by Shor's algorithm. Adopt a hybrid PQC KEM (X25519MLKEM768 / ML-KEM-768) during the transition."
+        recommendation: "hybrid SecP384r1MLKEM1024 (or X25519MLKEM768)",
+        detail: "X448 (Goldilocks curve) is a modern classical key-agreement primitive at a higher classical security level, but it is still broken by Shor's algorithm. To preserve that assurance level, prefer the SecP384r1MLKEM1024 hybrid (ML-KEM-1024); X25519MLKEM768 is acceptable at the commercial tier."
       },
       ECIES: {
         algorithm: "ECIES",
-        recommendation: "ML-KEM-768 hybrid encryption",
-        detail: "ECIES relies on classical ECDH for its key encapsulation and is exposed to harvest-now-decrypt-later. Replace the KEM step with ML-KEM-768 (FIPS 203), preferably in a hybrid construction."
+        recommendation: "ML-KEM-768 hybrid encryption (X-Wing for HPKE)",
+        detail: "ECIES relies on classical ECDH for its key encapsulation and is exposed to harvest-now-decrypt-later. Replace the KEM step with ML-KEM-768 (FIPS 203) in a hybrid construction \u2014 for HPKE-style application-layer encryption, X-Wing (X25519 + ML-KEM-768) is the emerging hybrid KEM target."
       },
       unknown: {
         algorithm: "unknown",
@@ -840,6 +840,28 @@ var init_dependencies = __esm({
         severity: "high"
       },
       {
+        name: "pycrypto",
+        ecosystem: "pypi",
+        reason: "Abandoned/unmaintained crypto library \u2014 classical RSA/DSA/ElGamal.",
+        algorithms: ["RSA", "DSA"],
+        severity: "high"
+      },
+      {
+        name: "jwcrypto",
+        ecosystem: "pypi",
+        reason: "JWK / JWS / JWE with classical RS*/ES* and ECDH-ES key agreement.",
+        algorithms: ["RSA", "ECDSA", "ECDH"],
+        severity: "medium"
+      },
+      {
+        name: "authlib",
+        ecosystem: "pypi",
+        reason: "OAuth / OIDC / JOSE stack using classical RS*/ES* JWT signing.",
+        algorithms: ["RSA", "ECDSA"],
+        severity: "medium",
+        hndl: false
+      },
+      {
         name: "pycryptodomex",
         ecosystem: "pypi",
         reason: "RSA / ECC / DSA public-key crypto (the `Cryptodome` namespace).",
@@ -947,6 +969,13 @@ var init_dependencies = __esm({
         severity: "high"
       },
       {
+        name: "secp256k1",
+        ecosystem: "cargo",
+        reason: "libsecp256k1 bindings (blockchain) \u2014 classical ECDSA + ECDH.",
+        algorithms: ["ECDSA", "ECDH"],
+        severity: "high"
+      },
+      {
         name: "ed25519-dalek",
         ecosystem: "cargo",
         reason: "Ed25519 signatures (modern but classical).",
@@ -1044,6 +1073,13 @@ var init_dependencies = __esm({
         algorithms: ["RSA", "ECDSA"],
         severity: "medium",
         hndl: false
+      },
+      {
+        name: "net-ssh",
+        ecosystem: "rubygems",
+        reason: "Ruby SSH client \u2014 classical host/user keys (RSA/ECDSA/Ed25519) and ECDH/DH key exchange.",
+        algorithms: ["RSA", "ECDSA", "ECDH"],
+        severity: "medium"
       },
       {
         name: "rbnacl",
@@ -5502,7 +5538,22 @@ var init_openai = __esm({
 });
 
 // ../agent/dist/client.js
+function assertSafeBaseUrl(baseURL) {
+  if (!baseURL)
+    return;
+  let u;
+  try {
+    u = new URL(baseURL);
+  } catch {
+    throw new Error(`invalid LLM baseURL: ${baseURL}`);
+  }
+  const isLoopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(u.hostname);
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && isLoopback)) {
+    throw new Error(`refusing to send the API key over ${u.protocol}//${u.hostname} \u2014 the LLM baseURL must use https (http is allowed only for localhost).`);
+  }
+}
 function resolveClient(config, fetchImpl = fetch) {
+  assertSafeBaseUrl(config.baseURL);
   return config.provider === "anthropic" ? anthropicClient(config, fetchImpl) : openAiCompatibleClient(config, fetchImpl);
 }
 var init_client = __esm({

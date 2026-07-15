@@ -314,6 +314,28 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     severity: "high",
   },
   {
+    name: "pycrypto",
+    ecosystem: "pypi",
+    reason: "Abandoned/unmaintained crypto library — classical RSA/DSA/ElGamal.",
+    algorithms: ["RSA", "DSA"],
+    severity: "high",
+  },
+  {
+    name: "jwcrypto",
+    ecosystem: "pypi",
+    reason: "JWK / JWS / JWE with classical RS*/ES* and ECDH-ES key agreement.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium",
+  },
+  {
+    name: "authlib",
+    ecosystem: "pypi",
+    reason: "OAuth / OIDC / JOSE stack using classical RS*/ES* JWT signing.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
     name: "pycryptodomex",
     ecosystem: "pypi",
     reason: "RSA / ECC / DSA public-key crypto (the `Cryptodome` namespace).",
@@ -423,6 +445,13 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     severity: "high",
   },
   {
+    name: "secp256k1",
+    ecosystem: "cargo",
+    reason: "libsecp256k1 bindings (blockchain) — classical ECDSA + ECDH.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high",
+  },
+  {
     name: "ed25519-dalek",
     ecosystem: "cargo",
     reason: "Ed25519 signatures (modern but classical).",
@@ -523,6 +552,14 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
     hndl: false,
+  },
+  {
+    name: "net-ssh",
+    ecosystem: "rubygems",
+    reason:
+      "Ruby SSH client — classical host/user keys (RSA/ECDSA/Ed25519) and ECDH/DH key exchange.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium",
   },
   {
     name: "rbnacl",

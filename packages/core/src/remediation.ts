@@ -1,8 +1,9 @@
 /**
  * Post-quantum remediation guidance for each classical asymmetric algorithm
- * family. The recommendations follow NIST's standardized PQC algorithms
- * (ML-KEM / FIPS 203, ML-DSA / FIPS 204, SLH-DSA / FIPS 205) and the IETF
- * hybrid key-exchange drafts (X25519MLKEM768).
+ * family. The recommendations follow NIST's finalized PQC algorithms — ML-KEM
+ * (FIPS 203), ML-DSA (FIPS 204), SLH-DSA (FIPS 205) — and the IETF hybrid
+ * key-exchange groups (X25519MLKEM768, SecP384r1MLKEM1024). Forward-looking
+ * standards to track are captured in {@link PQC_TRANSITION_NOTE}.
  */
 import type { AlgorithmFamily, Remediation } from "./types.js";
 
@@ -63,19 +64,21 @@ const REMEDIATIONS: Record<AlgorithmFamily, Remediation> = {
   },
   X448: {
     algorithm: "X448",
-    recommendation: "hybrid X25519MLKEM768 (ML-KEM-768)",
+    recommendation: "hybrid SecP384r1MLKEM1024 (or X25519MLKEM768)",
     detail:
       "X448 (Goldilocks curve) is a modern classical key-agreement primitive at a " +
       "higher classical security level, but it is still broken by Shor's algorithm. " +
-      "Adopt a hybrid PQC KEM (X25519MLKEM768 / ML-KEM-768) during the transition.",
+      "To preserve that assurance level, prefer the SecP384r1MLKEM1024 hybrid " +
+      "(ML-KEM-1024); X25519MLKEM768 is acceptable at the commercial tier.",
   },
   ECIES: {
     algorithm: "ECIES",
-    recommendation: "ML-KEM-768 hybrid encryption",
+    recommendation: "ML-KEM-768 hybrid encryption (X-Wing for HPKE)",
     detail:
       "ECIES relies on classical ECDH for its key encapsulation and is exposed to " +
-      "harvest-now-decrypt-later. Replace the KEM step with ML-KEM-768 (FIPS 203), " +
-      "preferably in a hybrid construction.",
+      "harvest-now-decrypt-later. Replace the KEM step with ML-KEM-768 (FIPS 203) in " +
+      "a hybrid construction — for HPKE-style application-layer encryption, X-Wing " +
+      "(X25519 + ML-KEM-768) is the emerging hybrid KEM target.",
   },
   unknown: {
     algorithm: "unknown",
@@ -198,6 +201,18 @@ export const STATEFUL_HBS_NOTE =
   "but they are STATEFUL: the signer must never reuse a one-time key index. " +
   "Use only with rigorous state management; otherwise prefer stateless ML-DSA " +
   "(FIPS 204) or SLH-DSA (FIPS 205).";
+
+/**
+ * Forward-looking PQC standards worth tracking beyond the current FIPS 203/204/205
+ * targets. Surfaced for operators planning multi-year migrations.
+ */
+export const PQC_TRANSITION_NOTE =
+  "Migration urgency: NIST IR 8547 deprecates classical public-key crypto after " +
+  "2030 and disallows it after 2035 — long-lived (harvest-now-decrypt-later) data " +
+  "must move sooner. Standards to track: HQC (NIST's code-based backup KEM, " +
+  "selected March 2025; draft FIPS expected ~2026) as a diversity hedge against " +
+  "ML-KEM; FN-DSA / Falcon (draft FIPS 206) for compact lattice signatures; and " +
+  "X-Wing (X25519 + ML-KEM-768) for HPKE-style hybrid encryption.";
 
 /** True when stateful HBS (SP 800-208) is a reasonable alternative for a family. */
 export function statefulHbsApplies(algorithm: AlgorithmFamily): boolean {
