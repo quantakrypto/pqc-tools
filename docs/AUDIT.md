@@ -1,5 +1,17 @@
 # quantakrypto-tools — Post-Build Audit & Improvement Roadmap
 
+> ## ⚠ Historical snapshot (v0.1.0) — superseded
+>
+> _Banner added 2026-07-15._ This is a **point-in-time audit of v0.1.0**, kept for
+> historical reference. It is **out of date** — the code has since shipped through
+> **0.4.2**. For current status, read **[docs/ROADMAP.md](ROADMAP.md)**.
+>
+> Most of the **§7 roadmap table** below has since **shipped**, and several of the
+> defects this audit describes are now **fixed** — including the dead
+> `ScanOptions.include` option, the qScan SARIF fallback, the MCP no-auth HTTP
+> transport, and the Sieve full-`env` passthrough. Read specific counts, versions,
+> and "current violations" here as the state *as of v0.1.0*, not today.
+
 Audit of the `quantakrypto-tools` monorepo (v0.1.0) at commit time of writing.
 Scope: all five packages (`core`, `qscan`, `mcp`, `action`, `sieve`), READMEs,
 sources, and tests. No code was modified.

@@ -6,9 +6,83 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
-Implements the full P0/P1/P2 roadmap (see [`docs/ROADMAP.md`](docs/ROADMAP.md)).
-Build clean; **307 tests pass**; ESLint + Prettier clean; still zero runtime
-dependencies.
+Documentation refresh to v0.4 reality (roadmap, threat model). A dedicated
+adversarial audit of the BYOK agent line is in progress — see
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §1 (Critical) and
+[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) §4.6/§6.5.
+
+## [0.4.2] — 2026-07-04
+
+Multi-expert audit-hardening pass across all packages; Action `dist/` re-bundled.
+First published to npm under the `@quantakrypto` scope with build provenance.
+
+### Fixed
+
+- Hardening fixes from a multi-discipline review (redactor coverage, readiness
+  scoring, remediation edge cases); build clean, benchmark 1.000, zero runtime deps.
+
+## [0.4.1] — 2026-07-03
+
+### Fixed
+
+- `qremediate` now fully fixes files with multiple TLS issues in one pass; added
+  the end-to-end testing runbook ([`docs/how-to-test-0.4.md`](docs/how-to-test-0.4.md)).
+
+## [0.4.0] — 2026-07-03
+
+The multi-language + BYOK-agent release (0.3 skipped). Six new detector languages
+and the optional LLM agent line land together; still **zero runtime dependencies**.
+
+### Added
+
+- **core (detectors):** language packs for **Python, Go, Java/Kotlin, C#, Rust,
+  Ruby, and C/OpenSSL** — the `DetectorRegistry` now spans **8 source languages**
+  (JS/TS + 7) plus PEM key material. Multi-ecosystem dependency manifests:
+  PyPI, cargo, Go modules, Maven, RubyGems (in addition to npm; +yarn/pnpm lock
+  parsing). Coverage-honesty labelling (`ANALYZABLE_LANGUAGES_LABEL`).
+- **agent (new package `@quantakrypto/agent`):** zero-dep BYOK LLM client —
+  native-`fetch` adapters for Anthropic Messages + OpenAI-compatible APIs, a
+  zero-dep JSON-schema response validator, a repair-retry loop, and a response
+  cache keyed by `(promptVersion, model, level, fingerprint)`. Triage orchestrator
+  (rubric prompt) and LLM fix orchestrator (`proposeFix`, skips secret-bearing files).
+- **qscan:** **`--triage`** (BYOK LLM re-ranks + explains findings; **never
+  suppresses, never gates CI**) and **`qremediate`** — deterministic codemod fixes
+  (`--mode diff|apply`), plus **`--llm`** and **`--mode pr`** (draft-PR), all
+  verify-gated and worktree-isolated with **no auto-merge**.
+- **mcp:** deterministic **`triage_findings` / `apply_triage`** and
+  **`remediate_findings`** — request/apply tools that stay **offline and key-free**
+  (the host agent reasons; the server never calls a provider).
+- **action:** **`comment-plan`** migration-plan PR comment; `dist/` re-bundled.
+
+### Notes
+
+- This is the first release published to npm; earlier versions were tagged but
+  the packages went public here.
+
+## [0.2.2] — 2026-07-02
+
+### Changed / Fixed
+
+- Readiness score uses exponential decay so it stays responsive across the whole
+  range (was pinning flat at 0 on large repos, hiding all progress).
+- The Action upserts its PR comment via a hidden marker instead of stacking a new
+  comment every push.
+- Expanded the npm dependency DB (+15: ethers, web3, bitcoinjs-lib, openpgp,
+  node-jose, ssh2, @peculiar/x509, http-signature, libsodium-wrappers, …).
+
+## [0.2.1] — 2026-07-02
+
+### Fixed
+
+- The `qscan` CLI was a silent no-op via `npx` / the `.bin` symlink / macOS
+  `/tmp` — the main-guard compared `import.meta.url` to the unresolved `argv[1]`.
+  Resolve symlinks like the MCP stdio guard does; added a symlink smoke test.
+
+## [0.2.0] — 2026-06-29
+
+The audit-hardening release. Implements the full P0/P1/P2 roadmap (see
+[`docs/ROADMAP.md`](docs/ROADMAP.md)). Build clean; **307 tests pass**; ESLint +
+Prettier clean; still zero runtime dependencies.
 
 ### Added
 
@@ -77,5 +151,9 @@ TypeScript toolset for post-quantum readiness.
   driven over a JSON protocol; ships no KAT vectors and never fabricates them.
 - Project governance, CI, and a multi-discipline audit set under `docs/`.
 
-[Unreleased]: https://github.com/quantakrypto/pqc-tools/compare/v0.1.0...HEAD
+<!-- Per-version compare links are omitted: releases are currently published from
+`main` rather than immutable `vX.Y.Z` tags (only a moving `v1` Action tag exists).
+Cutting semver tags + a GitHub Release per version is tracked as a release-process
+fix. -->
+[Unreleased]: https://github.com/quantakrypto/pqc-tools/commits/main
 [0.1.0]: https://github.com/quantakrypto/pqc-tools/releases/tag/v0.1.0

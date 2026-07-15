@@ -14,21 +14,22 @@ All packages follow [Semantic Versioning 2.0.0](https://semver.org): `MAJOR.MINO
 - **PATCH** — backward-compatible bug fixes (including detection-accuracy fixes
   that do not change the data contract).
 
-### Pre-1.0 reality (today: all packages `0.1.0`)
+### Pre-1.0 reality (today: all packages `0.4.2`)
 
 Under SemVer's 0.x rule, **anything may change in a minor release** and the public
 API is explicitly **pre-stable**. We make **no compatibility promises before 1.0**
-— in particular, the known pre-1.0 honesty items (the baseline-fingerprint schism
-P1-1, dead `ScanOptions.include` P1-2) may be fixed in a `0.x` minor even though
-they would be breaking post-1.0. Reaching **1.0.0 requires** a documented, frozen
+— pre-1.0 breaking cleanups land in a `0.x` minor even though they would be breaking
+post-1.0. (The two earlier honesty items — the baseline-fingerprint schism P1-1 and
+the dead `ScanOptions.include` option P1-2 — have both since been fixed this way.)
+Reaching **1.0.0 requires** a documented, frozen
 public API surface (the [core contract](#3-what-counts-as-breaking-on-the-core-contract)),
 a generated API reference, and a maintained [CHANGELOG](../CHANGELOG.md).
 
 ### Independent versions, coordinated bumps
 
 Each package versions independently (it has its own `package.json` and publishes
-on its own line). But because three tools consume `@quantakrypto/core`
-([ADR-0002](adr/0002-shared-core-contract.md)):
+on its own line). But because four tools consume `@quantakrypto/core` — qScan, MCP,
+the Action, and agent ([ADR-0002](adr/0002-shared-core-contract.md)):
 
 - A **MAJOR** bump of `@quantakrypto/core` that changes the contract forces, at minimum,
   a **MINOR** bump of every consumer that adopts the new core (a new compatible
@@ -46,10 +47,11 @@ path, `dist` layout) are **not** part of the contract and may change in a PATCH.
 | Package | Public surface (SemVer-covered) |
 |---|---|
 | `@quantakrypto/core` | The exports of `src/index.ts` + the types in `src/types.ts` (see §3). |
-| `@quantakrypto/qscan` | The **CLI** (flags, exit codes, output-format *shape*) **and** the programmatic API: `runQscan`, `EXIT`, `parseArgs`, `defaultOptions`, severity + baseline helpers. |
+| `@quantakrypto/qscan` | The **`qscan` CLI** (flags, exit codes, output-format *shape*) **and** the **`qremediate` CLI** (flags, `--mode diff\|apply\|pr`, exit codes 0/2) **and** the programmatic API: `runQscan`, `EXIT`, `parseArgs`, `defaultOptions`, `REMEDIATE_EXIT`, severity + baseline helpers. |
 | `@quantakrypto/mcp` | The **MCP tool contract**: tool names, their `inputSchema`, and result shape; the supported JSON-RPC methods. The bin name `quantakrypto-mcp`. |
 | `@quantakrypto/action` | The **action interface**: `action.yml` inputs, outputs, and documented exit behavior; the `uses:` ref. |
 | `@quantakrypto/sieve` | The **SUT protocol** (`PROTOCOL.md`, `PROTOCOL_VERSION`), the CLI flags/exit codes, and `runSieve`/`formatHuman`. |
+| `@quantakrypto/agent` | The exported BYOK client API: `resolveClient`, `triageFindings`, `proposeFix`, `validateAgainstSchema`, the `LlmClient`/`LlmConfig`/`LlmRequest` types, and the prompt-version constants (`TRIAGE_PROMPT_VERSION`, `FIX_PROMPT_VERSION`). The internal provider adapters (`anthropicClient`, `openAiCompatibleClient`) and the response-cache layout are *not* the contract. |
 
 Non-API-but-still-contract surfaces — the **qScan exit codes** (0/1/2), the
 **SARIF 2.1.0** output schema, the **Sieve wire protocol**, the **baseline file
@@ -62,9 +64,14 @@ wire change independently of the package version.
 A change to `@quantakrypto/core` is **MAJOR (breaking)** if it alters the meaning or
 shape that a consumer relies on. Concretely, breaking:
 
-- **Removing or renaming** any `src/index.ts` export (`scan`, `walkFiles`,
-  `toSarif`, `toJson`, `formatSummary`, `buildInventory`, `remediationFor`,
-  `detectors`, `vulnerableDependencies`, `VERSION`).
+- **Removing or renaming** any `src/index.ts` export — e.g. `scan`, `scanParallel`,
+  `walkFiles`, `toSarif`, `toJson`, `toCbom`, `formatSummary`, `buildInventory`,
+  `remediationFor`, `verifyFix`, `detectors`, `vulnerableDependencies`, the shared
+  baseline surface (`fingerprintFinding`, `applyBaseline`, `loadBaseline`,
+  `saveBaseline`), the offline agent-plane primitives (`buildContext`,
+  `buildTriageRequest`, `buildRemediateRequest`, `checkPatchPolicy`, `withWorktree`,
+  `codemodFor`, `remediateFindings`), `loadConfig`, and `VERSION`. (The re-export
+  surface has grown ~3× since 0.1.0; `packages/core/src/index.ts` is the full list.)
 - **Narrowing** an input or **widening** an output type incompatibly — e.g.
   removing a `Finding` field, making an optional field required, or removing a
   member from the **`Severity`**, **`AlgorithmFamily`**, or **`FindingCategory`**

@@ -23,8 +23,9 @@ step.
 Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
 **Go**, **Java/Kotlin** (JCA + BouncyCastle), **C#/.NET**, **Rust**, **Ruby**,
 and **C/C++** (OpenSSL) source. PEM key material, SSH keys, TLS/certificate
-config, and npm dependency manifests are detected in **any** file regardless of
-language.
+config, and dependency manifests for **six ecosystems** — npm (plus
+`yarn.lock` / `pnpm-lock.yaml`), PyPI, Cargo, Go modules, Maven, and RubyGems —
+are detected in **any** file regardless of language.
 
 qScan is **honest about coverage**: if a scan walks files but finds none in a
 supported source language, it says so and will **not** present a bare `100/100`
@@ -72,6 +73,12 @@ qscan [path] [options]
 | `--since <git-ref>` | With `--changed`, diff against `<git-ref>` (implies `--changed`). | working tree |
 | `--parallel` | Scan using a worker-thread pool when the workload is large enough. | off |
 | `--concurrency <n>` | Worker count for `--parallel` (implies `--parallel`). `0`/`1` forces serial. | CPU count |
+| `--triage` | BYOK LLM pass that re-ranks findings by real exposure and explains them. Never suppresses; never changes the exit code. Needs an API key. | off |
+| `--triage-floor <level>` | With `--triage`, only triage findings at/above this level. | `medium` |
+| `--context <level>` | How much source is shared with the LLM: `metadata`, `snippet`, `function`, `file` (secrets always redacted). | `snippet` |
+| `--dry-run` | With `--triage`, print the exact payload that would be sent and exit without contacting the provider. | off |
+| `--llm-provider <name>` | BYOK provider: `anthropic` or `openai-compatible`. | `anthropic` |
+| `--llm-model <id>` | Model id for the BYOK provider. | provider default |
 | `--baseline <file>` | Suppress findings whose fingerprint is in the baseline file. | — |
 | `--write-baseline <file>` | Write current findings as a baseline, then exit 0. | — |
 | `--quiet` | Suppress the human summary banner. | off |
@@ -100,7 +107,7 @@ with `--config <path>`, or disable discovery with `--no-config-file`. See
 
 ```
 qScan — quantum-vulnerable cryptography report
-root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.1.0
+root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.4.2
 
 3 findings  (2 high, 1 medium)
 2 exposed to harvest-now-decrypt-later (HNDL).
@@ -197,6 +204,61 @@ qscan . --format cbom -o qscan-cbom.json
 
 The output is deterministic (sorted components and occurrences, stable serial
 number), so re-running on an unchanged tree produces byte-identical CBOMs.
+
+## Triage (opt-in, BYOK)
+
+`--triage` adds an optional LLM pass that **re-ranks and explains** findings by
+their real-world exposure. It is purely additive: it **never suppresses** a
+finding and **never changes the exit code** (that is still computed from severity
+alone), so it cannot mask a problem or gate CI. It is **bring-your-own-key** —
+provide an API key via `QK_LLM_API_KEY` (or `ANTHROPIC_API_KEY` /
+`OPENAI_API_KEY`); without a key, triage is skipped and the deterministic scan is
+unaffected.
+
+```bash
+# Re-rank + annotate findings at/above the floor (default floor: medium).
+qscan . --triage
+
+# Only triage the most serious findings, with a specific provider/model.
+qscan . --triage --triage-floor high --llm-provider anthropic --llm-model claude-sonnet-5
+
+# See exactly what would be sent — contacts nothing, needs no key.
+qscan . --triage --dry-run
+```
+
+`--context` controls how much source leaves the machine (`metadata` | `snippet` |
+`function` | `file`, default `snippet`); secrets are always redacted. `--dry-run`
+prints the exact, redacted payload and exits **without contacting the provider**,
+so you can review what triage would send before enabling it.
+
+## Remediation (`qremediate`)
+
+This package also ships a `qremediate` bin that **applies** fixes, not just
+reports them. It scans, then for each finding a deterministic **codemod** proposes
+a patch; every patch must clear a **verify gate** (the crypto finding is gone and
+no new crypto finding is introduced) and a patch policy (only files that have
+findings, plus dependency manifests) before it is offered.
+
+```bash
+qremediate .                 # print a unified diff of every verified fix (default; writes nothing)
+qremediate . --mode apply    # write the verified fixes into the working tree
+qremediate . --mode pr       # commit them to a new branch and open a DRAFT PR (never merges)
+```
+
+Deterministic codemod fixes are safe to apply directly. With `--llm` (BYOK, same
+keys as `--triage`), an LLM can also propose fixes codemods can't:
+
+```bash
+qremediate . --llm --mode diff   # review LLM-proposed fixes as a diff first
+qremediate . --llm --mode pr     # or stage them as a draft PR
+```
+
+**Review LLM-proposed fixes before trusting them.** The verify gate only confirms
+the classical crypto finding was removed (a crypto-count check) — it is **not** a
+full semantic safety review, so read every LLM-proposed change as a diff. Prefer
+`--mode diff` or `--mode pr` for `--llm` fixes; `--mode apply` writes straight to
+the working tree. Draft PRs are built in an isolated git worktree (your checkout is
+never touched) and are **never** auto-merged.
 
 ## CI
 

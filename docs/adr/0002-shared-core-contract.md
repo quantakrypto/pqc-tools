@@ -24,7 +24,10 @@ reporters — is the asset. It must live in exactly one place.
 We will keep **all** cryptographic-analysis logic in `@quantakrypto/core` and treat its
 public surface (`src/index.ts` re-exports + the types in `src/types.ts`) as **the
 contract**. `qscan`, `mcp`, and `action` are thin shells that consume `core`;
-they do **I/O and policy**, never detection. The MCP [HOSTING.md](../../packages/mcp/HOSTING.md)
+they do **I/O and policy**, never detection. (The later opt-in `@quantakrypto/agent`
+also consumes `core` — for the shared agent-plane types, the context redactor, and
+the triage/remediate rubrics — so the same contract discipline applies to it, giving
+core four consumers across the six workspace packages.) The MCP [HOSTING.md](../../packages/mcp/HOSTING.md)
 states the rule directly: *transports do I/O and policy; `McpServer` does
 protocol; `@quantakrypto/core` does cryptographic analysis.*
 
@@ -37,10 +40,11 @@ The locked contract is:
 
 Consumers must **reuse** core's primitives rather than re-derive them. (The
 [architecture audit](../audits/architecture.md) and [ROADMAP P1-1/P1-3](../ROADMAP.md)
-flag two current violations: the qScan/Action **baseline fingerprint schism** and
+flagged two violations here: the qScan/Action **baseline fingerprint schism** and
 the Action re-implementing `fingerprint`/`applyBaseline`/`renderReport` instead of
-importing `runQscan`. Closing those is conformance to this ADR, not a new
-decision.)
+importing `runQscan`. **Both are now closed** — the Action imports `runQscan` and the
+single canonical baseline module lives in `core`, so the divergent copies are gone.
+Keeping consumers thin remains conformance to this ADR, not a new decision.)
 
 ## Consequences
 
@@ -56,8 +60,9 @@ consumer and, post-1.0, are **breaking**. We accept the discipline of treating
 **Enforcement:** the build's project references (see [ADR-0003](0003-monorepo-and-build.md))
 make the dependency direction explicit; a future public-API reference + a
 review rule ("does this PR add detection logic outside core?") keep consumers
-thin. The baseline-unification work (P1-1) extracts the one shared baseline module
-*into core* so the two divergent copies cannot persist.
+thin. The baseline-unification work (P1-1) has **landed**: the one shared baseline
+module now lives *in core* (`fingerprintFinding` / `applyBaseline` / `loadBaseline` /
+…), so the two divergent copies cannot persist.
 
 ## Alternatives considered
 

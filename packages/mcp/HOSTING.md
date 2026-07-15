@@ -19,13 +19,17 @@ hosted endpoint is reachable by untrusted peers. Out of the box `node dist/http.
   must carry `Authorization: Bearer <token>`; auth is checked *before* the body
   is read or dispatched. Missing/invalid token → `401` with `WWW-Authenticate: Bearer`.
   `GET /health` is unauthenticated.
-- **Gates the filesystem tools off by default.** `scan_path`, `inventory_crypto`
-  and `generate_cbom` take a client-supplied path straight into `core.scan` and
-  would otherwise be an arbitrary-directory reader (`/etc`, `/root/.ssh`, …) with
-  matched-line snippets echoed back. Over HTTP they are registered **only when
-  `QUANTAKRYPTO_MCP_ALLOW_FS=1`**, so both `tools/list` and `tools/call` reflect the
-  gate. The knowledge tools (`explain_finding`, `suggest_hybrid`, `list_rules`)
-  are pure and always exposed. The gating is a pure function (`gateHttpTools`),
+- **Gates the filesystem tools off by default.** `scan_path`, `inventory_crypto`,
+  `generate_cbom` and `plan_migration` take a client-supplied path straight into
+  `core.scan` and would otherwise be an arbitrary-directory reader (`/etc`,
+  `/root/.ssh`, …) with matched-line snippets echoed back. Over HTTP they are
+  registered **only when `QUANTAKRYPTO_MCP_ALLOW_FS=1`**, so both `tools/list` and
+  `tools/call` reflect the gate. The remaining tools take no path and are pure, so
+  they are always exposed: the knowledge tools (`explain_finding`,
+  `suggest_hybrid`, `list_rules`, `get_fix_examples`), the copilot helpers
+  (`verify_fix`, `check_dependency`, `score_delta`), and the offline, key-free
+  BYOK triage/remediation request tools (`triage_findings`, `apply_triage`,
+  `remediate_findings`). The gating is a pure function (`gateHttpTools`),
   unit-tested in `test/http.test.ts`.
 - **Confines the filesystem tools to a root allow-list.** When the FS tools are
   enabled, every scanned path must resolve inside `QUANTAKRYPTO_MCP_ROOT`

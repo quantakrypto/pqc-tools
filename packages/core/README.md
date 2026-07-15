@@ -58,7 +58,7 @@ interface ScanOptions {
   exclude?: string[];           // extra exclude patterns (substring/prefix)
   noDefaultIgnores?: boolean;   // disable node_modules/.git/dist/… ignores
   source?: boolean;             // scan source files (default true)
-  dependencies?: boolean;       // scan package.json / package-lock.json (default true)
+  dependencies?: boolean;       // scan manifests/lockfiles across 6 ecosystems (default true)
   config?: boolean;             // scan PEM/TLS/cert config (default true)
   maxFileSize?: number;         // bytes; default 2 MiB (manifests are exempt)
   scanMinified?: boolean;       // scan minified/generated files (default false: skip them)
@@ -138,6 +138,20 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 | `pem-material` | config | PEM keys/certs in any file: `RSA/EC/DSA/PKCS#8/OPENSSH/PGP PRIVATE KEY`, `PGP MESSAGE`, `CERTIFICATE` |
 | `ssh-cert` | config | SSH public keys (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`) and X.509 certificate signature algorithms (`sha256WithRSAEncryption`, `ecdsa-with-SHA256`, …) |
 
+The rows above cover JavaScript/TypeScript plus the language-agnostic PEM/SSH/TLS
+surfaces. Seven further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
+detection to other ecosystems (each is a single umbrella detector):
+
+| Detector | Scope | Language |
+| --- | --- | --- |
+| `python-crypto` | source | Python (`cryptography`, PyCryptodome, `pyca`) |
+| `go-crypto` | source | Go (`crypto/rsa`, `crypto/ecdsa`, `crypto/ecdh`, `crypto/ed25519`, …) |
+| `java-crypto` | source | Java/Kotlin (JCA `KeyPairGenerator`/`Signature`/`KeyAgreement`, BouncyCastle) |
+| `csharp-crypto` | source | C#/.NET (`RSA`, `ECDsa`, `ECDiffieHellman`, `DSA`) |
+| `rust-crypto` | source | Rust (`rsa`, `p256`/`k256` ECDSA, `x25519-dalek`, `ed25519-dalek`) |
+| `ruby-crypto` | source | Ruby (`OpenSSL::PKey::{RSA,EC,DSA,DH}`) |
+| `c-crypto` | source | C/C++ (OpenSSL `EVP_PKEY_*` / `RSA_*` / `EC_*` / `DSA_*` / `DH_*`) |
+
 `defaultRegistry` is a `DetectorRegistry` preloaded with these built-ins. The
 registry is the plugin point:
 
@@ -154,8 +168,8 @@ const result = await scan({ root: ".", detectors: registry.all() });
 #### Adding a detector / language
 
 1. Create `src/detectors/<lang>.ts` exporting one or more `Detector`s. Set
-   `language` (`"js" | "python" | "go" | "java" | "any"`), `scope`
-   (`"source" | "config"`), an `appliesTo(path)` extension check, and a pure
+   `language` (`"js" | "python" | "go" | "java" | "csharp" | "rust" | "ruby" | "c" | "any"`),
+   `scope` (`"source" | "config"`), an `appliesTo(path)` extension check, and a pure
    `detect({ file, content })` returning `Finding[]` (use `makeFinding` from
    `detect-utils` for consistent location/remediation/CWE handling).
 2. If the language uses new file extensions, ensure the walker treats them as
@@ -168,13 +182,17 @@ const result = await scan({ root: ".", detectors: registry.all() });
 
 ### `vulnerableDependencies: VulnerableDependency[]`
 
-Curated database (~20 entries) of npm packages whose purpose is classical
-asymmetric crypto: `node-forge`, `elliptic`, `jsrsasign`, `node-rsa`, `ursa`,
-`sshpk`, `jsonwebtoken`, `jose`, `jws`, `eccrypto`, `secp256k1`, `tweetnacl`,
-`ed25519`, `@noble/curves`, `@noble/secp256k1`, `@noble/ed25519`, `paseto`,
-`bcrypto`, `ecpair`, `keypair`. `scan()` matches these against `package.json`
-and `package-lock.json` and emits `category: "dependency"` findings located at
-the manifest.
+Curated database (**61 entries**) of packages whose purpose is classical
+asymmetric crypto, spanning **six ecosystems** — npm, PyPI, Cargo, Go modules,
+Maven, and RubyGems (`VulnerableDependency.ecosystem`). The npm subset includes
+`node-forge`, `elliptic`, `jsrsasign`, `node-rsa`, `ursa`, `sshpk`,
+`jsonwebtoken`, `jose`, `jws`, `eccrypto`, `secp256k1`, `tweetnacl`, `ed25519`,
+`@noble/curves`, `@noble/secp256k1`, `@noble/ed25519`, `paseto`, `bcrypto`,
+`ecpair`, `keypair`. `scan()` matches these against each ecosystem's manifests
+and lockfiles — `package.json` / `package-lock.json` / `yarn.lock` /
+`pnpm-lock.yaml`, `requirements.txt` / `pyproject.toml` / `Pipfile`, `Cargo.toml`,
+`go.mod`, `pom.xml` / `build.gradle`, `Gemfile` / `*.gemspec` — and emits
+`category: "dependency"` findings located at the manifest.
 
 ### `buildInventory(findings: Finding[]): CryptoInventory`
 
@@ -267,6 +285,16 @@ Tool version surfaced in reports (kept in sync with `package.json`).
 | `remediationFor`, `remediationForTier`, `TIER_PARAMS` | fn/const | PQC remediation (family + CNSA tier) |
 | `STATEFUL_HBS_NOTE`, `statefulHbsApplies` | const/fn | SP 800-208 LMS/XMSS guidance |
 | `fingerprintFinding`, `baselineFromFindings`, `applyBaseline`, `loadBaseline`, `saveBaseline`, `BASELINE_VERSION` | fn/const | Canonical baseline |
+| `verifyFix`, `languageToExtension` | fn | Snippet-level fix verification (crypto finding removed?) + language→extension map |
+| `buildContext`, `renderPreflight` | fn | Redacted source-context builder + preflight preview (secrets stripped) |
+| `TRIAGE_RUBRIC`, `TRIAGE_VERDICT_SCHEMA`, `buildTriageRequest` | const/fn | Deterministic, offline triage-request bundle (rubric + verdict schema) |
+| `REMEDIATE_RUBRIC`, `FIX_REQUEST_SCHEMA`, `buildRemediateRequest` | const/fn | Deterministic, offline remediation-request bundle (rubric + fix schema) |
+| `checkPatchPolicy` | fn | Patch-policy gate — only files with findings + dependency manifests |
+| `withWorktree` | fn | Run a callback inside an ephemeral git worktree (isolates writes; no auto-merge) |
+| `codemodRegistry`, `codemodFor`, `configToggleCodemod` | const/fn | Deterministic codemod registry + per-finding lookup |
+| `remediateFindings` | fn | Remediation pipeline: propose → policy + verify gate → verified patches |
+| `loadConfig`, `ConfigError`, `CONFIG_FILENAME` | fn/const | `quantakrypto.config.json` loader |
+| `AbortError`, `BudgetExceededError` | class | Scan cancellation / work-budget overflow errors |
 | `CWE_BROKEN_CRYPTO`, `CWE_WEAK_STRENGTH`, `CWE_CERT_VALIDATION`, `CWE_HARDCODED_KEY`, `CWE_RISKY_PRIMITIVE` | const | CWE identifiers |
 | `VERSION` | const | Tool version |
 

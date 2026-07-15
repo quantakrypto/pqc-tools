@@ -57,6 +57,7 @@ A ready-to-copy workflow lives at
 
 | Input | Default | Description |
 |---|---|---|
+| `mode` | `scan` | `scan` writes a report and gates the build; `comment-plan` posts a deterministic PQC migration plan as a PR comment and **never** fails the build. |
 | `path` | `.` | Directory (or file) to scan, relative to the repo root. |
 | `severity-threshold` | `high` | Minimum severity that fails the build: `critical`, `high`, `medium`, `low`, `info`. Findings below this never fail. |
 | `fail-on-findings` | `true` | When `true`, exit non-zero if any finding at/above the threshold remains. Set `false` to report only. |
@@ -65,6 +66,7 @@ A ready-to-copy workflow lives at
 | `baseline` | _(none)_ | Path to a qScan baseline file (`{ version, fingerprints }`, as written by `qscan --write-baseline`). Findings whose fingerprint it lists are suppressed, so only **new** crypto fails. |
 | `comment-pr` | `false` | When `true` (and a token + PR context exist), post a summary comment on the PR. Never fails the build. |
 | `github-token` | _(none)_ | Token used to comment on the PR. Usually `${{ github.token }}`. |
+| `redact-snippets` | `false` | When `true`, omit the matched source snippet from every finding in the written report. Snippets of sensitive findings (embedded key material) are **always** omitted regardless of this setting. |
 
 ## Outputs
 
@@ -73,6 +75,23 @@ A ready-to-copy workflow lives at
 | `findings-count` | Number of findings at/above the threshold, after baseline. |
 | `sarif-file` | Path of the report file that was written. |
 | `readiness-score` | Post-quantum readiness score, 0 (worst) – 100 (no classical asymmetric crypto found). |
+
+## Comment-only migration plan (`mode: comment-plan`)
+
+Set `mode: comment-plan` to post a deterministic, prioritized PQC migration plan
+as a pull-request comment instead of gating the build. This mode **never fails
+the job** — it is advisory, useful for gradually adopting the tool on a legacy
+codebase before you turn on `fail-on-findings`.
+
+```yaml
+      - name: quantakrypto — Migration plan comment
+        uses: quantakrypto/pqc-tools/packages/action@v1
+        with:
+          mode: "comment-plan"
+          path: "."
+          comment-pr: "true"
+          github-token: ${{ github.token }}
+```
 
 ## Readiness badge
 

@@ -17,6 +17,7 @@ Format: a lightweight [MADR](https://adr.github.io/madr/)-style record.
 | [0002](0002-shared-core-contract.md) | `@quantakrypto/core` is the single shared contract | Accepted |
 | [0003](0003-monorepo-and-build.md) | npm-workspaces monorepo + `tsc -b` project references | Accepted |
 | [0004](0004-sieve-no-fabricated-vectors.md) | Sieve ships no KAT vectors and never fabricates expected values | Accepted |
+| [0005](0005-byok-agent-two-planes.md) | BYOK agent line: `@quantakrypto/agent` is the sole networked plane; the engine disposes | Accepted |
 
 ## Related governance
 

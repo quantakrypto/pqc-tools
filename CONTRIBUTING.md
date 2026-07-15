@@ -67,8 +67,12 @@ or skip the hook entirely for a WIP checkpoint with `git commit --no-verify`.
 ## Where to start
 
 The prioritised work is in [`docs/ROADMAP.md`](docs/ROADMAP.md), distilled from
-the discipline audits under [`docs/audits/`](docs/audits/). Good first issues are
-the P1 detector additions (new languages / algorithms) and test-coverage gaps.
+the discipline audits under [`docs/audits/`](docs/audits/). The P1 detector
+additions (new languages / algorithms) have **shipped** — the detector line now
+covers eight languages. Current open work (ROADMAP §1) is **cross-language
+detection parity** and growing the **false-negative corpus**, plus **hardening the
+opt-in agent line** (`--triage` / `qremediate`); test-coverage gaps remain a good
+first contribution.
 
 ## Security
 

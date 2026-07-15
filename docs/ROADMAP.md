@@ -1,49 +1,136 @@
-# quantakrypto-tools — Roadmap & Gap Analysis
+# quantakrypto-tools — Roadmap & Status
 
-This is the consolidated, prioritised plan, distilled from the multi-discipline
-audits in [`docs/audits/`](audits/) and [`COMPLIANCE.md`](COMPLIANCE.md).
+The forward plan is in §1–§2. The v0.2 audit tables (§3 onward) are retained as
+the historical record of how the tool got here — every item in them shipped.
 
-Sources: [security](audits/security.md) · [cryptography](audits/cryptography.md)
+Audit sources: [security](audits/security.md) · [cryptography](audits/cryptography.md)
 · [architecture](audits/architecture.md) · [performance](audits/performance.md)
-· [testing/devex](audits/testing-devex.md) · [overview](AUDIT.md).
+· [testing/devex](audits/testing-devex.md) · [overview](AUDIT.md) · [COMPLIANCE.md](COMPLIANCE.md).
 
-> ## ✅ Status — v0.2: P0 / P1 / P2 implemented
+---
+
+> ## ✅ Current status — v0.4.2 (published)
 >
-> Everything in this roadmap has been **implemented** (build clean, **307 tests
-> pass**, ESLint + Prettier clean, zero runtime dependencies, all tools verified
-> end-to-end).
+> All five packages are live on npm at **0.4.2** with build provenance:
+> `@quantakrypto/`**core · qscan · mcp · sieve · agent**.
 >
-> - **P0 (6/6):** MCP HTTP safe-by-default + auth/timeouts/FS-gating; PR/annotation
->   injection escaping; Sieve SUT env scrub; EC→key-exchange HNDL fix;
->   `explain_finding` rule resolution; hardened TLS regex + binary-search proximity.
-> - **P1 (10/10):** shared baseline (core); wired `ScanOptions`; Action reuses
->   `runQscan`; `DetectorRegistry` + scope/language; new detectors (DH/SSH/cert-sig/
->   JOSE/one-shot/secp256k1); CNSA 2.0 C5 + SP 800-208 remediation; Sieve ek
->   modulus-range + deeper ML-DSA; coverage tooling + new tests; perf (precompiled
->   regexes, minified-skip, large lockfiles); threat model.
-> - **P2 (9/9):** `scanParallel` worker pool; incremental `--changed`; Sieve
->   pipelining; bench harness; ESLint + Prettier + CI; CycloneDX **CBOM** + CWE
->   tags; Scorecard + release workflows + REUSE; SLH-DSA (FIPS 205) + ISO 27001
->   A.8.24 / ACVP-provenance designs; ADRs + SemVer policy + config spec.
->
-> **Follow-ups now landed** (previously documented designs): ✅ fuzz-target
-> *implementation* (P1-10 — deterministic, seeded fuzz of the manifest/SARIF,
-> Sieve protocol/base64, and qScan-args parsers); ✅ pre-commit hooks (P2-5 —
-> `.githooks/pre-commit`); ✅ SARIF structural-validation CI step (P2-6 —
-> `scripts/validate-sarif.mjs` + a `sarif` CI job); ✅ an advisory `bench` CI
-> job (P2-4); and ✅ `quantakrypto.config.json` *implementation* (P2-9 — `loadConfig`
-> in core + flags-over-config-over-defaults precedence in qScan). Publishing
-> remains deferred (§5).
->
-> The detailed P0/P1/P2 tables below are retained as the historical record of
-> what each item entailed.
+> - **Detectors:** **8 source languages** — JS/TS, Python, Go, Java/Kotlin, C#,
+>   Rust, Ruby, C/C++ — plus PEM key material.
+> - **Quality:** **593 tests** across the workspaces (core 259 · qscan 116 ·
+>   mcp 94 · sieve 55 · action 50 · agent 19); precision/recall benchmark
+>   **= 1.000**; build + ESLint + Prettier clean; **zero runtime dependencies**.
+> - **Distribution:** the GitHub Action ships a committed `dist/` (usable via
+>   `uses:`); packages published under the real `@quantakrypto` scope.
+
+### What shipped since the v0.2 audit
+
+The v0.2 roadmap (below) closed every P0/P1/P2 item. Since then, three things
+landed that the old roadmap treated as **future** or **deferred**:
+
+1. **BYOK LLM agent line** — a new **`@quantakrypto/agent`** package (zero-dep,
+   native-`fetch` adapters for Anthropic + OpenAI-compatible APIs, response
+   validator, cache) plus:
+   - **`qscan --triage`** — an LLM re-ranks findings by real exposure and
+     explains them. It **never suppresses a finding and never changes the exit
+     code** ("model proposes, engine disposes").
+   - **`qremediate`** — deterministic template codemods first, then optional
+     **`--llm`** fixes applied in an **ephemeral worktree behind a `verify_fix`
+     gate**; `--mode diff|apply|pr`; **no auto-merge**.
+   - **MCP `triage_findings` / `remediate_findings`** — exposed as deterministic
+     request/apply tools; **the MCP itself stays offline and key-free** (the host
+     agent reasons; no network, no API key in the server).
+   - **Action `comment-plan`** — posts a migration-plan comment on PRs.
+   - Hard invariants: zero third-party runtime deps (native `fetch`), **secrets
+     redacted before any egress**, `verify_fix` on every patch, no auto-merge,
+     triage never suppresses / never changes exit code.
+
+2. **Six more detector languages** — v0.2 shipped JS/TS only and listed "add a
+   language (Python/Go/Java)" as future work (P1-4). The `DetectorRegistry` now
+   carries Python, Go, Java, C#, Rust, Ruby, and C/C++.
+
+3. **Published + distributable** — §5 "release readiness (deferred)" is **done**:
+   npm publish under `@quantakrypto` with provenance, the Action `dist/`
+   committed, and `repository`/`bugs`/`homepage` filled in on every package.
+
+---
+
+## 1. v0.4 → 1.0 — what's actually left
+
+Re-prioritised against the shipped v0.4 surface. A multi-lens Fable 5 audit is
+running against this list; findings will be folded in.
+
+### 🔴 Critical — clear before a credible 1.0
+
+- **Threat-model the agent / BYOK line.** Every prior security audit targeted the
+  deterministic, offline v0.2 scanner. The agent line is the tool's **only**
+  networked, secret-handling, code-writing surface and is **not yet covered by
+  [THREAT-MODEL.md](THREAT-MODEL.md)**. Needs an adversarial review of:
+  - **prompt injection** from scanned repos into LLM triage/remediation (verify
+    "triage never suppresses / never changes exit code" is enforced in *code*,
+    not just prompt text);
+  - **data egress** to the LLM provider — is the secret redactor applied on
+    *every* path that builds LLM context? Can PEM / keys / `.env` leak?
+  - **remediation-patch safety** — verify-gate bypass, out-of-scope file writes,
+    ephemeral-worktree escape, the no-auto-merge guarantee;
+  - **BYOK key handling** (never logged / cached / echoed in errors);
+  - **budget / DoS** from a hostile repo.
+  - *Status: audit in progress; THREAT-MODEL.md now documents the surface + the
+    open questions.*
+
+### 🟠 High
+
+- **Cross-language detection parity.** JS/TS (`source.ts`) is the deepest
+  detector; the six newer languages need a **false-negative benchmark** so
+  "8 languages" means comparable depth, not "JS/TS-deep + others-shallow."
+  Extend the detection-quality corpus to exercise every language.
+- **Standards-currency cadence.** Operationalise the quarterly NIST / CNSA 2.0 /
+  BSI re-check (FIPS 203/204/205 parameters, CNSA tiers, hybrid recommendations
+  like X25519MLKEM768). Currently ad-hoc.
+
+### 🟡 Medium
+
+- **ISO/IEC 27001 A.8.24 evidence-chain export + ACVP provenance** — designs
+  exist ([docs/compliance/](compliance/)); implement the signed, timestamped
+  readiness report and the vector-provenance pipeline.
+- **Reproducible-build verification** for the published artifacts.
+- **Report i18n / accessibility** of human-facing output.
+- **Published supply-chain gate on a cadence** — Scorecard + dependency/Action
+  review, now that the packages are live on npm.
+
+---
+
+## 2. Recurring audit vectors (run on a cadence)
+
+Fold these recurring lenses in beyond one-off reviews:
+
+- **Fuzz / property-based testing** of every parser, in CI. *(landed — seeded
+  fuzz in each package's `test/fuzz.test.ts`; keep extending.)*
+- **Supply-chain posture** as a gate: OpenSSF Scorecard + dependency review (even
+  at zero runtime deps, dev-deps and Actions are surface).
+- **Detection-quality benchmark:** curated corpus measuring false-positive /
+  false-negative rates **per language**, regression-tested over time.
+- **Agent-line adversarial review:** prompt-injection, data-egress, and
+  patch-safety re-tested whenever the agent/remediation code changes.
+- **Reproducible-build** verification for published artifacts.
+- **Standards drift:** re-check against NIST / CNSA / BSI updates each quarter.
+- **CLI / output accessibility & i18n** of human-facing reports.
+
+---
+---
+
+# Historical record — v0.2 audit & gap analysis
+
+> The v0.2 roadmap below was the consolidated, prioritised plan distilled from the
+> multi-discipline audits in [`docs/audits/`](audits/). **Every P0/P1/P2 item was
+> implemented** (build clean, 307 tests at v0.2 → 593 now, ESLint + Prettier
+> clean, zero runtime deps). Retained verbatim as the record of what each item
+> entailed. The one item marked "deferred" at the time — publishing (§5) — has
+> since shipped (see "Current status" above).
 
 **Pre-v0.2 baseline:** the audits were run against v0.1 (182 tests). The items
 below are improvements and gaps — not regressions.
 
----
-
-## 1. What's missing (gap matrix)
+## 3. What's missing (gap matrix)
 
 | Area | Item | Status |
 |---|---|---|
@@ -61,11 +148,11 @@ below are improvements and gaps — not regressions.
 | Security | Threat-model doc | ✅ **done** (+ deterministic fuzz targets, P1-10) |
 | Compliance | CBOM (CycloneDX) output, CWE tagging | ✅ **done** (+ SARIF structural CI check, P2-6) |
 | Supply chain | OpenSSF Scorecard, SLSA provenance, REUSE | ✅ **done** (workflows + `REUSE.toml`) |
-| Release | Commit/bundle the Action `dist/`; npm publish under `@quantakrypto` | ⏸ deferred (see §5) |
+| Release | Commit/bundle the Action `dist/`; npm publish under `@quantakrypto` | ✅ **done** (v0.4.x — see "Current status") |
 
 ---
 
-## 2. P0 — security & correctness (do before hosting / 1.0)
+## 4. P0 — security & correctness (do before hosting / 1.0)
 
 These are confirmed bugs or real risks, each cited to source.
 
@@ -80,7 +167,7 @@ These are confirmed bugs or real risks, each cited to source.
 
 ---
 
-## 3. P1 — correctness coverage & architecture
+## 5. P1 — correctness coverage & architecture
 
 | # | Item | Package | Audit | Effort |
 |---|---|---|---|---|
@@ -97,7 +184,7 @@ These are confirmed bugs or real risks, each cited to source.
 
 ---
 
-## 4. P2 — scale, polish, assurance
+## 6. P2 — scale, polish, assurance
 
 | # | Item | Package | Audit |
 |---|---|---|---|
@@ -110,34 +197,3 @@ These are confirmed bugs or real risks, each cited to source.
 | P2-7 | OpenSSF Scorecard workflow, SLSA build provenance, SPDX/REUSE license headers, npm publish provenance. | repo | compliance/testing |
 | P2-8 | ISO/IEC 27001 **A.8.24 evidence-chain** export (a signed, timestamped readiness report); ACVP vector-provenance pipeline; SLH-DSA (FIPS 205) conformance category. | core/sieve | compliance/crypto |
 | P2-9 | Semver + deprecation policy, a generated public API reference, and ADRs; an optional `quantakrypto.config.json`. ✅ `quantakrypto.config.json` implemented: `loadConfig` in core, flags > config > defaults in qScan (see [CONFIG.md](CONFIG.md)). | all | architecture |
-
----
-
-## 5. Release readiness (publishing — deferred)
-
-Out of scope for now (per the plan to finalize tech first), captured so it's ready:
-
-- **Action `dist/` is not committed** and is gitignored — a `node20` action runs
-  `dist/main.js` directly, so `uses: …/packages/action@v1` will not work until the
-  built JS is committed or bundled (recommend a single-file `esbuild`-free bundle
-  step + a CI "dist is fresh" gate). See [testing/devex audit §6.4](audits/testing-devex.md).
-- Publish under the real `@quantakrypto` npm scope with **npm provenance**; tag `v0.1.0`.
-- Add `repository` / `bugs` / `homepage` to each package `package.json`; unify the
-  three divergent `informationUri` / repo URLs noted across the codebase.
-
----
-
-## 6. New audit vectors to run on a cadence
-
-Beyond this one-off review, fold these recurring lenses in (the "add new vectors
-of auditing" ask):
-
-- **Fuzz / property-based testing** of every parser, in CI.
-- **Supply-chain posture** as a gate: OpenSSF Scorecard + dependency review (even
-  with zero runtime deps, dev-deps and Actions are surface).
-- **Detection-quality benchmark:** a curated corpus measuring false-positive /
-  false-negative rates of the crypto detectors over time (regression-tested).
-- **Reproducible-build** verification for published artifacts.
-- **Standards drift:** re-check against NIST/CNSA/BSI updates each quarter (the PQC
-  landscape moves — see [COMPLIANCE.md](COMPLIANCE.md)).
-- **CLI/output accessibility & i18n** of human-facing reports.

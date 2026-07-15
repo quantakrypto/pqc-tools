@@ -1,12 +1,48 @@
 # quantakrypto-tools — Compliance & Standards Mapping
 
-A standards-and-compliance reference for the `quantakrypto-tools` monorepo (v0.1.0):
-`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/action`, `@quantakrypto/sieve`.
+A standards-and-compliance reference for the `quantakrypto-tools` monorepo (**v0.4.2**):
+`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/action`,
+`@quantakrypto/sieve`, and `@quantakrypto/agent`.
 
 This document maps the toolset against post-quantum cryptography standards,
 interchange/output formats, information-security and evaluation standards,
 PQC-migration regulations, and software-supply-chain assurance frameworks for the
-project itself. It is a **READ-ONLY analysis**; no source was modified.
+project itself.
+
+> ### ⚠ v0.4 status correction (2026-07-15)
+> The section bodies below were written at **v0.1.0** and several "would require /
+> not yet / gap" items **have since shipped**. Corrections, so the mapping does not
+> *undersell* the tool:
+> - **Emitted today** (were "gaps"): **CWE tagging** (`Finding.cwe` + SARIF
+>   `taxonomies`), **CycloneDX CBOM** (`toCbom` / `qscan --cbom` / MCP
+>   `generate_cbom`), and **SARIF is CI-validated** (`scripts/validate-sarif.mjs`,
+>   URLs reconciled). §2 is done.
+> - **Project posture** (§5): **CI + release workflows exist**, **npm/Sigstore
+>   provenance is LIVE** on all 5 published packages, **`SECURITY.md`** (ISO
+>   29147/30111 framing) exists, **`REUSE.toml` + `LICENSES/`** are committed,
+>   packages are at **0.4.2**. **Still genuine gaps:** the **OpenSSF Scorecard
+>   workflow is not wired**, `reuse lint` isn't in CI, tarballs lack a per-package
+>   `LICENSE`, and releases publish from `main` (no immutable semver tags).
+> - **Crypto coverage:** a **SLH-DSA (FIPS 205) Sieve category** now exists
+>   (self-consistency + sizes), but its **ACVP exact-value KAT loader misclassifies
+>   FIPS 205 vectors** — advertised, not yet functional. **CNSA 2.0 Category-5**
+>   tier logic (`remediationForTier`) is implemented in core **but not surfaced by
+>   any CLI flag or MCP tool** — library-API only, so "CNSA-2.0-aware" is not yet an
+>   end-to-end claim. **SP 800-208** is now *touched* (guidance text) but still has
+>   no detector.
+> - **New compliance surface — the agent/BYOK line.** `qscan --triage` /
+>   `qremediate --llm` send **redacted** source context to a third-party LLM
+>   provider (opt-in, BYOK). This introduces a **data-processing / data-egress**
+>   consideration (GDPR Art. 28/32, DPIA relevance; the provider is a processor)
+>   absent from the original analysis. The redactor is best-effort; treat the
+>   feature as out-of-scope for regulated data unless the operator accepts the
+>   egress. See [THREAT-MODEL.md §6.5](THREAT-MODEL.md).
+>
+> The still-open roadmap items (§6) are: **#4** ISO A.8.24 evidence-chain export,
+> **#9** CNSA-policy-profile wiring + SLH-DSA ACVP fix, **#10** ACVP vector
+> provenance, plus Scorecard/REUSE-lint. Items #1/#2/#3/#5/#6 shipped.
+
+It is a **READ-ONLY analysis** of the code; no source was modified by writing it.
 
 ---
 
@@ -73,10 +109,10 @@ SP 800-208 stateful sigs, and CNSA-2.0 parameter-level policy are **gaps**.
 | Standard | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
 | **SARIF 2.1.0 (OASIS)** | Static Analysis Results Interchange Format — the OASIS standard JSON schema for static-analysis findings, consumed by GitHub code scanning and others. | **Emits today.** core's `toSarif()` produces SARIF 2.1.0 (`$schema`, `version`, `runs[0].tool.driver{name,informationUri,version,rules[]}`, `results[]` with `ruleId`/`level`/`message.text`/`physicalLocation`). qscan (`--format sarif`) and the Action both emit it; the Action uploads via `github/codeql-action/upload-sarif`. **Caveats to harden the claim:** (a) `docs/AUDIT.md` notes three different `informationUri`/repo URLs across core/qscan — reconcile to one; (b) CRLF files can be off-by-one in `startColumn` (precise SARIF column consumers affected). Validate output against the official OASIS SARIF JSON schema in CI to *claim* conformance. |
-| **CWE (Common Weakness Enumeration)** | MITRE's catalog of software/hardware weakness types; SARIF results commonly carry CWE taxonomy references. | **Does not touch yet.** Findings are **not** tagged with CWE ids. Natural mappings exist (e.g. CWE-327 *Use of a Broken or Risky Cryptographic Algorithm*, CWE-326 *Inadequate Encryption Strength*, CWE-1240 *Use of a Risky Cryptographic Primitive*). **Recommended:** add a `cwe` field per rule and emit SARIF `taxonomies`/`relationships` referencing CWE. This is the single highest-leverage interchange improvement — it makes findings consumable by CWE-aware dashboards and audit frameworks. |
-| **CycloneDX SBOM** | OWASP CycloneDX — a Software Bill of Materials format; recent versions support cryptographic assets (`cryptographic-asset` components) → effectively a CBOM. | **Strong fit, not yet emitted.** core already builds the substance of a crypto inventory (algorithms, categories, locations, dependency findings). **Would require** a CycloneDX exporter that maps each Finding to a `cryptographic-asset` component (algorithm family, primitive, location, HNDL flag). This is the most defensible path to a real **CBOM** (see below). |
+| **CWE (Common Weakness Enumeration)** | MITRE's catalog of software/hardware weakness types; SARIF results commonly carry CWE taxonomy references. | **Emits today** (shipped since v0.2). Findings carry a `Finding.cwe` id (e.g. CWE-327 *Use of a Broken or Risky Cryptographic Algorithm*, CWE-326, CWE-1240) and `toSarif()` emits a CWE `taxonomies` block + per-result `relationships`, so findings are consumable by CWE-aware dashboards. See `packages/core/src/cwe.ts`. |
+| **CycloneDX SBOM** | OWASP CycloneDX — a Software Bill of Materials format; recent versions support cryptographic assets (`cryptographic-asset` components) → effectively a CBOM. | **Emits the crypto-asset profile today** via `toCbom()` (maps each `Finding` to a `cryptographic-asset` component — algorithm family, primitive, location, HNDL flag); see the CBOM row below. A *full-dependency* CycloneDX SBOM (all components, not just crypto assets) is **not** emitted — that remains an optional future addition. |
 | **SPDX SBOM** | Linux Foundation / ISO/IEC 5962 SBOM format; SPDX 3.0 adds security and (emerging) crypto profiles. | **Does not emit.** Same opportunity as CycloneDX. **Would require** an SPDX exporter; lower priority than CycloneDX for crypto assets since CycloneDX's crypto-asset model is more mature today. |
-| **CBOM (Cryptographic Bill of Materials)** | An SBOM specialized to enumerate cryptographic assets (algorithms, keys, certificates, protocols) and their usage — the emerging primitive for PQC migration tracking. | **Best-fit future output for this toolset.** The inventory core already computes *is* a CBOM in all but format. **Would require** emitting it as standardized CBOM (via CycloneDX crypto-assets, or an SPDX crypto profile). Until then, qscan output **helps you build** a CBOM but is **not itself** a standardized CBOM. This is the flagship roadmap item (Section 6). |
+| **CBOM (Cryptographic Bill of Materials)** | An SBOM specialized to enumerate cryptographic assets (algorithms, keys, certificates, protocols) and their usage — the emerging primitive for PQC migration tracking. | **Emits today** (shipped since v0.2). `toCbom()` produces a CycloneDX cryptographic-BOM mapping each `Finding` to a `cryptographic-asset` component (algorithm family, primitive, location, `hndl` flag); exposed as **`qscan --cbom`** and the MCP **`generate_cbom`** tool. |
 | **NIST ACVP vector format** | The JSON test-vector format used by NIST's Automated Cryptographic Validation Protocol (CAVP/ACVTS) for ML-KEM (FIPS 203) and ML-DSA (FIPS 204). | **Consumes (does not emit).** Sieve's `src/vectors.ts` parses standard ACVP JSON (`algorithm`/`mode`/`testGroups[].tests[]`, hex byte fields) for `keyGen`, `encapDecap`, and `sigVer`, normalizing into `kem-keygen`/`kem-encap`/`kem-decap`/`dsa-verify` cases. It **never fabricates** values and records unrecognized files as non-fatal notes. **To claim ACVP-based conformance**, the operator must supply authentic NIST ACVP vectors; Sieve does not redistribute them. Sieve is **not** an ACVP *client/server* and does not talk to ACVTS. |
 
 **Net for Section 2:** **SARIF 2.1.0 is emitted today** (the one true interchange
@@ -93,7 +129,7 @@ Sieve, not produced.
 | **ISO/IEC 27001 + 27002, esp. control 8.24 "Use of cryptography"** | ISMS requirements (27001) and the control catalog (27002); A.8.24 requires a defined, enforced policy on cryptographic use, algorithms, and key management. | **Helps you produce evidence** for A.8.24. qscan's crypto inventory, readiness score, SARIF report, and CI gate are concrete artifacts an auditor accepts as evidence that the org *identifies* and *governs* cryptographic usage and is *managing the PQC transition*. **Important boundary:** the *tool is not the control.* The organization still owns the cryptography policy, key management, and risk treatment. To say "qscan supports our A.8.24 evidence" defensibly you need: a written crypto policy, qscan wired into CI with retained reports (audit trail), and a triage/remediation process. The tool **does not** by itself satisfy A.8.24. |
 | **ISO/IEC 15408 (Common Criteria) + ISO/IEC 18045 (CEM)** | The IT-security evaluation framework (Protection Profiles, Security Targets, EALs) and its evaluation methodology. | **Relates only by analogy.** Sieve-style conformance testing resembles the *functional/assurance testing* an evaluator performs, and Sieve output could be **supporting evidence** within a developer's test documentation. It is **not** a CC evaluation, confers **no EAL**, and is not run by a licensed evaluation lab. To contribute to a real CC evaluation **would require** a Security Target, a recognized lab (ITSEF), and evaluator-driven testing; Sieve would be at most one developer-supplied test artifact. |
 | **FIPS 140-3 / ISO/IEC 19790 (module validation)** | Security requirements for cryptographic modules; validated via CMVP using CAVP algorithm testing. | **Relate — do NOT claim.** Sieve is a *pre-screen / conformance battery*, useful to catch obvious ML-KEM/ML-DSA defects **before** a CAVP/CMVP submission, but it is **not** a CAVP test tool and a passing Sieve run is **not** a FIPS 140-3 result. No `quantakrypto-tools` component is a "FIPS-validated module," and running qscan does not make a system FIPS-compliant. Any FIPS 140-3 claim **requires** CMVP validation of the actual module by an accredited lab — wholly outside this toolset. |
-| **ISO/IEC 29147 (vuln disclosure) + ISO/IEC 30111 (vuln handling)** | How to *receive* (29147) and *process* (30111) security vulnerability reports — for the **project itself**, not the code it scans. | **Does not satisfy today.** The repo has a single `LICENSE` and no `SECURITY.md`, no disclosure policy, no advertised contact, and no `.github/` process files. **Would require** publishing a `SECURITY.md` with a reporting channel (security contact / private advisories), a triage SLA, and a coordinated-disclosure process to align. Given the MCP server's documented `scan_path` arbitrary-file-read risk in a hosted context (`docs/AUDIT.md` §2.3), a disclosure policy is especially warranted. |
+| **ISO/IEC 29147 (vuln disclosure) + ISO/IEC 30111 (vuln handling)** | How to *receive* (29147) and *process* (30111) security vulnerability reports — for the **project itself**, not the code it scans. | **Partially satisfied** (shipped since v0.2). The repo now has a **`SECURITY.md`** with a reporting channel and ISO 29147/30111 framing, plus `.github/` issue/PR templates. To fully align, keep a triage SLA and enable private security advisories. Given the hosted-MCP `scan_path` risk (now mitigated by default-off FS gating + auth), the disclosure channel is the right backstop. |
 
 **Net for Section 3:** qscan **helps generate A.8.24 evidence** inside an ISMS the
 org still operates; Sieve **relates to CC/FIPS evaluation as a pre-screen** but
@@ -128,18 +164,21 @@ into mandate-specific report/inventory formats.
 
 ## 5. Software supply-chain / OSS assurance — for the project itself
 
-This section assesses `quantakrypto-tools` *as a published open-source project*. Current
-state below is drawn from the repo (`package.json` × 6 = Apache-2.0 @ v0.1.0,
-a single root `LICENSE`, **no `.github/` workflows**, no `SECURITY.md`).
+This section assesses `quantakrypto-tools` *as a published open-source project*.
+**Updated for v0.4.2:** the five library packages are **published to npm with live
+Sigstore/npm provenance**; the repo has **`ci.yml` + `release.yml`**, **`SECURITY.md`**,
+and **`REUSE.toml` + `LICENSES/`**. The rows below are corrected inline; the
+remaining genuine gaps are the **OpenSSF Scorecard workflow** (not wired),
+`reuse lint` in CI, per-package `LICENSE` in tarballs, and immutable semver tags.
 
 | Framework | What it is (one line) | Current state in quantakrypto-tools / what'd be needed to claim alignment |
 |---|---|---|
-| **SLSA** | Supply-chain Levels for Software Artifacts — graduated provenance/build-integrity levels for released artifacts. | **Not yet aligned.** No build provenance is generated. To reach **SLSA L1+** the project **would require** a scripted, version-controlled build with generated provenance; **L2/L3** need a hosted, hardened CI builder (e.g. GitHub Actions reusable workflow + signed provenance). Today: no CI present. |
-| **OpenSSF Scorecard** | Automated checks scoring an OSS repo on security practices (branch protection, CI tests, pinned deps, code review, etc.). | **Not run.** **Would require** adding the Scorecard GitHub Action and acting on results. The project's **zero-runtime-dependency** posture helps several checks (`Pinned-Dependencies`, `Vulnerabilities` — minimal attack surface) for free; missing items are branch protection, CI, fuzzing, signed releases, and a security policy. |
+| **SLSA** | Supply-chain Levels for Software Artifacts — graduated provenance/build-integrity levels for released artifacts. | **Aligned (build provenance live).** `release.yml` publishes all 5 library packages with npm/Sigstore provenance attestations (verified via `npm audit signatures`). Actions are SHA-pinned. Residual to strengthen L3-style claims: publish from an immutable tag rather than `main` so provenance pins a non-mutable ref. |
+| **OpenSSF Scorecard** | Automated checks scoring an OSS repo on security practices (branch protection, CI tests, pinned deps, code review, etc.). | **Not yet wired** (genuine gap). The `ossf/scorecard-action` workflow is **not** present (only `ci.yml`/`release.yml`). The **zero-runtime-dependency** posture + SHA-pinned actions + provenance already satisfy several checks; adding the Scorecard Action + branch protection is the remaining step. |
 | **OpenSSF Best Practices Badge (formerly CII)** | Self-certified badge for following OSS best practices (reporting process, tests, release notes, crypto hygiene). | **Not held.** Apache-2.0 + an existing `node:test` suite satisfy several criteria already. **Would require** a published vuln-reporting process (ties to ISO 29147/30111 above), documented release process, and completing the questionnaire to earn the *passing* badge. |
 | **SPDX / REUSE (license compliance)** | REUSE.software best practice: every file carries an SPDX license identifier; machine-verifiable licensing. | **Partial.** Top-level `LICENSE` (Apache-2.0) is present and every package declares `"license": "Apache-2.0"`, but per-file `SPDX-License-Identifier` headers and a REUSE-compliant `LICENSES/` layout are **not** in place. **Would require** adding SPDX headers (or `.reuse/dep5`) and running `reuse lint` to claim REUSE compliance. |
-| **SemVer** | Semantic Versioning — `MAJOR.MINOR.PATCH` with documented compatibility semantics. | **Followed in form.** All packages are `0.1.0`. Under SemVer's 0.x rule, **anything may change**; the API is explicitly pre-stable. To make compatibility *promises*, the project **would require** reaching `1.0.0` with a documented public API surface and a changelog. (`docs/AUDIT.md` already flags pre-1.0 API-honesty items — dead options, divergent baseline schemes.) |
-| **npm provenance** | npm's signed build-provenance attestation (Sigstore) shown on the package page, proving which CI built a release. | **Not configured.** No `provenance` publish config and no CI to produce it. **Would require** publishing from a supported CI (GitHub Actions) with `npm publish --provenance` (or `publishConfig.provenance: true`) and OIDC. Pairs naturally with SLSA. |
+| **SemVer** | Semantic Versioning — `MAJOR.MINOR.PATCH` with documented compatibility semantics. | **Followed in form.** All packages are `0.4.2`. Under SemVer's 0.x rule the API is still explicitly pre-stable. `docs/VERSIONING.md` documents the public surface; a `CHANGELOG.md` is maintained. Reaching `1.0.0` (with the agent line's surface declared) is the remaining step to make compatibility *promises*. |
+| **npm provenance** | npm's signed build-provenance attestation (Sigstore) shown on the package page, proving which CI built a release. | **Live** (shipped since v0.4). `release.yml` publishes all 5 library packages with `--provenance` via GitHub OIDC; `npm audit signatures` verifies the attestations. Residual: the attestation currently pins `refs/heads/main` rather than an immutable release tag. |
 
 **Net for Section 5:** strong **license clarity** (Apache-2.0 throughout) and an
 excellent **minimal-dependency** security posture, but **no CI, no provenance, no
@@ -176,9 +215,9 @@ Blank cells indicate no meaningful relationship.
 | Standard | core | qscan | mcp | action | sieve |
 |---|---|---|---|---|---|
 | SARIF 2.1.0 (OASIS) | **E** | **E** | — (JSON/text only) | **E** | — |
-| CWE tagging | — (gap) | — (gap) | — | — (gap) | — |
-| CycloneDX / SPDX SBOM | — (gap) | — (gap) | — | — (gap) | — |
-| CBOM (crypto BOM) | builds substance (gap to emit) | builds substance | — | — | — |
+| CWE tagging | **E** | **E** | — | **E** | — |
+| CycloneDX CBOM | **E** (`toCbom`) | **E** (`--cbom`) | **E** (`generate_cbom`) | — | — |
+| SPDX SBOM | — (gap) | — (gap) | — | — | — |
 | NIST ACVP vector format | — | — | — | — | **C** |
 | ISO 27001 / 27002 A.8.24 | S (evidence) | S (evidence) | S (advisory) | S (CI gate) | R (impl conformance) |
 | ISO 15408/18045 (Common Criteria) | — | — | — | — | R (test evidence) |

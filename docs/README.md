@@ -6,8 +6,9 @@ monorepo. Start here.
 ## Roadmap & gaps
 
 - **[ROADMAP.md](ROADMAP.md)** — the consolidated, prioritised plan (P0/P1/P2)
-  and the "what's missing" gap matrix, distilled from every audit below. **Read
-  this first to pick up the work.**
+  and the "what's missing" gap matrix, distilled from every audit below. Most of
+  it has shipped, so it now reads as a **status doc** — what's done and what
+  remains — rather than a worklist.
 
 ## Audits
 
@@ -33,6 +34,9 @@ regression guards in the test suite.
 | [validation/detection-benchmark.md](validation/detection-benchmark.md) | qScan detector precision / recall / F1 against a labeled corpus (current: P 0.969 · R 1.000 · F1 0.984), with a frank list of known false positives / false negatives |
 | [validation/sieve-real-impl.md](validation/sieve-real-impl.md) | Sieve driven against a real audited PQC implementation (`@noble/post-quantum`): passes ML-KEM/ML-DSA/SLH-DSA, catches a broken variant, and surfaced one genuine FIPS 203 §7.2 deviation |
 | [validation/qscan-dogfood.md](validation/qscan-dogfood.md) | qScan run on real repositories (`jsonwebtoken`, `jose`) — accurate inventory + readiness verdict on crypto-heavy code |
+
+- **[how-to-test-0.4.md](how-to-test-0.4.md)** — hands-on walkthrough for exercising
+  the 0.4 release end to end (scan, `--triage`, `qremediate`, MCP, the Action).
 
 ## Security & threat model
 
@@ -68,9 +72,18 @@ regression guards in the test suite.
 | [compliance/iso27001-a8.24-evidence.md](compliance/iso27001-a8.24-evidence.md) | A signed, timestamped A.8.24 "Use of cryptography" readiness-evidence report (scan + inventory + CBOM + attestation) |
 | [compliance/acvp-provenance.md](compliance/acvp-provenance.md) | How Sieve records provenance (source URL, hash, version) of operator-supplied NIST ACVP vectors |
 
+## Agent line (BYOK, opt-in)
+
+The optional bring-your-own-key LLM line — qScan `--triage`, the `qremediate` CLI,
+and the key-free MCP `triage_findings` / `apply_triage` / `remediate_findings`
+tools — is built on [`@quantakrypto/agent`](../packages/agent/README.md).
+
+- [superpowers/specs/2026-07-03-byok-agent-tools-design.md](superpowers/specs/2026-07-03-byok-agent-tools-design.md) — the BYOK agent-tools design.
+- [superpowers/plans/2026-07-03-byok-agent-tools.md](superpowers/plans/2026-07-03-byok-agent-tools.md) — the implementation plan.
+
 ## Per-package & protocol docs
 
-- [`@quantakrypto/core`](../packages/core/README.md) · [`qscan`](../packages/qscan/README.md) · [`mcp`](../packages/mcp/README.md) · [`action`](../packages/action/README.md) · [`sieve`](../packages/sieve/README.md)
+- [`@quantakrypto/core`](../packages/core/README.md) · [`qscan`](../packages/qscan/README.md) · [`mcp`](../packages/mcp/README.md) · [`action`](../packages/action/README.md) · [`sieve`](../packages/sieve/README.md) · [`agent`](../packages/agent/README.md)
 - [MCP hosting design](../packages/mcp/HOSTING.md)
 - [Sieve ↔ SUT protocol](../packages/sieve/PROTOCOL.md) · [obtaining NIST ACVP vectors](../packages/sieve/vectors/README.md)
 

@@ -7,8 +7,9 @@
 
 ## Context
 
-Four of the five packages share `@quantakrypto/core` ([ADR-0002](0002-shared-core-contract.md)),
-and the tools are developed, audited, and released together. They must build and
+Five of the six packages share `@quantakrypto/core` ([ADR-0002](0002-shared-core-contract.md)) —
+`sieve` is the standalone exception — and the tools are developed, audited, and
+released together. They must build and
 test as one unit, with the shared contract built before its consumers, while still
 being **independently publishable** under the `@quantakrypto/*` npm scope. The
 zero-dependency rule ([ADR-0001](0001-zero-runtime-dependencies.md)) means the
@@ -17,7 +18,7 @@ toolchain itself should stay tiny.
 ## Decision
 
 We will use a **single Git repository** with **npm workspaces** under
-`packages/*` (`core`, `qscan`, `mcp`, `action`, `sieve`), and build with
+`packages/*` (`core`, `qscan`, `mcp`, `action`, `sieve`, `agent`), and build with
 **TypeScript project references** via `tsc -b`. The toolchain is intentionally
 minimal: `typescript` + `tsx` (to run `node:test` directly on `.ts`) are the only
 dev dependencies; tests use `node:test` + `node:assert` exclusively.
@@ -39,18 +40,22 @@ contributors run three commands (`npm install` / `npm run build` / `npm test`).
   wired and an entry in the root build. Accepted as the price of correct,
   incremental, contract-first builds.
 - **The Action's `dist/` must be committed/bundled to publish.** A `node20`
-  GitHub Action runs `dist/main.js` directly, so `uses: …/packages/action@v1`
-  does not work until the built JS is committed or single-file-bundled. This is a
-  known release-readiness gap captured in [ROADMAP §5](../ROADMAP.md) and the
-  [release workflow](../../.github/workflows/release.yml) scaffold; it is a
-  consequence of choosing a monorepo + a compiled action, accepted deliberately.
+  GitHub Action runs `dist/index.js` directly, so `uses: …/packages/action@v1`
+  does not work until the built JS is committed or single-file-bundled. **This gap
+  is now closed:** `packages/action/dist/index.js` is committed and a CI
+  **freshness gate** (`action-bundle` in [ci.yml](../../.github/workflows/ci.yml))
+  re-bundles and fails the build if the committed `dist/` drifts from source. (One
+  release caveat remains — the moving `v1` tag is not yet re-pointed at the current
+  release, so it can lag `main`; see [ROADMAP §5](../ROADMAP.md).) This was a
+  deliberate consequence of choosing a monorepo + a compiled action.
 - **Shared versioning discipline.** Independent publish + a shared contract means
   version bumps must follow [VERSIONING.md](../VERSIONING.md) so a core change and
   its consumers move together.
 
 **Enforcement:** the root `tsconfig`/build script encodes the reference graph; CI
 builds + tests the whole workspace on every push (`.github/workflows/ci.yml`); a
-"dist is fresh" gate is planned for the Action (ROADMAP §5).
+"dist is fresh" gate (`action-bundle`) now guards the Action's committed `dist/` in
+that same CI.
 
 ## Alternatives considered
 
