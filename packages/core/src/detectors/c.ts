@@ -1,7 +1,9 @@
 /**
  * Source-code detector for classical asymmetric cryptography in C / C++ using
- * OpenSSL (the dominant crypto library for the ecosystem). Lexical, same
- * strategy as the other packs; the OpenSSL function names are distinctive.
+ * OpenSSL (the dominant crypto library for the ecosystem), libsodium, and — for
+ * the embedded / firmware / IoT niche — Mbed TLS (`mbedtls_*`) and wolfSSL /
+ * wolfCrypt (`wc_*`). Lexical, same strategy as the other packs; every library's
+ * function names are distinctive enough to keep the false-positive risk low.
  *
  * NOTE: scanning OpenSSL's OWN source/headers will naturally light up (the
  * library declares these symbols) — that is inherent to lexical scanning of a
@@ -48,6 +50,24 @@ const RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
 // deprecated protocol version or disabling certificate verification.
 const RE_C_TLS_VERSION = /\bTLSv1_method\b|\bSSLv3_method\b/g;
 const RE_C_TLS_VERIFY_NONE = /\bSSL_VERIFY_NONE\b/g;
+// Embedded C crypto libraries (the "embedded" niche): Mbed TLS and wolfSSL /
+// wolfCrypt. Both use highly-distinctive `mbedtls_*` / `wc_*` prefixes, so the
+// false-positive risk is low. These dominate firmware / IoT / RTOS builds where
+// OpenSSL is too heavy — a codebase surface qScan previously missed entirely.
+const RE_C_MBEDTLS_RSA = /\bmbedtls_rsa_gen_key\s*\(/g;
+const RE_C_MBEDTLS_EC = /\bmbedtls_ecp_gen_key(?:pair)?\s*\(/g;
+const RE_C_MBEDTLS_ECDSA =
+  /\bmbedtls_ecdsa_(?:sign|write_signature|read_signature|verify)\w*\s*\(/g;
+const RE_C_MBEDTLS_ECDH = /\bmbedtls_ecdh_(?:compute_shared|calc_secret)\s*\(/g;
+const RE_C_MBEDTLS_DH = /\bmbedtls_dhm_(?:make_public|make_params|calc_secret)\s*\(/g;
+const RE_C_WOLF_RSA =
+  /\bwc_MakeRsaKey\s*\(|\bwc_RsaPublicEncrypt\s*\(|\bwc_RsaPrivateDecrypt\s*\(/g;
+const RE_C_WOLF_ECC = /\bwc_ecc_make_key(?:_ex)?\s*\(/g;
+const RE_C_WOLF_ECDSA = /\bwc_ecc_sign_hash\s*\(|\bwc_ecc_verify_hash\s*\(/g;
+const RE_C_WOLF_ECDH = /\bwc_ecc_shared_secret\s*\(/g;
+const RE_C_WOLF_DH = /\bwc_DhGenerateKeyPair\s*\(|\bwc_DhAgree\s*\(/g;
+const RE_C_WOLF_CURVE25519 = /\bwc_curve25519_(?:make_key|shared_secret)\s*\(/g;
+const RE_C_WOLF_ED25519 = /\bwc_ed25519_(?:make_key|sign_msg|verify_msg)\s*\(/g;
 
 const RULE_C_RSA: RuleMeta = {
   id: "c-rsa-keygen",
@@ -275,11 +295,173 @@ const RULE_C_TLS_VERIFY_NONE: RuleMeta = {
   message: "SSL_VERIFY_NONE disables TLS certificate verification (MITM risk).",
   remediation: "Use SSL_VERIFY_PEER and verify certificates properly.",
 };
+// --- Mbed TLS (embedded) ---
+const RULE_C_MBEDTLS_RSA: RuleMeta = {
+  id: "c-mbedtls-rsa-keygen",
+  title: "Mbed TLS RSA key generation",
+  description: "Mbed TLS mbedtls_rsa_gen_key",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Generates a classical RSA key pair (Mbed TLS, embedded), which is not quantum-safe.",
+};
+const RULE_C_MBEDTLS_EC: RuleMeta = {
+  id: "c-mbedtls-ec-keygen",
+  title: "Mbed TLS EC key generation",
+  description: "Mbed TLS mbedtls_ecp_gen_key / mbedtls_ecp_gen_keypair",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Generates a classical EC key pair (Mbed TLS, embedded). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation:
+    "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204).",
+};
+const RULE_C_MBEDTLS_ECDSA: RuleMeta = {
+  id: "c-mbedtls-ecdsa",
+  title: "Mbed TLS ECDSA signature",
+  description: "Mbed TLS mbedtls_ecdsa_sign / write_signature / read_signature / verify",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA (Mbed TLS, embedded) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_C_MBEDTLS_ECDH: RuleMeta = {
+  id: "c-mbedtls-ecdh",
+  title: "Mbed TLS ECDH key agreement",
+  description: "Mbed TLS mbedtls_ecdh_compute_shared / mbedtls_ecdh_calc_secret",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Elliptic-curve Diffie-Hellman (Mbed TLS, embedded) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_C_MBEDTLS_DH: RuleMeta = {
+  id: "c-mbedtls-dh",
+  title: "Mbed TLS Diffie-Hellman key exchange",
+  description: "Mbed TLS mbedtls_dhm_make_public / make_params / calc_secret",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Finite-field Diffie-Hellman (Mbed TLS, embedded) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+// --- wolfSSL / wolfCrypt (embedded) ---
+const RULE_C_WOLF_RSA: RuleMeta = {
+  id: "c-wolfssl-rsa",
+  title: "wolfSSL RSA key/usage",
+  description: "wolfCrypt wc_MakeRsaKey / wc_RsaPublicEncrypt / wc_RsaPrivateDecrypt",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Classical RSA key generation / encryption (wolfSSL, embedded) is harvest-now-decrypt-later exposed.",
+};
+const RULE_C_WOLF_ECC: RuleMeta = {
+  id: "c-wolfssl-ecc-keygen",
+  title: "wolfSSL EC key generation",
+  description: "wolfCrypt wc_ecc_make_key / wc_ecc_make_key_ex",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Generates a classical EC key pair (wolfSSL, embedded). EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+  remediation:
+    "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204).",
+};
+const RULE_C_WOLF_ECDSA: RuleMeta = {
+  id: "c-wolfssl-ecdsa",
+  title: "wolfSSL ECDSA signature",
+  description: "wolfCrypt wc_ecc_sign_hash / wc_ecc_verify_hash",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Classical ECDSA (wolfSSL, embedded) is forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
+const RULE_C_WOLF_ECDH: RuleMeta = {
+  id: "c-wolfssl-ecdh",
+  title: "wolfSSL ECDH key agreement",
+  description: "wolfCrypt wc_ecc_shared_secret",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Elliptic-curve Diffie-Hellman (wolfSSL, embedded) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_C_WOLF_DH: RuleMeta = {
+  id: "c-wolfssl-dh",
+  title: "wolfSSL Diffie-Hellman key exchange",
+  description: "wolfCrypt wc_DhGenerateKeyPair / wc_DhAgree",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "DH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Finite-field Diffie-Hellman (wolfSSL, embedded) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+};
+const RULE_C_WOLF_CURVE25519: RuleMeta = {
+  id: "c-wolfssl-curve25519",
+  title: "wolfSSL X25519 key agreement",
+  description: "wolfCrypt wc_curve25519_make_key / wc_curve25519_shared_secret",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "X25519 key agreement (wolfSSL, embedded) is modern but classical, and harvest-now-decrypt-later exposed.",
+};
+const RULE_C_WOLF_ED25519: RuleMeta = {
+  id: "c-wolfssl-ed25519",
+  title: "wolfSSL Ed25519 signature",
+  description: "wolfCrypt wc_ed25519_make_key / wc_ed25519_sign_msg / wc_ed25519_verify_msg",
+  category: "signature",
+  severity: "low",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ed25519 signatures (wolfSSL, embedded) are classical and forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)",
+};
 
 /** Detects classical asymmetric crypto in C/C++ (OpenSSL). */
 export const cDetector: Detector = {
   id: "c-crypto",
-  description: "Classical asymmetric crypto in C/C++ (OpenSSL)",
+  description: "Classical asymmetric crypto in C/C++ (OpenSSL, libsodium, Mbed TLS, wolfSSL)",
   scope: "source",
   language: "c",
   rules: [
@@ -300,6 +482,18 @@ export const cDetector: Detector = {
     RULE_C_RSA_CRYPT,
     RULE_C_TLS_VERSION,
     RULE_C_TLS_VERIFY_NONE,
+    RULE_C_MBEDTLS_RSA,
+    RULE_C_MBEDTLS_EC,
+    RULE_C_MBEDTLS_ECDSA,
+    RULE_C_MBEDTLS_ECDH,
+    RULE_C_MBEDTLS_DH,
+    RULE_C_WOLF_RSA,
+    RULE_C_WOLF_ECC,
+    RULE_C_WOLF_ECDSA,
+    RULE_C_WOLF_ECDH,
+    RULE_C_WOLF_DH,
+    RULE_C_WOLF_CURVE25519,
+    RULE_C_WOLF_ED25519,
   ],
   appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -327,6 +521,18 @@ export const cDetector: Detector = {
     add(RE_C_RSA_CRYPT, RULE_C_RSA_CRYPT);
     add(RE_C_TLS_VERSION, RULE_C_TLS_VERSION);
     add(RE_C_TLS_VERIFY_NONE, RULE_C_TLS_VERIFY_NONE);
+    add(RE_C_MBEDTLS_RSA, RULE_C_MBEDTLS_RSA);
+    add(RE_C_MBEDTLS_EC, RULE_C_MBEDTLS_EC);
+    add(RE_C_MBEDTLS_ECDSA, RULE_C_MBEDTLS_ECDSA);
+    add(RE_C_MBEDTLS_ECDH, RULE_C_MBEDTLS_ECDH);
+    add(RE_C_MBEDTLS_DH, RULE_C_MBEDTLS_DH);
+    add(RE_C_WOLF_RSA, RULE_C_WOLF_RSA);
+    add(RE_C_WOLF_ECC, RULE_C_WOLF_ECC);
+    add(RE_C_WOLF_ECDSA, RULE_C_WOLF_ECDSA);
+    add(RE_C_WOLF_ECDH, RULE_C_WOLF_ECDH);
+    add(RE_C_WOLF_DH, RULE_C_WOLF_DH);
+    add(RE_C_WOLF_CURVE25519, RULE_C_WOLF_CURVE25519);
+    add(RE_C_WOLF_ED25519, RULE_C_WOLF_ED25519);
     return findings;
   },
 };

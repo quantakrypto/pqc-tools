@@ -8,6 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Embedded C crypto coverage (Mbed TLS + wolfSSL/wolfCrypt).** The C/C++
+  detector previously covered only OpenSSL and libsodium; it now also detects the
+  two dominant *embedded* libraries — `mbedtls_rsa_gen_key` / `mbedtls_ecp_gen_key`
+  / `mbedtls_ecdsa_*` / `mbedtls_ecdh_*` / `mbedtls_dhm_*`, and `wc_MakeRsaKey` /
+  `wc_ecc_*` / `wc_DhAgree` / `wc_curve25519_*` / `wc_ed25519_*` — with the same
+  HNDL classification as the OpenSSL rules. Directly closes the "embedded / IoT /
+  firmware" scanning-depth gap; distinctive `mbedtls_*` / `wc_*` prefixes keep
+  false positives near zero (precision/recall stay **1.000** on the tuned corpus).
 - **GitHub Action now writes a job summary (`$GITHUB_STEP_SUMMARY`)** on every
   run — the readiness score and the findings table (or the migration plan in
   `comment-plan` mode) render on the workflow run's summary page with no PR

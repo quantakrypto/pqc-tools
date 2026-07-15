@@ -77,6 +77,73 @@ test("C/OpenSSL: RSA_generate_key / EC_KEY / ECDSA_sign / DH", () => {
   assert.equal(rule(run("a.cpp", "DH_generate_key(dh);"), "c-dh")?.algorithm, "DH");
 });
 
+test("C/Mbed TLS (embedded): rsa / ecp / ecdsa / ecdh / dhm classify correctly", () => {
+  assert.equal(
+    rule(run("fw.c", "mbedtls_rsa_gen_key(&rsa, rng, p, 2048, 65537);"), "c-mbedtls-rsa-keygen")
+      ?.algorithm,
+    "RSA",
+  );
+  const ec = rule(run("fw.c", "mbedtls_ecp_gen_key(id, &grp, rng, p);"), "c-mbedtls-ec-keygen");
+  assert.equal(ec?.algorithm, "ECDH");
+  assert.equal(ec?.hndl, true);
+  assert.equal(
+    rule(
+      run("fw.c", "mbedtls_ecdsa_write_signature(&ctx, md, h, hl, s, &sl, rng, p);"),
+      "c-mbedtls-ecdsa",
+    )?.hndl,
+    false,
+  );
+  assert.equal(
+    rule(run("fw.c", "mbedtls_ecdh_compute_shared(&grp, &z, &qp, &d, rng, p);"), "c-mbedtls-ecdh")
+      ?.hndl,
+    true,
+  );
+  assert.equal(
+    rule(run("fw.c", "mbedtls_dhm_calc_secret(&dhm, out, olen, &n, rng, p);"), "c-mbedtls-dh")
+      ?.algorithm,
+    "DH",
+  );
+});
+
+test("C/wolfSSL (embedded): rsa / ecc / ecdh / dh / x25519 / ed25519 classify correctly", () => {
+  assert.equal(
+    rule(run("iot.c", "wc_MakeRsaKey(&key, 2048, 65537, &rng);"), "c-wolfssl-rsa")?.hndl,
+    true,
+  );
+  const ecc = rule(run("iot.c", "wc_ecc_make_key(&rng, 32, &key);"), "c-wolfssl-ecc-keygen");
+  assert.equal(ecc?.algorithm, "ECDH");
+  assert.equal(ecc?.hndl, true);
+  assert.equal(
+    rule(run("iot.c", "wc_ecc_sign_hash(h, hl, s, &sl, &rng, &key);"), "c-wolfssl-ecdsa")?.hndl,
+    false,
+  );
+  assert.equal(
+    rule(run("iot.c", "wc_ecc_shared_secret(&priv, &pub, out, &olen);"), "c-wolfssl-ecdh")?.hndl,
+    true,
+  );
+  assert.equal(
+    rule(run("iot.c", "wc_DhAgree(&dh, z, &zl, priv, pl, pub, publ);"), "c-wolfssl-dh")?.algorithm,
+    "DH",
+  );
+  assert.equal(
+    rule(
+      run("iot.c", "wc_curve25519_shared_secret(&priv, &pub, out, &olen);"),
+      "c-wolfssl-curve25519",
+    )?.algorithm,
+    "X25519",
+  );
+  assert.equal(
+    rule(run("iot.c", "wc_ed25519_sign_msg(m, ml, s, &sl, &key);"), "c-wolfssl-ed25519")?.algorithm,
+    "EdDSA",
+  );
+});
+
+test("embedded C: distinctive prefixes don't fire on clean firmware code", () => {
+  // Symmetric / hashing calls from the same libraries must stay silent.
+  assert.deepEqual(run("fw.c", "mbedtls_aes_setkey_enc(&aes, key, 256);"), []);
+  assert.deepEqual(run("iot.c", "wc_Sha256Update(&sha, data, len);"), []);
+});
+
 test("each detector is gated to its own extensions", () => {
   // C# call text in a .rs file must not trigger the C# detector, and vice versa.
   assert.equal(rule(run("x.rs", "RSA.Create(2048);"), "csharp-rsa"), undefined);
