@@ -683,6 +683,18 @@
     "category": "negative",
     "expected": []
   },
+  "negative/go-jwt-in-string.go": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/ssh-doc-prose.rst": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/python-docstring-crypto.py": {
+    "category": "negative",
+    "expected": []
+  },
   "negative/java-clean.java": {
     "category": "negative",
     "expected": []

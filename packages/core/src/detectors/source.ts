@@ -29,6 +29,7 @@
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import {
   JS_TS_EXTENSIONS,
+  DOC_EXTENSIONS,
   JWT_HOST_EXTENSIONS,
   eachMatch,
   findingFromRule,
@@ -623,6 +624,11 @@ const libraryDetector: Detector = {
 /* JWT / JOSE / COSE algorithm strings                                         */
 /* -------------------------------------------------------------------------- */
 
+// JOSE RSA key-transport algorithms (JWE `alg`): quoted RSA-OAEP / RSA-OAEP-256
+// /384/512 / RSA1_5. Classical RSA *encryption* (key transport) — distinct from
+// the RS*/PS* *signature* tokens above, and a harvest-now-decrypt-later surface.
+const RE_JOSE_KEM = /['"`](RSA-OAEP(?:-(?:256|384|512))?|RSA1_5)['"`]/g;
+
 const RULE_JWT_ALG: RuleMeta = {
   id: "jwt-classical-alg",
   title: "Classical JWT/JOSE algorithm",
@@ -650,6 +656,20 @@ const RULE_JOSE_ECDH: RuleMeta = {
     "JOSE ECDH-ES performs classical ECDH key agreement — harvest-now-decrypt-later exposed.",
   remediation: "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption.",
 };
+const RULE_JOSE_RSA_OAEP: RuleMeta = {
+  id: "jose-rsa-oaep",
+  title: "JOSE RSA key-transport algorithm",
+  description: "JWE RSA-OAEP / RSA-OAEP-256/384/512 / RSA1_5 key encryption",
+  category: "key-exchange",
+  severity: "high",
+  confidence: "medium",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "JOSE RSA key transport (RSA-OAEP / RSA1_5) is classical RSA encryption — harvest-now-decrypt-later exposed.",
+  remediation: "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption.",
+};
 
 /**
  * Detects classical signature algorithm identifiers used by JWT/JOSE, plus
@@ -664,7 +684,7 @@ const jwtDetector: Detector = {
   // signal in JS/TS or Python (e.g. PyJWT `algorithm="RS256"`), so this detector
   // is un-gated from JS-only to the JWT host surfaces.
   language: "any",
-  rules: [RULE_JWT_ALG, RULE_JOSE_ECDH],
+  rules: [RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP],
   appliesTo: (f) => hasExtension(f, JWT_HOST_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
@@ -698,6 +718,20 @@ const jwtDetector: Detector = {
           {
             title: `JOSE key agreement ${m[1]}`,
             message: `JOSE "${m[1]}" performs classical ECDH key agreement — harvest-now-decrypt-later exposed.`,
+          },
+        ),
+      );
+    });
+
+    // JOSE RSA key transport (RSA-OAEP / RSA1_5) — classical RSA encryption, HNDL.
+    eachMatch(RE_JOSE_KEM, content, (m) => {
+      findings.push(
+        findingFromRule(
+          RULE_JOSE_RSA_OAEP,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `JOSE RSA key transport ${m[1]}`,
+            message: `JOSE "${m[1]}" is classical RSA key transport — harvest-now-decrypt-later exposed.`,
           },
         ),
       );
@@ -810,6 +844,13 @@ const tlsDetector: Detector = {
 const RE_SSH_PUBKEY = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521))\b/g;
 const RE_CERT_SIG_ALG =
   /\b(sha(?:1|256|384|512)WithRSAEncryption|ecdsa-with-SHA(?:1|256|384|512)|rsassaPss|dsaWithSHA(?:1|256))\b/g;
+// Classical SSH key-exchange algorithm identifiers: finite-field DH groups
+// (diffie-hellman-group{1,14,15,16,17,18} + group-exchange), ECDH over NIST
+// curves (ecdh-sha2-nistp*), and Curve25519 (curve25519-sha256). All are
+// Shor-broken key agreement — the harvest-now-decrypt-later surface a lexical
+// scan misses when only the `crypto/*` API is matched, not the negotiated kex.
+const RE_SSH_KEX =
+  /\b(diffie-hellman-group(?:1|14|15|16|17|18)(?:-sha1|-sha256|-sha512)?|diffie-hellman-group-exchange-sha(?:1|256)|ecdh-sha2-nistp(?:256|384|521)|curve25519-sha256)\b/g;
 
 const RULE_SSH_PUBKEY: RuleMeta = {
   id: "ssh-public-key",
@@ -840,6 +881,21 @@ const RULE_CERT_SIG_ALG: RuleMeta = {
     "A classical certificate signature algorithm (RSA/ECDSA/DSA) is a quantum forgery surface.",
   remediation: "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature.",
 };
+const RULE_SSH_KEX: RuleMeta = {
+  id: "ssh-kex-classical",
+  title: "Classical SSH key exchange",
+  description: "diffie-hellman-group* / group-exchange / ecdh-sha2-* / curve25519-sha256 kex",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A classical SSH key-exchange algorithm (finite-field DH / ECDH / X25519) is harvest-now-decrypt-later exposed.",
+  remediation:
+    "Prefer the mlkem768x25519-sha256 KEX (ML-KEM-768 hybrid, OpenSSH 10 default); sntrup761x25519 is an acceptable interim.",
+};
 
 /**
  * Detects classical SSH public keys (`authorized_keys` / `known_hosts` lines)
@@ -852,8 +908,10 @@ const sshCertDetector: Detector = {
   description: "SSH public keys and TLS/X.509 certificate signature algorithms in config",
   scope: "config",
   language: "any",
-  rules: [RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG],
-  appliesTo: () => true,
+  rules: [RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX],
+  // Skip prose/docs: a changelog or README that merely mentions `ssh-rsa` in a
+  // sentence is not crypto config. PEM material is caught by its own detector.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
 
@@ -896,6 +954,27 @@ const sshCertDetector: Detector = {
             title: `Classical certificate signature algorithm (${tok})`,
             algorithm,
             message: `Certificate signature algorithm "${tok}" is classical (RSA/ECDSA/DSA) — a quantum forgery surface.`,
+          },
+        ),
+      );
+    });
+
+    // SSH key-exchange algorithm identifiers (finite-field DH / ECDH / X25519).
+    eachMatch(RE_SSH_KEX, content, (m) => {
+      const tok = m[1];
+      const algorithm: Finding["algorithm"] = tok.startsWith("diffie-hellman")
+        ? "DH"
+        : tok.startsWith("ecdh")
+          ? "ECDH"
+          : "X25519";
+      findings.push(
+        findingFromRule(
+          RULE_SSH_KEX,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: `Classical SSH key exchange (${tok})`,
+            algorithm,
+            message: `SSH key-exchange "${tok}" is classical (${algorithm}) — harvest-now-decrypt-later exposed.`,
           },
         ),
       );
@@ -946,7 +1025,7 @@ const tlsClassicalKexDetector: Detector = {
   scope: "config",
   language: "any",
   rules: [RULE_TLS_CLASSICAL_KEX],
-  appliesTo: () => true,
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
     eachMatch(RE_TLS_CLASSICAL_KEX, content, (m) => {

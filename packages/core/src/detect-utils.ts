@@ -238,6 +238,27 @@ export const RUBY_EXTENSIONS: readonly string[] = [".rb"];
 export const C_EXTENSIONS: readonly string[] = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
 
 /**
+ * Prose/documentation extensions. The language-agnostic *token* detectors (SSH
+ * public keys, TLS cipher suites, certificate signature algorithms) must not run
+ * on these: a changelog or README that mentions `ssh-rsa` or `ECDHE-RSA` in a
+ * sentence is prose, not crypto config. (PEM/`-----BEGIN` material stays in scope
+ * everywhere, so a key pasted into docs is still caught.)
+ */
+export const DOC_EXTENSIONS: readonly string[] = [
+  ".md",
+  ".markdown",
+  ".mdown",
+  ".mkd",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  ".textile",
+  ".org",
+  ".rdoc",
+  ".pod",
+];
+
+/**
  * File-literal surfaces where a JWT/JOSE algorithm string (`"RS256"`, `"ES256"`)
  * is the same evidence regardless of language. Used to un-gate the JWT detector
  * from JS-only. Covers the languages whose JWT libraries pass the alg as a quoted

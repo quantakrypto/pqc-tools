@@ -36,6 +36,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   0.711 → 0.813**; tuned benchmark held at 1.000, no new false positives. The
   residual 31 FNs are the lexical ceiling (runtime-constructed algorithm names,
   import aliasing) — out of reach without dataflow.
+- **Real-repo validation fixes** — running qscan over four real OSS repos
+  (golang-jwt, paramiko, panva/jose, gin) surfaced precision bugs and recall holes
+  the authored corpus missed; all closed and pinned by benchmark cases. **Recall:**
+  `x509`/PEM **key parsing** (`x509.Parse*`, Go — not just keygen), JOSE **RSA-OAEP**
+  key transport (`jose-rsa-oaep`), and classical **SSH key exchange**
+  (`ssh-kex-classical`: `diffie-hellman-group*` / `ecdh-sha2-*` / `curve25519`) —
+  overall recall 0.813 → 0.824. **Precision:** a code-only **string-literal guard**
+  (identifier rules like `go-jwt-signingmethod` no longer fire inside string
+  literals), a **documentation-file skip** (SSH/TLS/cert token rules skip
+  `.rst`/`.md`), and **Python-docstring** suppression for token rules (PEM key
+  material inside a docstring is still caught). **Readiness score** now down-weights
+  findings in test/fixture/doc paths (a no-crypto web app scored 40 → 81). Tuned
+  benchmark held at 1.000 with three new negative baits.
 
 ## [0.4.3] — 2026-07-15
 

@@ -37,6 +37,34 @@ function penaltyFor(weight: number, occurrence: number): number {
 const SCORE_SCALE = 100;
 
 /**
+ * Fraction of the normal penalty a finding in test/fixture/example/doc code
+ * contributes to the readiness score. Such findings are almost always test
+ * vectors, sample keys, or the library's own algorithm enumerations — accurate
+ * detections, but not the deployed crypto whose migration the score is meant to
+ * track. Real-repo runs showed 60–77% of findings live in these paths, which
+ * dragged the score of no-real-crypto codebases down unfairly. They still appear
+ * in the inventory counts in full; only their *score* weight is reduced.
+ */
+const TEST_PATH_WEIGHT = 0.15;
+
+/** True when a finding's file path is test / fixture / example / documentation. */
+export function isTestOrFixturePath(file: string): boolean {
+  const f = file.toLowerCase().replace(/\\/g, "/");
+  if (
+    /(?:^|\/)(?:tests?|__tests__|testdata|test-data|fixtures?|examples?|demos?|samples?|specs?|mocks?|docs?|benchmarks?|e2e)\//.test(
+      f,
+    )
+  ) {
+    return true;
+  }
+  const base = f.slice(f.lastIndexOf("/") + 1);
+  if (/(?:^|[_.-])(?:test|spec)\.[a-z0-9]+$/.test(base)) return true; // test.go, foo_test.go, foo.test.ts
+  if (/^test_[^/]+\.py$/.test(base)) return true; // python test_foo.py
+  if (/^changelog/.test(base) || /\.(?:md|markdown|rst|adoc|asciidoc)$/.test(base)) return true;
+  return false;
+}
+
+/**
  * Compute a 0–100 readiness score. 100 means no classical asymmetric crypto was
  * found. Findings accrue a severity-weighted penalty (with per-bucket diminishing
  * returns), then the score is `100 * e^(-penalty/scale)`. Exponential decay keeps
@@ -58,7 +86,9 @@ export function readinessScore(findings: Finding[]): number {
   let penalty = 0;
   for (const f of findings) {
     seen[f.severity] += 1;
-    penalty += penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
+    const weight =
+      SEVERITY_WEIGHT[f.severity] * (isTestOrFixturePath(f.location.file) ? TEST_PATH_WEIGHT : 1);
+    penalty += penaltyFor(weight, seen[f.severity]);
   }
 
   return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));

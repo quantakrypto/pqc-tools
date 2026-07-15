@@ -1,6 +1,55 @@
 {
   "$comment": "Ground truth for the recall (false-negative depth) benchmark — see docs/validation/recall-benchmark.md and packages/core/test/recall.test.ts. Each file maps to the quantum-vulnerable crypto it TRULY contains, labeled independently of what the detectors match, across a deliberate spread of difficulty (canonical/aliased/uncommon/config/adversarial). Family vocabulary: RSA, DH, ECDH, ECDSA, DSA, EDDSA, X25519, X448, SECP256K1, TLS, SSH, DEP.",
 
+  "recall/go/x509_keyutils.go": {
+    "language": "go",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "x509.ParsePKCS1PrivateKey (classical key parsing layer)"
+      },
+      {
+        "family": "ECDSA",
+        "difficulty": "uncommon",
+        "note": "x509.ParseECPrivateKey (classical key parsing layer)"
+      }
+    ]
+  },
+  "recall/js/jose-rsa-oaep.ts": {
+    "language": "js",
+    "expected": [
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "jose alg 'RSA-OAEP-256' RSA key transport"
+      },
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "jose alg 'RSA-OAEP' RSA key transport"
+      },
+      {
+        "family": "RSA",
+        "difficulty": "uncommon",
+        "note": "jose alg 'RSA-OAEP-384' RSA key transport"
+      }
+    ]
+  },
+  "recall/python/ssh_kex_prefs.py": {
+    "language": "python",
+    "expected": [
+      { "family": "DH", "difficulty": "config", "note": "diffie-hellman-group14-sha256 kex" },
+      { "family": "DH", "difficulty": "config", "note": "diffie-hellman-group16-sha512 kex" },
+      {
+        "family": "DH",
+        "difficulty": "config",
+        "note": "diffie-hellman-group-exchange-sha256 kex"
+      },
+      { "family": "ECDH", "difficulty": "config", "note": "ecdh-sha2-nistp256 kex" },
+      { "family": "X25519", "difficulty": "config", "note": "curve25519-sha256 kex" }
+    ]
+  },
   "recall/js/rsa-keypair-service.ts": {
     "language": "js",
     "expected": [

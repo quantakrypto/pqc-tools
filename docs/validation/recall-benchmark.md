@@ -61,22 +61,20 @@ guard; the enumerated false negatives are the point.
 
 ## Current measured results
 
-2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap and the
-library-form gaps (initial baseline was 0.645):
+2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap, the
+library-form gaps, and the gaps a real-repo validation run surfaced (initial
+baseline was 0.645):
 
-**Overall: detection recall 0.813** (135 / 166; 8 caught unclassified; 31 false
+**Overall: detection recall 0.824** (145 / 176; 10 caught unclassified; 31 false
 negatives).
 
-| By language | recall |     | By difficulty | recall |
-| ----------- | ------ | --- | ------------- | ------ |
-| python      | 0.952  |     | config        | 1.000  |
-| c           | 0.933  |     | uncommon      | 0.902  |
-| js          | 0.895  |     | canonical     | 0.892  |
-| csharp      | 0.833  |     | adversarial   | 0.474  |
-| ruby        | 0.800  |     | aliased       | 0.316  |
-| rust        | 0.778  |     |               |        |
-| go          | 0.739  |     |               |        |
-| java        | 0.667  |     |               |        |
+| By difficulty | recall |
+| ------------- | ------ |
+| config        | 1.000  |
+| uncommon      | 0.913  |
+| canonical     | 0.892  |
+| adversarial   | 0.474  |
+| aliased       | 0.316  |
 
 The shape is the finding: the scanner catches **config** (1.00), **uncommon**
 (0.90), and **canonical** (0.89) idioms well, and is bounded where the algorithm
@@ -103,6 +101,16 @@ Grouping the 59 misses by root cause separates the *closable* gaps from the
   `Ed25519`/`X25519`/`X448`/DH lightweight classes in Java/C#; and the
   `cloudflare/circl` + decred `secp256k1/v4` Go modules in the dependency catalog.
   This lifted uncommon recall 0.66 → 0.90 and overall 0.711 → 0.813.
+- ✅ **Real-repo validation gaps** (`0.813 → 0.824`). Running qscan over four real
+  OSS repos (golang-jwt, paramiko, panva/jose, gin) surfaced holes the authored
+  corpus lacked, now closed with a corpus case each: **x509/PEM key parsing**
+  (`x509.Parse*`, not just keygen — Go), **RSA-OAEP key transport** (JOSE JWE
+  `alg`), and **classical SSH key exchange** (`diffie-hellman-group*` /
+  `ecdh-sha2-*` / `curve25519-sha256`). The same run also fixed three false-positive
+  classes — algorithm identifiers inside string literals (Go error messages),
+  documentation prose (`.rst`/`.md`), and Python docstrings (PEM keys still caught)
+  — and taught the readiness score to down-weight test/fixture paths. See
+  [Real-world validation](#real-world-validation) below.
 
 **The lexical ceiling (documented, not chased) — where the residual 31 FNs live:**
 
@@ -121,6 +129,34 @@ Grouping the 59 misses by root cause separates the *closable* gaps from the
 
 The benchmark exists so these numbers move deliberately, with evidence, rather
 than being asserted.
+
+## Real-world validation
+
+The authored corpus measures recall on idioms we thought to write. To check what
+it *missed*, qscan was run over four real OSS repos and the findings audited by
+hand:
+
+| repo | precision (sampled) | what it exposed |
+| --- | --- | --- |
+| gin (general Go app) | 7/7, 0 FP | readiness score too harsh on test-only findings |
+| panva/jose (JS JOSE) | ~100% | RSA-OAEP key transport entirely missed |
+| golang-jwt (Go) | ~90% | x509/PEM key-parsing layer missed; FPs from identifiers in error strings |
+| paramiko (Py SSH) | ~83% | finite-field DH kex missed; FPs on docstrings + `.rst` prose |
+
+Every gap above is now closed and pinned by a benchmark case — three recall
+positives (`recall/go/x509_keyutils.go`, `recall/js/jose-rsa-oaep.ts`,
+`recall/python/ssh_kex_prefs.py`) and three tuned-corpus negatives that keep the
+precision fixes from regressing (`negative/go-jwt-in-string.go`,
+`negative/ssh-doc-prose.rst`, `negative/python-docstring-crypto.py`). The
+precision fixes: a **code-only string guard** (identifier rules don't fire inside
+string literals), a **doc-file skip** (SSH/TLS/cert token rules don't scan
+`.rst`/`.md`), and **Python-docstring suppression** for token rules (PEM key
+material inside a docstring is still caught). On the real repos this took
+`ssh-public-key` on paramiko from 113 → 91 findings (22 prose/doc FPs removed) with
+zero real keys lost, and gin's readiness from 40 → 81.
+
+The lesson: an authored recall corpus is necessary but not sufficient — a
+periodic real-code run is the only thing that finds the idioms you didn't imagine.
 
 ## Reproducing
 

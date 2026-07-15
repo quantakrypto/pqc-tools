@@ -80,7 +80,9 @@ const LABELS_PATH = fileURLToPath(new URL("./benchmark/recall-labels.json", impo
 function findingFamily(f: Finding): string {
   const id = f.ruleId.toLowerCase();
   if (id.includes("tls")) return "TLS";
-  if (id.includes("ssh")) return "SSH";
+  // Only host-key findings are the structural SSH family; ssh-kex-classical
+  // carries a real algorithm (DH/ECDH/X25519) and is mapped off that below.
+  if (id === "ssh-public-key") return "SSH";
   if (id.includes("dep") || id.includes("dependency")) return "DEP";
   if (id.includes("secp256k1")) return "SECP256K1";
   const a = (f.algorithm ?? "").toUpperCase();

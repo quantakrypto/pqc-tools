@@ -109,6 +109,54 @@ export function commentSpans(content: string, style: CommentStyle): Array<[numbe
   return spans;
 }
 
+/**
+ * Compute Python triple-quoted string spans (`"""…"""` / `'''…'''`). These are
+ * docstrings / prose in practice, so a crypto *name* mentioned inside one
+ * (`:param key_type: eg "ssh-ed25519"`) should not fire a token finding — but a
+ * PEM key pasted into one is still real material, so {@link stripCommentFindings}
+ * exempts `pem-*` rules. Comments and normal strings are skipped so a `"""`
+ * delimiter inside them is not mis-detected.
+ */
+export function pythonDocstringSpans(content: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  const n = content.length;
+  let i = 0;
+  while (i < n) {
+    const c = content[i];
+    if (c === "#") {
+      i++;
+      while (i < n && content[i] !== "\n") i++;
+      continue;
+    }
+    if ((c === '"' || c === "'") && content[i + 1] === c && content[i + 2] === c) {
+      const start = i;
+      i += 3;
+      while (i < n && !(content[i] === c && content[i + 1] === c && content[i + 2] === c)) i++;
+      i = Math.min(n, i + 3);
+      spans.push([start, i]);
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const q = c;
+      i++;
+      while (i < n) {
+        if (content[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (content[i] === q) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return spans;
+}
+
 /** True if `offset` falls inside one of the (sorted, non-overlapping) spans. */
 export function offsetInSpans(spans: ReadonlyArray<[number, number]>, offset: number): boolean {
   let lo = 0;
@@ -163,7 +211,9 @@ export function stripCommentFindings(
   const style = commentStyleForFile(file);
   if (!style) return findings;
   const spans = commentSpans(content, style);
-  if (spans.length === 0) return findings;
+  // Python docstrings suppress prose *token* rules but keep real PEM material.
+  const docSpans = style === "hash" ? pythonDocstringSpans(content) : [];
+  if (spans.length === 0 && docSpans.length === 0) return findings;
 
   // 1-based line → start offset, to turn a finding's (line, column) back into an
   // absolute offset (column is 1-based: offset = lineStart + column - 1).
@@ -173,6 +223,95 @@ export function stripCommentFindings(
   }
 
   return findings.filter((f) => {
+    const start = lineStarts[f.location.line - 1] ?? 0;
+    const offset = start + ((f.location.column ?? 1) - 1);
+    if (offsetInSpans(spans, offset)) return false;
+    if (docSpans.length > 0 && !f.ruleId.startsWith("pem-") && offsetInSpans(docSpans, offset)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Compute the string-literal spans (`[start, end)`) of `content`, skipping over
+ * comments so a quote inside a comment is not treated as a string. Used to
+ * suppress findings from IDENTIFIER-only rules (e.g. a Go `SigningMethodRS256`
+ * mentioned inside an error-message string) — the mirror of {@link commentSpans}.
+ */
+export function stringSpans(content: string, style: CommentStyle): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  const n = content.length;
+  let i = 0;
+  while (i < n) {
+    const c = content[i];
+    if (style === "c" && c === "/" && content[i + 1] === "/") {
+      i += 2;
+      while (i < n && content[i] !== "\n") i++;
+      continue;
+    }
+    if (style === "c" && c === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < n && !(content[i] === "*" && content[i + 1] === "/")) i++;
+      i = Math.min(n, i + 2);
+      continue;
+    }
+    if (style === "hash" && c === "#") {
+      i++;
+      while (i < n && content[i] !== "\n") i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      const start = i;
+      i++;
+      while (i < n) {
+        if (content[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (content[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      spans.push([start, i]);
+      continue;
+    }
+    i++;
+  }
+  return spans;
+}
+
+/**
+ * Drop findings of "code-only" rules (`ruleIds`) whose match starts inside a
+ * string literal. Some rules — an identifier-form JWT signing method, a Go
+ * `SigningMethodRS256` — are only meaningful as code; when the same token appears
+ * inside a string (a test's `t.Error("SigningMethodPS256 …")`) it is prose, not a
+ * usage. Rules that legitimately match inside strings (quoted `"RS256"` alg
+ * tokens, cipher-suite strings, ssh-key tokens) are NOT in `ruleIds` and pass
+ * through untouched.
+ */
+export function stripStringLiteralFindings(
+  findings: Finding[],
+  content: string,
+  file: string,
+  ruleIds: ReadonlySet<string>,
+): Finding[] {
+  if (findings.length === 0 || !findings.some((f) => ruleIds.has(f.ruleId))) return findings;
+  const style = commentStyleForFile(file);
+  if (!style) return findings;
+  const spans = stringSpans(content, style);
+  if (spans.length === 0) return findings;
+
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n") lineStarts.push(i + 1);
+  }
+
+  return findings.filter((f) => {
+    if (!ruleIds.has(f.ruleId)) return true;
     const start = lineStarts[f.location.line - 1] ?? 0;
     const offset = start + ((f.location.column ?? 1) - 1);
     return !offsetInSpans(spans, offset);

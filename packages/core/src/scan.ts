@@ -15,7 +15,18 @@ import * as path from "node:path";
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
 import { walkFiles, toPosix, isBinaryPath, looksMinified, matchesAny } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
-import { stripCommentFindings, stripIgnoredFindings } from "./comments.js";
+import {
+  stripCommentFindings,
+  stripIgnoredFindings,
+  stripStringLiteralFindings,
+} from "./comments.js";
+
+/**
+ * Rules whose token is only meaningful as code, never inside a string literal.
+ * A match inside a string (e.g. `t.Error("SigningMethodPS256 …")`) is prose and
+ * is dropped. Rules that legitimately match quoted tokens are NOT listed here.
+ */
+const CODE_ONLY_RULES: ReadonlySet<string> = new Set(["go-jwt-signingmethod"]);
 import { hashContent, loadCache, rulesetFingerprint, saveCache } from "./cache.js";
 import type { CacheEntry } from "./cache.js";
 import { builtinDetectors, defaultRegistry, detectorScope } from "./registry.js";
@@ -71,6 +82,7 @@ export function detectFile(
   // `qscan-ignore-next-line` directives. Both run before the dependency scan
   // appends its findings (manifests carry neither).
   out = stripCommentFindings(out, content, file);
+  out = stripStringLiteralFindings(out, content, file, CODE_ONLY_RULES);
   out = stripIgnoredFindings(out, content);
 
   if (toggles.deps && isManifestFile(file)) {

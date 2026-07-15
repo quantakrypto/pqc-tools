@@ -275,6 +275,29 @@ const RULE_GO_JWT_SIGNINGMETHOD: RuleMeta = {
   remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
 };
 
+// The x509 PEM/DER key + certificate layer: parsing/marshalling classical RSA,
+// EC and PKIX key material and X.509 certificates. This is the "handles classical
+// keys" surface the Sign/Verify/GenerateKey rules miss — a key-loading utility
+// (`x509.ParsePKCS8PrivateKey`) touches quantum-vulnerable material without ever
+// naming rsa/ecdsa. Family is ambiguous at the parse site, so `unknown`.
+const RE_GO_X509_PARSE =
+  /\bx509\.(?:ParsePKCS1PrivateKey|ParsePKCS8PrivateKey|ParsePKIXPublicKey|ParseECPrivateKey|ParsePKCS1PublicKey|MarshalPKCS1PrivateKey|MarshalPKCS8PrivateKey|MarshalPKIXPublicKey|MarshalECPrivateKey|ParseCertificates?|ParseCertificateRequest|CreateCertificate|CreateCertificateRequest)\b/g;
+const RULE_GO_X509_PARSE: RuleMeta = {
+  id: "go-x509-parse",
+  title: "Go x509 classical key/certificate handling",
+  description: "x509.Parse*/Marshal*/Create* for RSA/EC/PKIX keys and X.509 certificates",
+  category: "certificate",
+  severity: "medium",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "This code parses/marshals classical asymmetric key or X.509 certificate material (x509.*), a quantum forgery/harvest surface.",
+  remediation:
+    "Inventory the key/cert types handled here; plan PQC (ML-DSA) certificate + key migration.",
+};
+
 /** Detects classical asymmetric crypto in Go source (crypto/* standard library). */
 export const goDetector: Detector = {
   id: "go-crypto",
@@ -298,6 +321,7 @@ export const goDetector: Detector = {
     RULE_GO_TLS_SKIP_VERIFY,
     RULE_GO_TLS_LEGACY_VERSION,
     RULE_GO_JWT_SIGNINGMETHOD,
+    RULE_GO_X509_PARSE,
   ],
   appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -324,6 +348,7 @@ export const goDetector: Detector = {
     add(RE_GO_ECDH_CLASSIC, RULE_GO_ECDH_CLASSIC);
     add(RE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_SKIP_VERIFY);
     add(RE_GO_TLS_LEGACY_VERSION, RULE_GO_TLS_LEGACY_VERSION);
+    add(RE_GO_X509_PARSE, RULE_GO_X509_PARSE);
 
     // Identifier-form golang-jwt signing methods (jwt.SigningMethodRS256, …).
     // Refine the umbrella "unknown" algorithm per match: m[1] is the RS/PS/ES
