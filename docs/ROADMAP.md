@@ -74,8 +74,14 @@ running against this list; findings will be folded in.
     ephemeral-worktree escape, the no-auto-merge guarantee;
   - **BYOK key handling** (never logged / cached / echoed in errors);
   - **budget / DoS** from a hostile repo.
-  - *Status: audit in progress; THREAT-MODEL.md now documents the surface + the
-    open questions.*
+  - *Status (2026-07-15): **audit complete** — see
+    [audits/2026-07-15-v0.4-review.md](audits/2026-07-15-v0.4-review.md). The
+    safety spine (no-suppress triage, no auto-merge, key hygiene, redactor-on-every-
+    path, worktree isolation) was verified held in code. The residual gaps it found
+    are **fixed**: the crypto-only verify gate now has a blast-radius guard + honest
+    "crypto-verified, not security-reviewed" framing (F1), instruction/data
+    separation via the provider system role (F2), spend caps (F3), and F5–F7. The
+    THREAT-MODEL §4.6/§6.5 carries the verdicts.*
 
 ### 🟠 High
 
