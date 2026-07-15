@@ -32,6 +32,7 @@ regression guards in the test suite.
 | Doc | What it measures |
 |---|---|
 | [validation/detection-benchmark.md](validation/detection-benchmark.md) | qScan detector precision / recall / F1 against a labeled corpus (current: P 0.969 · R 1.000 · F1 0.984), with a frank list of known false positives / false negatives |
+| [validation/remediation-benchmark.md](validation/remediation-benchmark.md) | Correctness of the deterministic codemod layer — applied / cleared / no-regression / idempotent (current: all 1.000), plus the honesty property that it declines findings with no safe mechanical fix |
 | [validation/sieve-real-impl.md](validation/sieve-real-impl.md) | Sieve driven against a real audited PQC implementation (`@noble/post-quantum`): passes ML-KEM/ML-DSA/SLH-DSA, catches a broken variant, and surfaced one genuine FIPS 203 §7.2 deviation |
 | [validation/qscan-dogfood.md](validation/qscan-dogfood.md) | qScan run on real repositories (`jsonwebtoken`, `jose`) — accurate inventory + readiness verdict on crypto-heavy code |
 

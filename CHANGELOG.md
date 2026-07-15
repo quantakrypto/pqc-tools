@@ -68,6 +68,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Testing
 
+- **Remediation-correctness benchmark** — the counterpart to the detection
+  benchmark: it measures whether the deterministic codemod layer *fixes* what
+  qScan finds. For a labeled corpus it scores every produced patch on four
+  properties — **applied**, **cleared** (re-scan confirms the classical crypto is
+  gone, via the same `verifyFix` the pipeline uses), **no-regression**, and
+  **idempotent** — and, on a second corpus, asserts the layer **declines**
+  findings with no safe mechanical fix (RSA keygen, ECDH handshake) rather than
+  emitting a wrong patch. Deterministic → gated at **1.000**. Documented in
+  [`docs/validation/remediation-benchmark.md`](docs/validation/remediation-benchmark.md);
+  it's the harness future codemods (and, report-only, LLM fixes) plug into.
 - **Triage exit-code invariant is now regression-tested.** Added a `triageFn`
   test hook to `runQscan` so the `--triage` path runs offline, and a test that
   proves triage can re-rank/annotate a blocking finding but **never** drops it or
