@@ -9,7 +9,7 @@ import { scanManifest, isManifestFile } from "../src/dependencies.js";
 
 test("database has a healthy number of curated entries across ecosystems", () => {
   assert.ok(vulnerableDependencies.length >= 15, "at least 15 curated entries");
-  const validEcosystems = new Set(["npm", "pypi", "cargo", "go", "maven", "rubygems"]);
+  const validEcosystems = new Set(["npm", "pypi", "cargo", "go", "maven", "rubygems", "nuget"]);
   const ecosystems = new Set<string>();
   for (const d of vulnerableDependencies) {
     assert.ok(validEcosystems.has(d.ecosystem), `${d.name}: valid ecosystem`);
@@ -19,7 +19,7 @@ test("database has a healthy number of curated entries across ecosystems", () =>
     assert.ok(d.reason.length > 0);
   }
   // Multi-ecosystem coverage — not just npm anymore.
-  for (const eco of ["npm", "pypi", "cargo", "go", "maven", "rubygems"]) {
+  for (const eco of ["npm", "pypi", "cargo", "go", "maven", "rubygems", "nuget"]) {
     assert.ok(ecosystems.has(eco), `database covers ${eco}`);
   }
 });

@@ -20,6 +20,7 @@ import { rustDetector } from "./detectors/rust.js";
 import { rubyDetector } from "./detectors/ruby.js";
 import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
+import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
 export function detectorScope(d: Detector): DetectorScope {
@@ -111,8 +112,8 @@ export class DetectorRegistry {
 /**
  * The built-in detectors, in run order: the JS/TS source + config detectors,
  * then the per-language detectors (Python, Go, Java, C#, Rust, Ruby, C/C++),
- * then the language-agnostic PEM detector. The manifest (dependency) scanner is
- * handled separately by `scan()`.
+ * then the language-agnostic PEM and stateful-HBS (SP 800-208) detectors. The
+ * manifest (dependency) scanner is handled separately by `scan()`.
  *
  * This is the single source of truth for the default detector set: both
  * {@link defaultRegistry} and the public `detectors` export (re-exported from
@@ -128,6 +129,7 @@ export const builtinDetectors: Detector[] = [
   rubyDetector,
   cDetector,
   pemDetector,
+  statefulHbsDetector,
 ];
 
 /**

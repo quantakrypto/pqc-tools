@@ -308,7 +308,7 @@ var init_detect_utils = __esm({
 });
 
 // ../core/dist/cwe.js
-var CWE_BROKEN_CRYPTO, CWE_WEAK_STRENGTH, CWE_CERT_VALIDATION, CWE_HARDCODED_KEY;
+var CWE_BROKEN_CRYPTO, CWE_WEAK_STRENGTH, CWE_CERT_VALIDATION, CWE_HARDCODED_KEY, CWE_RISKY_PRIMITIVE;
 var init_cwe = __esm({
   "../core/dist/cwe.js"() {
     "use strict";
@@ -316,6 +316,7 @@ var init_cwe = __esm({
     CWE_WEAK_STRENGTH = "CWE-326";
     CWE_CERT_VALIDATION = "CWE-295";
     CWE_HARDCODED_KEY = "CWE-798";
+    CWE_RISKY_PRIMITIVE = "CWE-1240";
   }
 });
 
@@ -366,6 +367,8 @@ function manifestEcosystem(file) {
     return "maven";
   if (base === "gemfile" || base.endsWith(".gemspec"))
     return "rubygems";
+  if (base === "packages.config" || base === "directory.packages.props" || base.endsWith(".csproj"))
+    return "nuget";
   return null;
 }
 function isManifestFile(file) {
@@ -419,6 +422,15 @@ function candidateNames(ecosystem, content) {
       for (const m of content.matchAll(/\bgem\s+["']([\w.-]+)["']/g))
         names.push(m[1]);
       for (const m of content.matchAll(/add(?:_runtime|_development)?_dependency\s+["']([\w.-]+)["']/g)) {
+        names.push(m[1]);
+      }
+      break;
+    }
+    case "nuget": {
+      for (const m of content.matchAll(/<PackageReference\b[^>]*\bInclude\s*=\s*"([^"]+)"/gi)) {
+        names.push(m[1]);
+      }
+      for (const m of content.matchAll(/<package\b[^>]*\bid\s*=\s*"([^"]+)"/gi)) {
         names.push(m[1]);
       }
       break;
@@ -1094,6 +1106,37 @@ var init_dependencies = __esm({
         reason: "Ed25519 signatures (modern but classical).",
         algorithms: ["EdDSA"],
         severity: "low"
+      },
+      // --- NuGet (.NET) ---
+      {
+        name: "BouncyCastle.Cryptography",
+        ecosystem: "nuget",
+        reason: "BouncyCastle for .NET \u2014 full classical RSA/ECDSA/ECDH/DSA suite.",
+        algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+        severity: "high"
+      },
+      {
+        name: "Portable.BouncyCastle",
+        ecosystem: "nuget",
+        reason: "Portable BouncyCastle for .NET \u2014 classical RSA/ECDSA/ECDH/DSA.",
+        algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+        severity: "high"
+      },
+      {
+        name: "System.IdentityModel.Tokens.Jwt",
+        ecosystem: "nuget",
+        reason: "Microsoft JWT handler \u2014 classical RS*/ES* (RSA/ECDSA) signatures.",
+        algorithms: ["RSA", "ECDSA"],
+        severity: "medium",
+        hndl: false
+      },
+      {
+        name: "Microsoft.IdentityModel.Tokens",
+        ecosystem: "nuget",
+        reason: "Microsoft IdentityModel token crypto \u2014 classical RSA/ECDSA keys.",
+        algorithms: ["RSA", "ECDSA"],
+        severity: "medium",
+        hndl: false
       }
     ];
     BY_ECOSYSTEM = (() => {
@@ -2714,7 +2757,7 @@ function classifyGetInstance(factory, rawAlg) {
     return RULE_JAVA_DH;
   return null;
 }
-var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, BC_CLASS_RULES, javaDetector;
+var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RE_JAVA_JWT_ALG, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, RULE_JAVA_JWT_ALG, BC_CLASS_RULES, javaDetector;
 var init_java = __esm({
   "../core/dist/detectors/java.js"() {
     "use strict";
@@ -2724,6 +2767,7 @@ var init_java = __esm({
     RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
     RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
     RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
+    RE_JAVA_JWT_ALG = /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
     RULE_JAVA_RSA = {
       id: "java-rsa",
       title: "Java RSA key/encryption",
@@ -2860,6 +2904,19 @@ var init_java = __esm({
       message: "An all-trusting hostname verifier (Java) disables TLS hostname checking (MITM risk).",
       remediation: "Remove the all-trusting verifier; rely on the default hostname verifier."
     };
+    RULE_JAVA_JWT_ALG = {
+      id: "java-jwt-alg",
+      title: "Java identifier-form JWT/JOSE algorithm",
+      description: "jjwt SignatureAlgorithm.RS/PS/ES* / auth0 Algorithm.RSA*/ECDSA*",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical JWT/JOSE signature algorithm (Java, identifier form) is used, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms"
+    };
     BC_CLASS_RULES = {
       RSAKeyPairGenerator: RULE_JAVA_RSA,
       DSAKeyPairGenerator: RULE_JAVA_DSA,
@@ -2892,7 +2949,8 @@ var init_java = __esm({
         RULE_JAVA_XDH,
         RULE_JAVA_EDDSA,
         RULE_JAVA_TLS_LEGACY,
-        RULE_JAVA_TLS_NOVERIFY
+        RULE_JAVA_TLS_NOVERIFY,
+        RULE_JAVA_JWT_ALG
       ],
       appliesTo: (f) => hasExtension(f, JAVA_EXTENSIONS),
       detect({ file, content }) {
@@ -2925,6 +2983,14 @@ var init_java = __esm({
             matchLength: m[0].length
           }));
         });
+        eachMatch(RE_JAVA_JWT_ALG, content, (m) => {
+          findings.push(findingFromRule(RULE_JAVA_JWT_ALG, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          }));
+        });
         return findings;
       }
     };
@@ -2932,7 +2998,7 @@ var init_java = __esm({
 });
 
 // ../core/dist/detectors/csharp.js
-var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RE_CS_TLS_CERT_VALIDATION, RE_CS_TLS_LEGACY_VERSION, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY, csharpDetector;
+var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RE_CS_TLS_CERT_VALIDATION, RE_CS_TLS_LEGACY_VERSION, RE_CS_JWT_ALG, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY, RULE_CS_JWT_ALG, csharpDetector;
 var init_csharp = __esm({
   "../core/dist/detectors/csharp.js"() {
     "use strict";
@@ -2944,6 +3010,7 @@ var init_csharp = __esm({
     RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bnew\s+DSACng\s*\(/g;
     RE_CS_TLS_CERT_VALIDATION = /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
     RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
+    RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
     RULE_CS_RSA = {
       id: "csharp-rsa",
       title: "C# RSA key/usage",
@@ -3018,6 +3085,19 @@ var init_csharp = __esm({
       message: "SSL 3.0 / TLS 1.0 / TLS 1.1 are deprecated and insecure; require TLS 1.2+ (prefer 1.3).",
       remediation: "Use SslProtocols.Tls13 (or Tls12) and prefer PQC-hybrid key exchange."
     };
+    RULE_CS_JWT_ALG = {
+      id: "csharp-jwt-alg",
+      title: "C# identifier-form JWT/JOSE algorithm",
+      description: "Microsoft.IdentityModel SecurityAlgorithms.RsaSha* / EcdsaSha*",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical JWT/JOSE signature algorithm (.NET, identifier form) is used, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms"
+    };
     csharpDetector = {
       id: "csharp-crypto",
       description: "Classical asymmetric crypto (System.Security.Cryptography) and insecure TLS config in C#/.NET",
@@ -3029,7 +3109,8 @@ var init_csharp = __esm({
         RULE_CS_ECDH,
         RULE_CS_DSA,
         RULE_CS_TLS_CERT,
-        RULE_CS_TLS_LEGACY
+        RULE_CS_TLS_LEGACY,
+        RULE_CS_JWT_ALG
       ],
       appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
       detect({ file, content }) {
@@ -3041,6 +3122,7 @@ var init_csharp = __esm({
         add(RE_CS_DSA, RULE_CS_DSA);
         add(RE_CS_TLS_CERT_VALIDATION, RULE_CS_TLS_CERT);
         add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
+        add(RE_CS_JWT_ALG, RULE_CS_JWT_ALG);
         return findings;
       }
     };
@@ -3953,6 +4035,144 @@ var init_pem = __esm({
   }
 });
 
+// ../core/dist/detectors/stateful-hbs.js
+var STATEFUL_HBS_REMEDIATION, HBS_RULES, statefulHbsDetector;
+var init_stateful_hbs = __esm({
+  "../core/dist/detectors/stateful-hbs.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    STATEFUL_HBS_REMEDIATION = "LMS/HSS/XMSS/XMSSMT are NIST-approved (SP 800-208) but STATEFUL: the signer must NEVER reuse a one-time key index (reuse enables signature forgery). Use only with rigorous, crash-safe state management; otherwise prefer the stateless ML-DSA (FIPS 204) or SLH-DSA (FIPS 205).";
+    HBS_RULES = [
+      {
+        // LMS parameter set, e.g. LMS_SHA256_M32_H10 (RFC 8554 / SP 800-208).
+        re: /\bLMS_SHA256_[MN]\d+_[HW]\d+\b/g,
+        meta: {
+          id: "stateful-hbs-lms-param",
+          title: "LMS parameter set (stateful hash-based signature)",
+          description: "LMS/HSS one-time-signature parameter string (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "LMS parameter set \u2014 NIST-approved (SP 800-208) but STATEFUL: reusing a one-time key index is catastrophic.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      },
+      {
+        // HSS keygen (hierarchical LMS), e.g. pyhsslms.hss_generate_private_key(...).
+        re: /\bhss_generate_private_key\b/g,
+        meta: {
+          id: "stateful-hbs-hss-keygen",
+          title: "HSS private-key generation (stateful hash-based signature)",
+          description: "HSS (hierarchical LMS) private-key generation call (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "HSS private-key generation \u2014 NIST-approved (SP 800-208) but STATEFUL: never reuse a one-time key index.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      },
+      {
+        // pyhsslms — the Python LMS/HSS library import token.
+        re: /\bpyhsslms\b/g,
+        meta: {
+          id: "stateful-hbs-pyhsslms",
+          title: "pyhsslms library (stateful LMS/HSS signatures)",
+          description: "Reference to the pyhsslms LMS/HSS library (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "pyhsslms (LMS/HSS) \u2014 NIST-approved (SP 800-208) but STATEFUL: the signer must never reuse a one-time key index.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      },
+      {
+        // XMSS parameter set, e.g. XMSS-SHA2_10_256 (RFC 8391 / SP 800-208).
+        re: /\bXMSS-SHA2_\d+_256\b/g,
+        meta: {
+          id: "stateful-hbs-xmss-param",
+          title: "XMSS parameter set (stateful hash-based signature)",
+          description: "XMSS one-time-signature parameter string (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "XMSS parameter set \u2014 NIST-approved (SP 800-208) but STATEFUL: reusing a one-time key index is catastrophic.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      },
+      {
+        // XMSSMT (multi-tree XMSS) parameter set, e.g. XMSSMT-SHA2_20/2_256.
+        re: /\bXMSSMT-SHA2_\d+\b/g,
+        meta: {
+          id: "stateful-hbs-xmssmt-param",
+          title: "XMSSMT parameter set (stateful hash-based signature)",
+          description: "XMSSMT (multi-tree XMSS) parameter string (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "XMSSMT parameter set \u2014 NIST-approved (SP 800-208) but STATEFUL: never reuse a one-time key index.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      },
+      {
+        // XMSS keypair generation, e.g. xmss_keypair(...) (liboqs / xmss reference).
+        re: /\bxmss_keypair\b/g,
+        meta: {
+          id: "stateful-hbs-xmss-keypair",
+          title: "XMSS keypair generation (stateful hash-based signature)",
+          description: "XMSS keypair-generation call (SP 800-208)",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "XMSS keypair generation \u2014 NIST-approved (SP 800-208) but STATEFUL: the signer must never reuse a one-time key index.",
+          remediation: STATEFUL_HBS_REMEDIATION
+        }
+      }
+    ];
+    statefulHbsDetector = {
+      id: "stateful-hbs",
+      description: "Stateful hash-based signatures (NIST SP 800-208: LMS / HSS / XMSS / XMSSMT) in any file",
+      scope: "config",
+      language: "any",
+      rules: HBS_RULES.map((r) => r.meta),
+      // Applies to every text file; the walker already filters out binaries.
+      appliesTo: () => true,
+      detect({ file, content }) {
+        const findings = [];
+        for (const rule of HBS_RULES) {
+          eachMatch(rule.re, content, (m) => {
+            findings.push(findingFromRule(rule.meta, {
+              file,
+              content,
+              index: m.index,
+              matchLength: m[0].length
+            }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/registry.js
 function detectorScope(d) {
   return d.scope ?? "source";
@@ -3970,6 +4190,7 @@ var init_registry = __esm({
     init_ruby();
     init_c();
     init_pem();
+    init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
       order = [];
@@ -4044,7 +4265,8 @@ var init_registry = __esm({
       rustDetector,
       rubyDetector,
       cDetector,
-      pemDetector
+      pemDetector,
+      statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
   }

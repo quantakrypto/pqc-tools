@@ -30,6 +30,11 @@ const RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bne
 const RE_CS_TLS_CERT_VALIDATION =
   /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
 const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
+// Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
+// alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but
+// Microsoft.IdentityModel passes the alg as an IDENTIFIER, not a string literal:
+// SecurityAlgorithms.RsaSha256 / SecurityAlgorithms.EcdsaSha256.
+const RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
 
 const RULE_CS_RSA: RuleMeta = {
   id: "csharp-rsa",
@@ -109,6 +114,20 @@ const RULE_CS_TLS_LEGACY: RuleMeta = {
     "SSL 3.0 / TLS 1.0 / TLS 1.1 are deprecated and insecure; require TLS 1.2+ (prefer 1.3).",
   remediation: "Use SslProtocols.Tls13 (or Tls12) and prefer PQC-hybrid key exchange.",
 };
+const RULE_CS_JWT_ALG: RuleMeta = {
+  id: "csharp-jwt-alg",
+  title: "C# identifier-form JWT/JOSE algorithm",
+  description: "Microsoft.IdentityModel SecurityAlgorithms.RsaSha* / EcdsaSha*",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A classical JWT/JOSE signature algorithm (.NET, identifier form) is used, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
+};
 
 /** Detects classical asymmetric crypto in C# (System.Security.Cryptography). */
 export const csharpDetector: Detector = {
@@ -124,6 +143,7 @@ export const csharpDetector: Detector = {
     RULE_CS_DSA,
     RULE_CS_TLS_CERT,
     RULE_CS_TLS_LEGACY,
+    RULE_CS_JWT_ALG,
   ],
   appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -142,6 +162,8 @@ export const csharpDetector: Detector = {
     // Insecure TLS configuration (disjoint from the crypto factories above).
     add(RE_CS_TLS_CERT_VALIDATION, RULE_CS_TLS_CERT);
     add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
+    // Identifier-form JWT/JOSE signature algorithms (Microsoft.IdentityModel).
+    add(RE_CS_JWT_ALG, RULE_CS_JWT_ALG);
     return findings;
   },
 };

@@ -45,6 +45,15 @@ const RE_JAVA_BC =
 const RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
 const RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
 
+// Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
+// alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but
+// the Java JWT libraries pass the alg as an IDENTIFIER, not a string literal:
+// jjwt's `SignatureAlgorithm.RS256` and auth0 java-jwt's `Algorithm.RSA256` /
+// `Algorithm.ECDSA256`. ("SignatureAlgorithm" has no word boundary before its
+// "Algorithm", so the auth0 branch cannot re-match the jjwt form.)
+const RE_JAVA_JWT_ALG =
+  /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
+
 /* -------------------------------------------------------------------------- */
 /* Rule catalog                                                               */
 /* -------------------------------------------------------------------------- */
@@ -190,6 +199,20 @@ const RULE_JAVA_TLS_NOVERIFY: RuleMeta = {
   message: "An all-trusting hostname verifier (Java) disables TLS hostname checking (MITM risk).",
   remediation: "Remove the all-trusting verifier; rely on the default hostname verifier.",
 };
+const RULE_JAVA_JWT_ALG: RuleMeta = {
+  id: "java-jwt-alg",
+  title: "Java identifier-form JWT/JOSE algorithm",
+  description: "jjwt SignatureAlgorithm.RS/PS/ES* / auth0 Algorithm.RSA*/ECDSA*",
+  category: "signature",
+  severity: "high",
+  confidence: "high",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "A classical JWT/JOSE signature algorithm (Java, identifier form) is used, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms",
+};
 
 /**
  * Classify a `<factory>.getInstance("<alg>")` pair into a rule, or null when the
@@ -254,6 +277,7 @@ export const javaDetector: Detector = {
     RULE_JAVA_EDDSA,
     RULE_JAVA_TLS_LEGACY,
     RULE_JAVA_TLS_NOVERIFY,
+    RULE_JAVA_JWT_ALG,
   ],
   appliesTo: (f) => hasExtension(f, JAVA_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -291,6 +315,18 @@ export const javaDetector: Detector = {
     eachMatch(RE_JAVA_TLS_NOVERIFY, content, (m) => {
       findings.push(
         findingFromRule(RULE_JAVA_TLS_NOVERIFY, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
+      );
+    });
+
+    // Identifier-form JWT/JOSE signature algorithms (jjwt / auth0).
+    eachMatch(RE_JAVA_JWT_ALG, content, (m) => {
+      findings.push(
+        findingFromRule(RULE_JAVA_JWT_ALG, {
           file,
           content,
           index: m.index,

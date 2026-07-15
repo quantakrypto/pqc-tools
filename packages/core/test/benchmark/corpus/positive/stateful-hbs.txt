@@ -1,0 +1,8 @@
+Stateful hash-based signature usage (NIST SP 800-208) — one token per rule.
+
+LMS parameter set: LMS_SHA256_M32_H10
+HSS keygen call: priv = hss_generate_private_key(levels)
+Python LMS/HSS library import: import pyhsslms
+XMSS parameter set: XMSS-SHA2_10_256
+XMSSMT parameter set: XMSSMT-SHA2_20/2_256
+XMSS keypair generation: xmss_keypair(pk, sk)

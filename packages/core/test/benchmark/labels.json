@@ -1009,5 +1009,75 @@
         "hndl": false
       }
     ]
+  },
+  "positive/java-jwt-alg.java": {
+    "category": "java",
+    "expected": [
+      {
+        "ruleId": "java-jwt-alg",
+        "algorithm": "unknown",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/csharp-jwt-alg.cs": {
+    "category": "csharp",
+    "expected": [
+      {
+        "ruleId": "csharp-jwt-alg",
+        "algorithm": "unknown",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/stateful-hbs.txt": {
+    "category": "signature",
+    "expected": [
+      {
+        "ruleId": "stateful-hbs-lms-param",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "stateful-hbs-hss-keygen",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "stateful-hbs-pyhsslms",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "stateful-hbs-xmss-param",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "stateful-hbs-xmssmt-param",
+        "algorithm": "unknown",
+        "hndl": false
+      },
+      {
+        "ruleId": "stateful-hbs-xmss-keypair",
+        "algorithm": "unknown",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/packages.config": {
+    "category": "dependency",
+    "expected": [
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": true
+      },
+      {
+        "ruleId": "dep-vulnerable",
+        "algorithm": "RSA",
+        "hndl": false
+      }
+    ]
   }
 }

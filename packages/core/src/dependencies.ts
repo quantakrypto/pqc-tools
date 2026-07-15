@@ -1,9 +1,10 @@
 /**
  * Curated database of packages that primarily expose classical asymmetric
  * cryptography (and are therefore quantum-vulnerable), across multiple
- * ecosystems (npm, PyPI, crates.io, Go modules, Maven, RubyGems), plus a
+ * ecosystems (npm, PyPI, crates.io, Go modules, Maven, RubyGems, NuGet), plus a
  * manifest scanner that flags any of them found in the corresponding manifest
- * (package.json, requirements.txt, Cargo.toml, go.mod, pom.xml, Gemfile, …).
+ * (package.json, requirements.txt, Cargo.toml, go.mod, pom.xml, Gemfile,
+ * packages.config / *.csproj, …).
  *
  * The list is intentionally focused on libraries whose *purpose* is classical
  * public-key crypto. General-purpose packages that merely call the language's
@@ -575,13 +576,46 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["EdDSA"],
     severity: "low",
   },
+
+  // --- NuGet (.NET) ---
+  {
+    name: "BouncyCastle.Cryptography",
+    ecosystem: "nuget",
+    reason: "BouncyCastle for .NET — full classical RSA/ECDSA/ECDH/DSA suite.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+    severity: "high",
+  },
+  {
+    name: "Portable.BouncyCastle",
+    ecosystem: "nuget",
+    reason: "Portable BouncyCastle for .NET — classical RSA/ECDSA/ECDH/DSA.",
+    algorithms: ["RSA", "ECDSA", "ECDH", "DSA"],
+    severity: "high",
+  },
+  {
+    name: "System.IdentityModel.Tokens.Jwt",
+    ecosystem: "nuget",
+    reason: "Microsoft JWT handler — classical RS*/ES* (RSA/ECDSA) signatures.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "Microsoft.IdentityModel.Tokens",
+    ecosystem: "nuget",
+    reason: "Microsoft IdentityModel token crypto — classical RSA/ECDSA keys.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
 ];
 
 /**
  * Normalise a package name for matching within its ecosystem. PyPI is
  * case-insensitive and folds runs of `-_.` to a single `-` (PEP 503); cargo /
- * maven / rubygems are effectively lower-case; npm and go module paths are
- * matched verbatim (npm scopes and go paths are case-sensitive).
+ * maven / rubygems / nuget are effectively lower-case (NuGet ids are matched
+ * case-insensitively); npm and go module paths are matched verbatim (npm scopes
+ * and go paths are case-sensitive).
  */
 function normalizeName(ecosystem: DependencyEcosystem, name: string): string {
   const n = name.trim();
@@ -667,6 +701,8 @@ export function manifestEcosystem(file: string): DependencyEcosystem | null {
   if (base === "go.mod") return "go";
   if (base === "pom.xml" || base === "build.gradle" || base === "build.gradle.kts") return "maven";
   if (base === "gemfile" || base.endsWith(".gemspec")) return "rubygems";
+  if (base === "packages.config" || base === "directory.packages.props" || base.endsWith(".csproj"))
+    return "nuget";
   return null;
 }
 
@@ -728,6 +764,20 @@ function candidateNames(ecosystem: DependencyEcosystem, content: string): string
       for (const m of content.matchAll(
         /add(?:_runtime|_development)?_dependency\s+["']([\w.-]+)["']/g,
       )) {
+        names.push(m[1]);
+      }
+      break;
+    }
+    case "nuget": {
+      // NuGet manifests are XML. `.csproj` / `Directory.Packages.props` declare
+      // `<PackageReference Include="Name" … />`; `packages.config` uses
+      // `<package id="Name" … />`. Pull the Include= / id= attribute value from
+      // each. The `[^>]` guard keeps every match inside a single tag, so the
+      // scan is linear (no nested quantifiers → no catastrophic backtracking).
+      for (const m of content.matchAll(/<PackageReference\b[^>]*\bInclude\s*=\s*"([^"]+)"/gi)) {
+        names.push(m[1]);
+      }
+      for (const m of content.matchAll(/<package\b[^>]*\bid\s*=\s*"([^"]+)"/gi)) {
         names.push(m[1]);
       }
       break;

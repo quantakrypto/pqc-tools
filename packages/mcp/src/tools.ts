@@ -20,7 +20,9 @@ import {
   compareFindings,
   detectors,
   fingerprintFinding,
+  isManifestFile,
   languageToExtension,
+  remediateFindings,
   remediationFor,
   remediationForTier,
   scan,
@@ -1229,6 +1231,79 @@ const remediateFindingsTool: ToolDefinition = {
   },
 };
 
+const applyVerifiedPatchTool: ToolDefinition = {
+  name: "apply_verified_patch",
+  description:
+    "Deterministically VERIFY a proposed fix before writing it — runs the same " +
+    "patch-policy + verify_fix + blast-radius gates as `qremediate` (offline, no " +
+    "key, no network). Give the finding, the file's current content, and your " +
+    "proposed FULL corrected content; returns approved:true only if the patch is " +
+    "in-policy, clears the finding, adds no new finding, introduces no network/exec " +
+    "sink, and is bounded in size. This does NOT write the file — you write it, " +
+    "only when approved, and never auto-merge.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      finding: {
+        type: "object",
+        description: "The scan finding being fixed (needs a string ruleId and location.file).",
+      },
+      originalContent: { type: "string", description: "The file's current full content." },
+      newContent: { type: "string", description: "Your proposed full corrected file content." },
+    },
+    required: ["finding", "originalContent", "newContent"],
+    additionalProperties: false,
+  },
+  async handler(args): Promise<ToolResult> {
+    const finding = args.finding as Finding;
+    if (!finding || typeof finding !== "object" || !areFindings([finding])) {
+      return errorResult(
+        "apply_verified_patch requires a 'finding' with a string ruleId and location.file.",
+      );
+    }
+    if (typeof args.originalContent !== "string" || typeof args.newContent !== "string") {
+      return errorResult(
+        "apply_verified_patch requires string 'originalContent' and 'newContent'.",
+      );
+    }
+    const file = finding.location.file;
+    const originalContent = args.originalContent;
+    const patch = {
+      path: file,
+      newContent: args.newContent,
+      ruleId: finding.ruleId,
+      source: "llm" as const,
+    };
+    const res = await safe("apply_verified_patch", () =>
+      remediateFindings([finding], {
+        readContent: () => originalContent,
+        patchSource: () => patch,
+        policy: {
+          findingFiles: new Set([file]),
+          manifestFiles: new Set(isManifestFile(file) ? [file] : []),
+        },
+      }),
+    );
+    if (!res.ok) return res.result;
+    const approved = res.value.applied.length > 0;
+    return textResult(
+      JSON.stringify(
+        {
+          approved,
+          path: file,
+          ruleId: finding.ruleId,
+          ...(approved ? {} : { reason: res.value.rejected[0]?.reason ?? "rejected" }),
+          note: approved
+            ? "Cleared every deterministic gate — safe to write. Open a diff/PR for review; never auto-merge."
+            : "Rejected by the deterministic gates — do NOT write this patch.",
+        },
+        null,
+        2,
+      ),
+    );
+  },
+};
+
 /**
  * Tools that read arbitrary filesystem paths. Disabled by default on the HTTP
  * transport (see {@link ./http.ts}) because a hosted endpoint must not be an
@@ -1260,6 +1335,7 @@ export const quantakryptoTools: ToolDefinition[] = [
   triageFindingsTool,
   applyTriageTool,
   remediateFindingsTool,
+  applyVerifiedPatchTool,
 ];
 
 /** The core version these tools are built against (re-exported for diagnostics). */
