@@ -85,10 +85,14 @@ running against this list; findings will be folded in.
 
 ### 🟠 High
 
-- **Cross-language detection parity.** JS/TS (`source.ts`) is the deepest
-  detector; the six newer languages need a **false-negative benchmark** so
-  "8 languages" means comparable depth, not "JS/TS-deep + others-shallow."
-  Extend the detection-quality corpus to exercise every language.
+- ~~**Cross-language detection parity.**~~ ✅ **Done (2026-07-15).** The 7 non-JS
+  packs gained cross-language TLS-config detection, verify/decrypt-only coverage,
+  the Rust `openssl` crate + ring X25519, Java BouncyCastle + the RSASSA-PSS fix,
+  Go's X25519-as-its-own-family, JWT for Go/Ruby, and PEM public-key/DH/CSR
+  markers — with 9 new labelled corpus fixtures and the benchmark held at 1.000.
+  See [audits/2026-07-15-v0.4-review.md](audits/2026-07-15-v0.4-review.md).
+  *Residual:* a per-language false-negative *depth* benchmark (measuring recall
+  against a larger real-world corpus) is still worthwhile as a standing quality gate.
 - **Standards-currency cadence.** Operationalise the quarterly NIST / CNSA 2.0 /
   BSI re-check (FIPS 203/204/205 parameters, CNSA tiers, hybrid recommendations
   like X25519MLKEM768). Currently ad-hoc.
