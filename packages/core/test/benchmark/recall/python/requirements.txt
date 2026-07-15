@@ -5,7 +5,7 @@
 fastapi==0.110.1
 uvicorn[standard]==0.29.0
 pydantic-settings==2.2.1
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 requests>=2.31,<3
 
 # Cryptography stack
