@@ -29,6 +29,30 @@ test("renderHuman --tier category-5 surfaces the CNSA 2.0 migration targets", ()
   assert.doesNotMatch(renderHuman(result), /CNSA 2\.0 \(Category 5\)/);
 });
 
+test("renderHuman surfaces the PQC standards-&-timeline footer when there are findings", () => {
+  const out = renderHuman(makeResult([makeFinding({ algorithm: "RSA" })]));
+  assert.match(out, /Standards & timeline/);
+  // The IR 8547 deprecation deadline is the actionable long-horizon fact.
+  assert.match(out, /IR 8547/);
+  assert.match(out, /2035/);
+});
+
+test("renderHuman adds the stateful-HBS note only when a signature finding is present", () => {
+  const sig = makeFinding({ category: "signature", algorithm: "ECDSA", ruleId: "ecdsa-sign" });
+  const sigOut = renderHuman(makeResult([sig]));
+  assert.match(sigOut, /SP 800-208/);
+  assert.match(sigOut, /never reuse a one-time key index/);
+  // A non-signature finding (KEM) gets the transition note but not the HBS one.
+  const kemOut = renderHuman(makeResult([makeFinding({ algorithm: "RSA" })]));
+  assert.match(kemOut, /Standards & timeline/);
+  assert.doesNotMatch(kemOut, /SP 800-208/);
+});
+
+test("renderHuman omits the standards footer on a clean scan", () => {
+  // No findings → no long-horizon footer (the clean-path early return).
+  assert.doesNotMatch(renderHuman(makeResult([])), /Standards & timeline/);
+});
+
 test("renderHuman reports a normal clean result when analyzable source was scanned", () => {
   const result = { ...makeResult([]), filesScanned: 12, analyzedFiles: 9 };
   const out = renderHuman(result);

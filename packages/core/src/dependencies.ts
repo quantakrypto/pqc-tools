@@ -501,7 +501,8 @@ export const vulnerableDependencies: VulnerableDependency[] = [
   {
     name: "github.com/cloudflare/circl",
     ecosystem: "go",
-    reason: "Cloudflare CIRCL — classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256).",
+    reason:
+      "Cloudflare CIRCL — classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256); also ships PQC (ML-KEM/ML-DSA + hybrids), so migrate the classical *usage*, not the package.",
     algorithms: ["ECDH", "EdDSA"],
     severity: "medium",
   },

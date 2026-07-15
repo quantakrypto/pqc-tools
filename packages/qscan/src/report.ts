@@ -16,8 +16,10 @@ import {
   defaultRegistry,
   DEP_VULNERABLE_RULE,
   formatTierGuidance,
+  PQC_TRANSITION_NOTE,
   SEVERITY_ORDER,
   severityRank,
+  STATEFUL_HBS_NOTE,
   toCbom,
   toJson,
   toSarif,
@@ -200,6 +202,15 @@ export function renderHuman(
     const g = formatTierGuidance(inventory.byAlgorithm, opts.tier);
     lines.push(`${c.bold}${g[0]}${c.reset}`);
     for (const t of g.slice(1)) lines.push(`${c.cyan}${t}${c.reset}`);
+  }
+
+  // Forward-looking standards + the IR 8547 migration deadline (HQC / FN-DSA /
+  // X-Wing) — the long-horizon guidance behind anything flagged above.
+  lines.push("");
+  lines.push(`${c.bold}Standards & timeline${c.reset}`);
+  lines.push(`${c.dim}${PQC_TRANSITION_NOTE}${c.reset}`);
+  if (findings.some((f) => f.category === "signature")) {
+    lines.push(`${c.dim}${STATEFUL_HBS_NOTE}${c.reset}`);
   }
 
   return lines.join("\n");

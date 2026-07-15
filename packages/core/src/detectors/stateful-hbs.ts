@@ -39,8 +39,9 @@ interface HbsRule {
 
 const HBS_RULES: HbsRule[] = [
   {
-    // LMS parameter set, e.g. LMS_SHA256_M32_H10 (RFC 8554 / SP 800-208).
-    re: /\bLMS_SHA256_[MN]\d+_[HW]\d+\b/g,
+    // LMS parameter set, e.g. LMS_SHA256_M32_H10 / LMS_SHAKE_M24_H10 (SP 800-208
+    // adds SHAKE256 and the 192-bit M24/N24 sets to RFC 8554's SHA-256 sets).
+    re: /\bLMS_(?:SHA256|SHAKE(?:256)?)_[MN]\d+_[HW]\d+\b/g,
     meta: {
       id: "stateful-hbs-lms-param",
       title: "LMS parameter set (stateful hash-based signature)",
@@ -93,8 +94,9 @@ const HBS_RULES: HbsRule[] = [
     },
   },
   {
-    // XMSS parameter set, e.g. XMSS-SHA2_10_256 (RFC 8391 / SP 800-208).
-    re: /\bXMSS-SHA2_\d+_256\b/g,
+    // XMSS parameter set, e.g. XMSS-SHA2_10_256 / XMSS-SHAKE256_10_192 (SP 800-208
+    // adds the SHAKE256 and 192-bit variants to RFC 8391's SHA-2/256 sets).
+    re: /\bXMSS-(?:SHA2|SHAKE(?:256)?)_\d+_(?:192|256)\b/g,
     meta: {
       id: "stateful-hbs-xmss-param",
       title: "XMSS parameter set (stateful hash-based signature)",
@@ -111,8 +113,9 @@ const HBS_RULES: HbsRule[] = [
     },
   },
   {
-    // XMSSMT (multi-tree XMSS) parameter set, e.g. XMSSMT-SHA2_20/2_256.
-    re: /\bXMSSMT-SHA2_\d+\b/g,
+    // XMSSMT (multi-tree XMSS) parameter set, e.g. XMSSMT-SHA2_20/2_256 or the
+    // SP 800-208 SHAKE256 variant XMSSMT-SHAKE256_20/2_256.
+    re: /\bXMSSMT-(?:SHA2|SHAKE(?:256)?)_\d+\b/g,
     meta: {
       id: "stateful-hbs-xmssmt-param",
       title: "XMSSMT parameter set (stateful hash-based signature)",

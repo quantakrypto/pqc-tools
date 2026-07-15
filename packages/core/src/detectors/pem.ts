@@ -51,7 +51,7 @@ const PEM_RULES: PemRule[] = [
       sensitive: true,
       message: "Embedded EC private key (SEC1 PEM); classical ECDSA/ECDH key, not quantum-safe.",
       remediation:
-        "Migrate to ML-DSA (FIPS 204) keys and remove embedded private keys from source.",
+        "Migrate to ML-DSA (FIPS 204) for signatures or hybrid X25519MLKEM768 for key agreement; remove embedded private keys from source.",
     },
   },
   {

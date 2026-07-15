@@ -6,6 +6,23 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added / Changed (standards currency + guidance wiring)
+
+- **`qscan` human report now carries a "Standards & timeline" footer** whenever
+  findings exist: the NIST IR 8547 deprecation deadlines (classical public-key
+  crypto deprecated after 2030, disallowed after 2035) plus the standards worth
+  tracking (HQC, FN-DSA/Falcon, X-Wing). Signature findings additionally get the
+  SP 800-208 stateful-HBS note. This wires up guidance that already lived in
+  core (`PQC_TRANSITION_NOTE` / `STATEFUL_HBS_NOTE`) but was never surfaced.
+- **Stateful-HBS detector broadened to the full SP 800-208 parameter space** —
+  LMS/XMSS/XMSSMT rules now match the **SHAKE256** hash variants and the
+  **192-bit** (M24/N24, `_192`) parameter sets, not just RFC 8554/8391's SHA-256
+  sets.
+- **Sharper remediation copy** — embedded EC private keys now point at
+  ML-DSA (FIPS 204) for signatures *or* hybrid X25519MLKEM768 for key agreement;
+  the CIRCL dependency note clarifies you migrate the classical *usage*, not the
+  package (CIRCL itself already ships PQC).
+
 ### Fixed (security & correctness — from a post-release 5-lens audit)
 
 - **Agent-line exfiltration-guard bypass** — the `qremediate` blast-radius guard

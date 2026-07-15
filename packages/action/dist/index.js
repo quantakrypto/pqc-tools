@@ -62,7 +62,7 @@ function remediationForTier(algorithm, tier = "category-3") {
     detail: `${base.detail} ${params.note} For this tier use ${params.kem} (KEM) and ${params.signature} (signatures).`
   };
 }
-var REMEDIATIONS, TIER_PARAMS;
+var REMEDIATIONS, TIER_PARAMS, STATEFUL_HBS_NOTE, PQC_TRANSITION_NOTE;
 var init_remediation = __esm({
   "../core/dist/remediation.js"() {
     "use strict";
@@ -130,6 +130,8 @@ var init_remediation = __esm({
         note: "NIST Category 5 \u2014 CNSA 2.0 for national-security systems and long-lived secrets (2030/2033 milestones)."
       }
     };
+    STATEFUL_HBS_NOTE = "For firmware / secure-boot signing, the stateful hash-based signatures LMS, XMSS and HSS (NIST SP 800-208) are approved alternatives to ML-DSA, but they are STATEFUL: the signer must never reuse a one-time key index. Use only with rigorous state management; otherwise prefer stateless ML-DSA (FIPS 204) or SLH-DSA (FIPS 205).";
+    PQC_TRANSITION_NOTE = "Migration urgency: NIST IR 8547 deprecates classical public-key crypto after 2030 and disallows it after 2035 \u2014 long-lived (harvest-now-decrypt-later) data must move sooner. Standards to track: HQC (NIST's code-based backup KEM, selected March 2025; draft FIPS expected ~2026) as a diversity hedge against ML-KEM; FN-DSA / Falcon (draft FIPS 206) for compact lattice signatures; and X-Wing (X25519 + ML-KEM-768) for HPKE-style hybrid encryption.";
   }
 });
 
@@ -1048,7 +1050,7 @@ var init_dependencies = __esm({
       {
         name: "github.com/cloudflare/circl",
         ecosystem: "go",
-        reason: "Cloudflare CIRCL \u2014 classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256).",
+        reason: "Cloudflare CIRCL \u2014 classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256); also ships PQC (ML-KEM/ML-DSA + hybrids), so migrate the classical *usage*, not the package.",
         algorithms: ["ECDH", "EdDSA"],
         severity: "medium"
       },
@@ -4300,7 +4302,7 @@ var init_pem = __esm({
           cwe: CWE_HARDCODED_KEY,
           sensitive: true,
           message: "Embedded EC private key (SEC1 PEM); classical ECDSA/ECDH key, not quantum-safe.",
-          remediation: "Migrate to ML-DSA (FIPS 204) keys and remove embedded private keys from source."
+          remediation: "Migrate to ML-DSA (FIPS 204) for signatures or hybrid X25519MLKEM768 for key agreement; remove embedded private keys from source."
         }
       },
       {
@@ -4490,8 +4492,9 @@ var init_stateful_hbs = __esm({
     STATEFUL_HBS_REMEDIATION = "LMS/HSS/XMSS/XMSSMT are NIST-approved (SP 800-208) but STATEFUL: the signer must NEVER reuse a one-time key index (reuse enables signature forgery). Use only with rigorous, crash-safe state management; otherwise prefer the stateless ML-DSA (FIPS 204) or SLH-DSA (FIPS 205).";
     HBS_RULES = [
       {
-        // LMS parameter set, e.g. LMS_SHA256_M32_H10 (RFC 8554 / SP 800-208).
-        re: /\bLMS_SHA256_[MN]\d+_[HW]\d+\b/g,
+        // LMS parameter set, e.g. LMS_SHA256_M32_H10 / LMS_SHAKE_M24_H10 (SP 800-208
+        // adds SHAKE256 and the 192-bit M24/N24 sets to RFC 8554's SHA-256 sets).
+        re: /\bLMS_(?:SHA256|SHAKE(?:256)?)_[MN]\d+_[HW]\d+\b/g,
         meta: {
           id: "stateful-hbs-lms-param",
           title: "LMS parameter set (stateful hash-based signature)",
@@ -4541,8 +4544,9 @@ var init_stateful_hbs = __esm({
         }
       },
       {
-        // XMSS parameter set, e.g. XMSS-SHA2_10_256 (RFC 8391 / SP 800-208).
-        re: /\bXMSS-SHA2_\d+_256\b/g,
+        // XMSS parameter set, e.g. XMSS-SHA2_10_256 / XMSS-SHAKE256_10_192 (SP 800-208
+        // adds the SHAKE256 and 192-bit variants to RFC 8391's SHA-2/256 sets).
+        re: /\bXMSS-(?:SHA2|SHAKE(?:256)?)_\d+_(?:192|256)\b/g,
         meta: {
           id: "stateful-hbs-xmss-param",
           title: "XMSS parameter set (stateful hash-based signature)",
@@ -4558,8 +4562,9 @@ var init_stateful_hbs = __esm({
         }
       },
       {
-        // XMSSMT (multi-tree XMSS) parameter set, e.g. XMSSMT-SHA2_20/2_256.
-        re: /\bXMSSMT-SHA2_\d+\b/g,
+        // XMSSMT (multi-tree XMSS) parameter set, e.g. XMSSMT-SHA2_20/2_256 or the
+        // SP 800-208 SHAKE256 variant XMSSMT-SHAKE256_20/2_256.
+        re: /\bXMSSMT-(?:SHA2|SHAKE(?:256)?)_\d+\b/g,
         meta: {
           id: "stateful-hbs-xmssmt-param",
           title: "XMSSMT parameter set (stateful hash-based signature)",
@@ -6812,6 +6817,12 @@ function renderHuman(result, opts = {}) {
     lines.push(`${c.bold}${g[0]}${c.reset}`);
     for (const t of g.slice(1))
       lines.push(`${c.cyan}${t}${c.reset}`);
+  }
+  lines.push("");
+  lines.push(`${c.bold}Standards & timeline${c.reset}`);
+  lines.push(`${c.dim}${PQC_TRANSITION_NOTE}${c.reset}`);
+  if (findings.some((f) => f.category === "signature")) {
+    lines.push(`${c.dim}${STATEFUL_HBS_NOTE}${c.reset}`);
   }
   return lines.join("\n");
 }
