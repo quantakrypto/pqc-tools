@@ -20,6 +20,7 @@ import { rustDetector } from "./detectors/rust.js";
 import { rubyDetector } from "./detectors/ruby.js";
 import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
+import { jwkDetector } from "./detectors/jwk.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -129,6 +130,7 @@ export const builtinDetectors: Detector[] = [
   rubyDetector,
   cDetector,
   pemDetector,
+  jwkDetector,
   statefulHbsDetector,
 ];
 

@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **JSON Web Key (JWK / JWKS) detection** — a new config-scope detector finds
+  classical key material in JSON (`.json` / `.jwks`, OIDC discovery docs, config):
+  `"kty":"RSA"` → RSA; `"crv":"P-256/384/521/secp256k1"` → EC (ECDSA+ECDH);
+  `"crv":"Ed25519/Ed448"` → EdDSA; `"crv":"X25519/X448"` → key agreement. Keys EC/OKP
+  off `crv` so a single key is counted once; symmetric `oct` keys and ordinary JSON
+  don't fire. A real key-material surface the source packs and the PEM detector both
+  missed; precision/recall stay **1.000** on the tuned corpus.
 - **SARIF results now carry `partialFingerprints`** (`quantakrypto/v1` = the same
   line-insensitive sha256 the baseline uses). GitHub code scanning keys alert
   identity and dedup off this, so a finding survives line shifts and reformatting
