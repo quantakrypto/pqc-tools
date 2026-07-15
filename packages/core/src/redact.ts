@@ -46,6 +46,43 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
   /[A-Za-z0-9+/]{44,4096}={0,2}/g, // long base64 run (≥32 bytes)
 ];
 
+/** Shannon entropy of a string, in bits per character. */
+function shannonEntropy(s: string): number {
+  const freq = new Map<string, number>();
+  for (const ch of s) freq.set(ch, (freq.get(ch) ?? 0) + 1);
+  let e = 0;
+  for (const n of freq.values()) {
+    const p = n / s.length;
+    e -= p * Math.log2(p);
+  }
+  return e;
+}
+
+/**
+ * Catch-all for high-entropy secret tokens the named {@link TOKEN_PATTERNS}
+ * above miss (custom / novel key formats not tied to a known vendor prefix).
+ * Best-effort and biased toward over-redaction (safe): only a *long*,
+ * *high-entropy*, *charset-diverse* run is replaced, so ordinary code
+ * identifiers, words, and prose are left intact for the LLM to work with.
+ */
+const HIGH_ENTROPY_RUN = /[A-Za-z0-9_\-+/=.]{24,256}/g;
+function redactHighEntropy(text: string): { text: string; redacted: boolean } {
+  let redacted = false;
+  const out = text.replace(HIGH_ENTROPY_RUN, (m) => {
+    const classes =
+      (/[A-Z]/.test(m) ? 1 : 0) + (/[a-z]/.test(m) ? 1 : 0) + (/[0-9]/.test(m) ? 1 : 0);
+    const hasSpecial = /[+/=_-]/.test(m);
+    // Random secrets are charset-diverse AND high-entropy; identifiers usually
+    // fail one of these (an identifier has repetition / structure → lower entropy).
+    if ((classes >= 3 || (classes >= 2 && hasSpecial)) && shannonEntropy(m) >= 4.0) {
+      redacted = true;
+      return REDACTED;
+    }
+    return m;
+  });
+  return { text: out, redacted };
+}
+
 /** Redact PEM/OpenSSH/PGP private-key blocks line-by-line (linear; tolerant of
  * a missing END marker — a truncated key is still fully redacted). */
 function redactPrivateKeyBlocks(text: string): { text: string; redacted: boolean } {
@@ -94,6 +131,10 @@ function stripSecrets(text: string): { text: string; redacted: boolean } {
           return REDACTED;
         });
       }
+      // Best-effort entropy catch-all for novel token shapes the named patterns miss.
+      const ent = redactHighEntropy(out);
+      out = ent.text;
+      redacted = redacted || ent.redacted;
       result = { text: out, redacted };
     } catch {
       result = { text: REDACTED, redacted: true };

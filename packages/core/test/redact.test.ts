@@ -49,6 +49,19 @@ test("a sensitive finding is always redacted, even at file level", () => {
   assert.equal(c.redactedSecret, true);
 });
 
+test("a novel high-entropy token (no known vendor prefix) is caught by the entropy pass", () => {
+  // 40 random chars in an array literal — too short for the base64 rule, no vendor
+  // prefix, and `blob` is not a secret-keyword assignment, so only the entropy
+  // catch-all can mask it.
+  const tok = "Zx9Kq2Lm7Pw4Rt8Yu1Nv6Sd0Fg5Hj3Bc8De2Ai4";
+  const f: Finding = { ...finding, location: { file: "cfg.ts", line: 2 } };
+  const file = ["const blob = [", `  "${tok}",`, "];", "doThing(blob)"].join("\n");
+  const c = buildContext(f, "file", file);
+  assert.equal(c.redactedSecret, true);
+  assert.ok(c.code && !c.code.includes(tok), "the high-entropy token is masked");
+  assert.ok(c.code && c.code.includes("doThing(blob)"), "ordinary code around it survives");
+});
+
 test("embedded PEM secrets are masked from otherwise-shareable code", () => {
   const withKey = [
     "const k = `",

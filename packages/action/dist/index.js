@@ -4304,6 +4304,30 @@ var init_verify = __esm({
 });
 
 // ../core/dist/redact.js
+function shannonEntropy(s) {
+  const freq = /* @__PURE__ */ new Map();
+  for (const ch of s)
+    freq.set(ch, (freq.get(ch) ?? 0) + 1);
+  let e = 0;
+  for (const n of freq.values()) {
+    const p = n / s.length;
+    e -= p * Math.log2(p);
+  }
+  return e;
+}
+function redactHighEntropy(text) {
+  let redacted = false;
+  const out = text.replace(HIGH_ENTROPY_RUN, (m) => {
+    const classes = (/[A-Z]/.test(m) ? 1 : 0) + (/[a-z]/.test(m) ? 1 : 0) + (/[0-9]/.test(m) ? 1 : 0);
+    const hasSpecial = /[+/=_-]/.test(m);
+    if ((classes >= 3 || classes >= 2 && hasSpecial) && shannonEntropy(m) >= 4) {
+      redacted = true;
+      return REDACTED;
+    }
+    return m;
+  });
+  return { text: out, redacted };
+}
 function redactPrivateKeyBlocks(text) {
   const begin = /-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|OPENSSH PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----/;
   const end = /-----END /;
@@ -4343,6 +4367,9 @@ function stripSecrets(text) {
           return REDACTED;
         });
       }
+      const ent = redactHighEntropy(out);
+      out = ent.text;
+      redacted = redacted || ent.redacted;
       result = { text: out, redacted };
     } catch {
       result = { text: REDACTED, redacted: true };
@@ -4402,7 +4429,7 @@ function renderPreflight(contexts) {
 ${c.code}` : head;
   }).join("\n\n---\n\n");
 }
-var SNIPPET_RADIUS, REDACTED, MAX_SECRET_SCAN, TOKEN_PATTERNS, memoInput, memoResult;
+var SNIPPET_RADIUS, REDACTED, MAX_SECRET_SCAN, TOKEN_PATTERNS, HIGH_ENTROPY_RUN, memoInput, memoResult;
 var init_redact = __esm({
   "../core/dist/redact.js"() {
     "use strict";
@@ -4435,6 +4462,7 @@ var init_redact = __esm({
       /[A-Za-z0-9+/]{44,4096}={0,2}/g
       // long base64 run (≥32 bytes)
     ];
+    HIGH_ENTROPY_RUN = /[A-Za-z0-9_\-+/=.]{24,256}/g;
   }
 });
 
