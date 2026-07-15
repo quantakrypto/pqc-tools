@@ -96,6 +96,16 @@ test("suggest_hybrid (context) infers a family and recommends a migration", asyn
   assert.match(text, /X25519MLKEM768|ML-KEM|hybrid/i);
 });
 
+test("suggest_hybrid tier=category-5 surfaces the CNSA 2.0 parameter sets", async () => {
+  const result = await callTool("suggest_hybrid", { algorithm: "ECDH", tier: "category-5" });
+  assert.notEqual(result.isError, true);
+  const text = result.content.map((c) => c.text).join("\n");
+  assert.match(text, /category-5/);
+  assert.match(text, /ML-KEM-1024/);
+  // CNSA 2.0 must steer a KEM family to SecP384r1MLKEM1024, not the sub-CNSA X25519MLKEM768.
+  assert.match(text, /SecP384r1MLKEM1024/);
+});
+
 test("suggest_hybrid with no args returns an error result", async () => {
   const result = await callTool("suggest_hybrid", {});
   assert.equal(result.isError, true);

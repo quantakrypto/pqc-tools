@@ -86,7 +86,8 @@ const PEM_RULES: PemRule[] = [
       cwe: CWE_HARDCODED_KEY,
       sensitive: true,
       message: "Embedded OpenSSH private key (RSA/ECDSA/Ed25519); classical and not quantum-safe.",
-      remediation: "Rotate the key; plan migration to PQC-capable SSH (e.g. sntrup761x25519).",
+      remediation:
+        "Rotate the key; plan migration to PQC-capable SSH (prefer the mlkem768x25519-sha256 KEX, OpenSSH 10's default since Apr 2025).",
     },
   },
   {

@@ -17,6 +17,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { isParamSet } from "./sizes.js";
 import type { Family, ParamSet } from "./sizes.js";
 
 /** A normalized ML-KEM keygen vector: seed -> (pk, sk). */
@@ -84,21 +85,13 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-/** Map an ACVP parameterSet string to our canonical ParamSet, or undefined. */
+/** Map an ACVP parameterSet string to our canonical ParamSet, or undefined.
+ * ACVP uses e.g. "ML-KEM-768", "ML-DSA-65", "SLH-DSA-SHA2-128s" — lower-casing
+ * and `_`→`-` yields our canonical ids for all three families (incl. FIPS 205). */
 function normParam(family: Family, raw: unknown): ParamSet | undefined {
   if (typeof raw !== "string") return undefined;
   const s = raw.toLowerCase().replace(/_/g, "-");
-  // ACVP uses e.g. "ML-KEM-768", "ML-DSA-65".
-  const candidates: Record<string, ParamSet> = {
-    "ml-kem-512": "ml-kem-512",
-    "ml-kem-768": "ml-kem-768",
-    "ml-kem-1024": "ml-kem-1024",
-    "ml-dsa-44": "ml-dsa-44",
-    "ml-dsa-65": "ml-dsa-65",
-    "ml-dsa-87": "ml-dsa-87",
-  };
-  const hit = candidates[s];
-  if (hit && hit.startsWith(family)) return hit;
+  if (isParamSet(s) && s.startsWith(family)) return s;
   return undefined;
 }
 
@@ -122,11 +115,14 @@ function parseAcvpDocument(doc: unknown, notes: string[], file: string): Vector[
   const mode = str(root["mode"])?.toLowerCase() ?? "";
   const out: Vector[] = [];
 
+  // Order matters: "SLH-DSA" contains "DSA", so test SLH before the ML-DSA branch.
   const family: Family | undefined = algorithm.includes("KEM")
     ? "ml-kem"
-    : algorithm.includes("DSA")
-      ? "ml-dsa"
-      : undefined;
+    : algorithm.includes("SLH")
+      ? "slh-dsa"
+      : algorithm.includes("DSA")
+        ? "ml-dsa"
+        : undefined;
   if (family === undefined) {
     notes.push(`${file}: unrecognized algorithm "${algorithm}", skipped`);
     return out;
@@ -181,7 +177,7 @@ function parseAcvpDocument(doc: unknown, notes: string[], file: string): Vector[
             notes.push(`${file}: unrecognized ML-KEM mode "${mode}"`);
           }
         } else {
-          // ML-DSA: we can robustly check sigVer cases (no nonce dependence).
+          // ML-DSA / SLH-DSA: we can robustly check sigVer cases (verdict-driven).
           if (mode.includes("sigver") || ("signature" in t && "pk" in t)) {
             const expected = t["testPassed"];
             // NIST ACVP sigVer files mix valid and INTENTIONALLY-INVALID

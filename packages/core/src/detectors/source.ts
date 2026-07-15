@@ -823,7 +823,8 @@ const RULE_SSH_PUBKEY: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   sensitive: true,
   message: "A classical SSH public key is forgeable by a quantum attacker.",
-  remediation: "Plan migration to PQC-capable SSH (e.g. sntrup761x25519 KEX, PQC host keys).",
+  remediation:
+    "Plan migration to PQC-capable SSH: prefer the mlkem768x25519-sha256 KEX (ML-KEM-768 hybrid, OpenSSH 10's default since Apr 2025); sntrup761x25519 is an acceptable interim. Rotate to PQC host keys as they land.",
 };
 const RULE_CERT_SIG_ALG: RuleMeta = {
   id: "cert-signature-algorithm",

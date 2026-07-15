@@ -89,6 +89,32 @@ test("parses an ML-DSA sigVer ACVP group with testPassed verdict", () => {
   }
 });
 
+test("parses an SLH-DSA (FIPS 205) sigVer group — no longer misclassified as ML-DSA", () => {
+  const dir = tmp({
+    "slhdsa-sigver.json": {
+      algorithm: "SLH-DSA",
+      mode: "sigVer",
+      testGroups: [
+        {
+          parameterSet: "SLH-DSA-SHA2-128s",
+          tests: [
+            { pk: "0011", message: "2233", signature: "4455", testPassed: true },
+            { pk: "0011", message: "2233", signature: "6677", testPassed: false },
+          ],
+        },
+      ],
+    },
+  });
+  try {
+    const set = loadVectors(dir);
+    const vv = set.vectors.filter((v) => v.kind === "dsa-verify");
+    assert.equal(vv.length, 2, "SLH-DSA sigVer cases are parsed, not skipped");
+    assert.equal(vv[0]!.param, "slh-dsa-sha2-128s");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a sigVer case with an absent testPassed verdict is skipped, not assumed valid", () => {
   // NIST ACVP sigVer files contain intentionally-invalid signatures. If the
   // expected verdict is missing we must NOT default it to `expected:true` —

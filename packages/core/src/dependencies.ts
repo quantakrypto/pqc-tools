@@ -445,6 +445,29 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["RSA", "ECDSA", "EdDSA", "ECDH"],
     severity: "medium",
   },
+  {
+    name: "github.com/golang-jwt/jwt/v5",
+    ecosystem: "go",
+    reason: "golang-jwt — classical RS*/PS*/ES* JWT algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "github.com/golang-jwt/jwt/v4",
+    ecosystem: "go",
+    reason: "golang-jwt (v4) — classical RS*/PS*/ES* JWT algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "github.com/go-jose/go-jose/v4",
+    ecosystem: "go",
+    reason: "go-jose — classical JOSE (RSA/ECDSA signatures, ECDH-ES key agreement).",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium",
+  },
 
   // --- Maven (Java) ---
   {
@@ -472,6 +495,21 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     name: "java-jwt",
     ecosystem: "maven",
     reason: "Auth0 JWT with classical RS*/ES* algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "nimbus-jose-jwt",
+    ecosystem: "maven",
+    reason: "Nimbus JOSE+JWT — classical RS*/PS*/ES* JWS and RSA/ECDH-ES JWE.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium",
+  },
+  {
+    name: "jjwt-api",
+    ecosystem: "maven",
+    reason: "JJWT (io.jsonwebtoken) — classical RS*/ES* JWT signing.",
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
     hndl: false,

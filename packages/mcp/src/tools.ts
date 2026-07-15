@@ -22,6 +22,7 @@ import {
   fingerprintFinding,
   languageToExtension,
   remediationFor,
+  remediationForTier,
   scan,
   SEVERITY_ORDER,
   toCbom,
@@ -386,7 +387,8 @@ const suggestHybridTool: ToolDefinition = {
   name: "suggest_hybrid",
   description:
     "Recommend a post-quantum / hybrid migration. Provide an 'algorithm' " +
-    "(e.g. RSA, ECDH, ECDSA) or free-text 'context' describing the usage.",
+    "(e.g. RSA, ECDH, ECDSA) or free-text 'context' describing the usage. " +
+    "Set 'tier' to 'category-5' for CNSA 2.0 / national-security systems.",
   inputSchema: {
     type: "object",
     properties: {
@@ -399,6 +401,13 @@ const suggestHybridTool: ToolDefinition = {
         description:
           "Free-text description of the cryptographic usage (used when no algorithm is given).",
       },
+      tier: {
+        type: "string",
+        enum: ["category-3", "category-5"],
+        description:
+          "Security tier: 'category-3' (default, commercial — ML-KEM-768 / ML-DSA-65) or " +
+          "'category-5' (CNSA 2.0 / NSS, long-lived secrets — ML-KEM-1024 / ML-DSA-87).",
+      },
     },
     additionalProperties: false,
   },
@@ -410,12 +419,19 @@ const suggestHybridTool: ToolDefinition = {
     }
 
     const algorithm = normalizeAlgorithm(algoInput || context);
+    const tier =
+      args.tier === "category-5"
+        ? "category-5"
+        : args.tier === "category-3"
+          ? "category-3"
+          : undefined;
     const lines: string[] = [];
     lines.push(`Migration guidance for: ${algoInput || context}`);
     lines.push(`Detected family: ${algorithm}`);
+    if (tier) lines.push(`Security tier: ${tier}`);
 
     const rem = await safe<Remediation | undefined>("remediationFor", () =>
-      remediationFor(algorithm),
+      tier ? remediationForTier(algorithm, tier) : remediationFor(algorithm),
     );
     if (rem.ok && rem.value) {
       lines.push(`Recommended replacement: ${rem.value.recommendation}`);
