@@ -6,7 +6,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
-### Added
+_Nothing yet._
+
+## [0.4.3] — 2026-07-15
+
+The **2026-07-15 5-lens audit** ([`docs/audits/2026-07-15-v0.4-review.md`](docs/audits/2026-07-15-v0.4-review.md))
+and its remediation, plus the detection-depth work that followed — the
+false-negative **recall benchmark** and the precision/recall fixes a **real-repo
+validation** run surfaced. Build clean; tuned benchmark precision/recall **1.000**
+throughout; still zero runtime dependencies.
+
+### Detection depth + real-repo validation
 
 - **Recall (false-negative depth) benchmark** — the last open item from the
   2026-07-15 audit backlog. A deliberately-hard, real-world crypto corpus across
@@ -50,13 +60,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   findings in test/fixture/doc paths (a no-crypto web app scored 40 → 81). Tuned
   benchmark held at 1.000 with three new negative baits.
 
-## [0.4.3] — 2026-07-15
-
-The **2026-07-15 5-lens audit** ([`docs/audits/2026-07-15-v0.4-review.md`](docs/audits/2026-07-15-v0.4-review.md))
-and its remediation. Build clean; **~640 tests**; benchmark precision/recall
-**1.000** throughout; still zero runtime dependencies.
-
-### Added
+### Added (audit remediation)
 
 - **`qscan --tier category-3|category-5`** — CNSA security-tier migration targets
   in the report footer (`formatTierGuidance`), making the previously library-only
