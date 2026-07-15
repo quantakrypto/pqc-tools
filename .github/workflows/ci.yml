@@ -23,6 +23,8 @@ jobs:
         node: ["20", "22"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ matrix.node }}
@@ -38,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
@@ -62,6 +66,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "22"
@@ -77,6 +83,8 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
@@ -102,6 +110,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
@@ -117,6 +127,8 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
@@ -139,6 +151,8 @@ jobs:
     # and forgets to re-bundle, `uses: …@v1` would silently run old code.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
@@ -164,6 +178,8 @@ jobs:
     # so a runtime break in the action is caught here instead of in the wild.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Fixture with quantum-vulnerable crypto
         run: |
           mkdir -p smoke
@@ -182,3 +198,21 @@ jobs:
           echo "findings-count=${{ steps.scan.outputs.findings-count }} readiness-score=${{ steps.scan.outputs.readiness-score }}"
           test "${{ steps.scan.outputs.findings-count }}" -ge 1 || { echo "::error::expected >=1 finding on the RSA fixture"; exit 1; }
           test -n "${{ steps.scan.outputs.readiness-score }}" || { echo "::error::readiness-score output not set"; exit 1; }
+
+  supply-chain:
+    name: supply-chain invariants (zero-dep + REUSE)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+      - name: Enforce zero runtime dependencies (ADR-0001)
+        run: node scripts/check-zero-deps.mjs
+      - name: REUSE lint (SPDX / licensing) — advisory
+        continue-on-error: true
+        run: |
+          pipx install reuse >/dev/null 2>&1 || pip install --user reuse
+          reuse lint

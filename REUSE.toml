@@ -29,7 +29,6 @@ path = [
   "**/package-lock.json",
   "**/*.snap",
   "**/__snapshots__/**",
-  "graphify-out/**",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright 2026 quantakrypto / Dandelion Labs JSC"

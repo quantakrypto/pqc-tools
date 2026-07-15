@@ -1,0 +1,22 @@
+# Dependabot — keep dev-dependencies and pinned GitHub Actions current.
+# The project ships ZERO runtime dependencies (ADR-0001), so this only covers the
+# dev-tool surface (TypeScript/ESLint/Prettier/etc.) and Action SHAs.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["ci"]
+    commit-message:
+      prefix: "ci"

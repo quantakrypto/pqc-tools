@@ -17,10 +17,11 @@ buys several assurance checks for free; the gaps are process, not dependencies.
 
 | Pillar | Target | Status | Gap to target |
 |---|---|---|---|
-| **OpenSSF Scorecard** | A published score with a badge; act on findings each run. | **Not wired** (genuine gap). The repo is now public (npm provenance requires it), so the earlier "deferred while private" reason no longer applies — but no `ossf/scorecard-action` workflow exists yet. | Add the pinned `ossf/scorecard-action@v2.4.3` workflow, turn on **branch protection** + required reviews, then track the score. Zero deps + SHA-pinned actions already win several checks. |
+| **OpenSSF Scorecard** | A published score with a badge; act on findings each run. | **Wired** — [`scorecard.yml`](../.github/workflows/scorecard.yml) runs weekly + on push, uploads SARIF, and publishes the score. | Turn on **branch protection** + required reviews (a repo setting) to lift the remaining checks; add the badge once the first score publishes. |
 | **SLSA provenance** | SLSA build-provenance on every released artifact (L2+: hosted, hardened CI builder). | **Live.** All 5 library packages carry Sigstore provenance attestations (verified via `npm audit signatures`; tarballs reproduce bit-for-bit from source). | Publish from an **immutable release tag** rather than `main` so the attested ref is non-mutable. |
 | **npm provenance** | Each `@quantakrypto/*` package page shows a signed provenance attestation. | **Live** on all 5 published packages via `release.yml` (`--provenance`, GitHub OIDC). | Same as SLSA: pin to a release tag; cut `vX.Y.Z` tags per release. |
-| **SPDX / REUSE** | `reuse lint` passes; licensing is machine-verifiable. | [`REUSE.toml`](../REUSE.toml) bulk declaration + [`LICENSES/Apache-2.0.txt`](../LICENSES/Apache-2.0.txt) committed. | Wire `reuse lint` into CI; drop the stale `graphify-out/**` carve-out in `REUSE.toml`; add a per-package `LICENSE` so tarballs carry the Apache-2.0 text. |
+| **SPDX / REUSE** | `reuse lint` passes; licensing is machine-verifiable. | [`REUSE.toml`](../REUSE.toml) bulk declaration + `LICENSES/Apache-2.0.txt`; **per-package `LICENSE` now committed** (tarballs carry the Apache-2.0 text) and the stale `graphify-out/**` carve-out dropped. | `reuse lint` runs in CI (advisory) via the `supply-chain` job. |
+| **Zero-dep enforcement** (ADR-0001) | No third-party runtime dep + no install lifecycle scripts, enforced by CI. | **Wired** — `scripts/check-zero-deps.mjs` gates the `supply-chain` CI job (was review-only). | — |
 
 ## 2. OpenSSF Scorecard
 
