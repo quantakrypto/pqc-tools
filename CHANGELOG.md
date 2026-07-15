@@ -52,6 +52,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   the CIRCL dependency note clarifies you migrate the classical *usage*, not the
   package (CIRCL itself already ships PQC).
 
+### Testing
+
+- **Triage exit-code invariant is now regression-tested.** Added a `triageFn`
+  test hook to `runQscan` so the `--triage` path runs offline, and a test that
+  proves triage can re-rank/annotate a blocking finding but **never** drops it or
+  changes the exit code (the exit code is computed from raw severities before
+  triage runs — a prompt-injected "de-prioritize" verdict can't sneak a finding
+  past CI).
+- **MCP `FIX_EXAMPLES` meta-test.** Every canned before/after example the
+  `get_fix_examples` tool serves is now asserted well-formed (non-empty, before ≠
+  after) and required to name a post-quantum target — so no example can silently
+  hand an agent classical crypto — with coverage pinned for every HNDL-critical
+  and signature family.
+
 ### Fixed (security & correctness — from a post-release 5-lens audit)
 
 - **Agent-line exfiltration-guard bypass** — the `qremediate` blast-radius guard

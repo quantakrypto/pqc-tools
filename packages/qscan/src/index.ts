@@ -115,6 +115,11 @@ export interface RunQscanHooks {
   scanFn?: ScanFn;
   /** Override changed-file resolution. Default: `changedFiles` from `@quantakrypto/core`. */
   changedFilesFn?: ChangedFilesFn;
+  /** Inject the triage function (offline testing of the `--triage` path, so the
+   * exit-code invariant can be exercised without a network client or API key).
+   * `import type` keeps this a compile-time-only reference — the networked agent
+   * package is still only loaded via the dynamic import inside `runTriage`. */
+  triageFn?: import("./triage-run.js").TriageFn;
 }
 
 /**
@@ -236,6 +241,7 @@ export async function runQscan(
       // run, defeating both (audit: arch #1). Derive a sibling path.
       cacheFile: options.cacheFile ? `${options.cacheFile}.responses.json` : undefined,
       root: options.path,
+      triageFn: hooks.triageFn,
     });
     if (triaged.preflight !== undefined) {
       return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };

@@ -7172,7 +7172,8 @@ async function runQscan(opts, hooks = {}) {
       // they are different on-disk formats and would clobber each other every
       // run, defeating both (audit: arch #1). Derive a sibling path.
       cacheFile: options.cacheFile ? `${options.cacheFile}.responses.json` : void 0,
-      root: options.path
+      root: options.path,
+      triageFn: hooks.triageFn
     });
     if (triaged.preflight !== void 0) {
       return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };

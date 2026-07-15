@@ -1353,6 +1353,7 @@ export const __test = {
   staticHybridAdvice,
   buildScanOptions,
   describeError,
+  FIX_EXAMPLES,
 };
 
 /** Keep the schema type imported and referenced (documentation aid). */

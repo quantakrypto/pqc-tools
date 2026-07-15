@@ -13,6 +13,7 @@ import { test } from "node:test";
 import { EXIT, renderReport, runQscan } from "../src/index.js";
 import { fingerprint } from "../src/baseline.js";
 import { makeFinding, makeResult } from "./helpers.js";
+import type { Finding, TriageVerdict } from "@quantakrypto/core";
 
 /** Build hooks whose scanner returns a fixed result. */
 function scannerFor(...findings: Parameters<typeof makeFinding>[0][]) {
@@ -54,6 +55,32 @@ test("no findings → exit 0", async () => {
   const run = await runQscan({ path: ".", severityThreshold: "info" }, scannerFor());
   assert.equal(run.exitCode, EXIT.OK);
   assert.equal(run.result.findings.length, 0);
+});
+
+test("triage NEVER changes the exit code and NEVER drops a finding (invariant)", async () => {
+  // Inject a triage fn that annotates every finding with a LOW priority — i.e.
+  // the model tried to de-prioritize a blocking finding. The exit code is
+  // computed from raw severities BEFORE triage runs, so the build must still
+  // fail, and every finding must survive (triage re-ranks, never suppresses).
+  const high = makeFinding({ severity: "high", location: { file: "src/x.ts", line: 1 } });
+  const low = makeFinding({ severity: "low", location: { file: "src/y.ts", line: 2 } });
+  const triageFn = async (findings: readonly Finding[]) => {
+    const m = new Map<string, TriageVerdict>();
+    for (const f of findings) {
+      m.set(fingerprint(f), { exposureScore: 1, priority: "low", rationale: "looks dormant" });
+    }
+    return m;
+  };
+  const run = await runQscan(
+    { path: ".", severityThreshold: "high", triage: true },
+    { ...scannerFor({ severity: "high" }), scanFn: async () => makeResult([high, low]), triageFn },
+  );
+  assert.equal(run.exitCode, EXIT.FINDINGS, "a blocking finding still fails CI after triage");
+  assert.equal(run.result.findings.length, 2, "triage dropped no findings");
+  assert.ok(
+    run.result.findings.every((f) => f.triage?.priority === "low"),
+    "every finding was annotated",
+  );
 });
 
 test("baseline suppresses a finding and can flip the exit code to 0", async () => {

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createQuantakryptoServer } from "../src/index.js";
+import { __test } from "../src/tools.js";
 import type { JsonRpcSuccess, ToolContext } from "../src/protocol.js";
 
 interface ToolCallResult {
@@ -123,6 +124,35 @@ test("get_fix_examples returns before/after for an algorithm and resolves a rule
 
   const none = await callTool("get_fix_examples", {});
   assert.equal(none.isError, true);
+});
+
+// Meta-test: the FIX_EXAMPLES table is what get_fix_examples serves to an agent
+// verbatim. Every entry must be well-formed and — critically — must point at a
+// post-quantum target, so no example can silently hand back classical crypto.
+test("every FIX_EXAMPLES entry is well-formed and recommends a PQC target", () => {
+  const { FIX_EXAMPLES } = __test;
+  const entries = Object.entries(FIX_EXAMPLES) as Array<
+    [string, { note: string; before: string; after: string }]
+  >;
+  assert.ok(entries.length >= 5, "the table covers the common classical families");
+  // A PQC/hybrid target the `after` (or its note) must name — never classical-only.
+  const PQC = /ML-KEM|ML-DSA|SLH-DSA|X25519MLKEM768|hybrid|post-quantum|mlkem|ml_dsa/i;
+  for (const [family, ex] of entries) {
+    assert.ok(ex.note?.trim().length, `${family}: non-empty note`);
+    assert.ok(ex.before?.trim().length, `${family}: non-empty before`);
+    assert.ok(ex.after?.trim().length, `${family}: non-empty after`);
+    assert.notEqual(ex.before.trim(), ex.after.trim(), `${family}: before differs from after`);
+    assert.match(`${ex.note}\n${ex.after}`, PQC, `${family}: recommends a post-quantum target`);
+  }
+});
+
+test("FIX_EXAMPLES covers every HNDL-critical and signature family", () => {
+  const { FIX_EXAMPLES } = __test;
+  // The HNDL / confidentiality families (must have a hybrid-KEM example) plus the
+  // classical signature families (must have an ML-DSA example).
+  for (const family of ["RSA", "ECDH", "DH", "X25519", "ECDSA", "EdDSA", "DSA"]) {
+    assert.ok(family in FIX_EXAMPLES, `FIX_EXAMPLES has a ${family} entry`);
+  }
 });
 
 /* ------------------------------- score_delta ------------------------------ */
