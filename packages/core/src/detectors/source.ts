@@ -905,6 +905,68 @@ const sshCertDetector: Detector = {
   },
 };
 
+/* -------------------------------------------------------------------------- */
+/* Classical TLS key-exchange cipher suites (language-agnostic config)         */
+/* -------------------------------------------------------------------------- */
+
+// Classical KEX cipher-suite identifiers, in both the OpenSSL (`ECDHE-RSA-…`) and
+// IANA (`TLS_ECDHE_RSA_WITH_…`) spellings, with `-` or `_` separators. These name
+// a Shor-broken key exchange (ECDHE/DHE), so they are the harvest-now surface a
+// PQC scanner should flag — distinct from the legacy-*version* / weak-cipher rules
+// above. Case-sensitive on purpose: cipher-suite tokens are upper-case constants,
+// so prose like "ecdhe rsa" does not misfire. No trailing \b so the IANA
+// `TLS_ECDHE_RSA_WITH_…` form (a `_` follows `RSA`) still matches.
+const RE_TLS_CLASSICAL_KEX = /\b(?:TLS_)?(?:ECDHE|ECDH|DHE)[-_](?:RSA|ECDSA|DSS)/g;
+
+const RULE_TLS_CLASSICAL_KEX: RuleMeta = {
+  id: "tls-classical-kex",
+  title: "Classical TLS key-exchange cipher suite",
+  description: "ECDHE / DHE cipher suites negotiate Shor-broken key exchange",
+  category: "tls",
+  severity: "medium",
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Classical TLS key exchange (ECDHE/DHE) is harvest-now-decrypt-later exposed — the session key can be recorded now and recovered by a quantum attacker.",
+  remediation:
+    "Adopt a PQC-hybrid TLS 1.3 key exchange (e.g. X25519MLKEM768) as your stack and peers support it; keep classical suites only as a transitional fallback.",
+};
+
+/**
+ * Detects classical TLS key-exchange cipher suites in any text/config file
+ * (OpenSSL cipher lists, IANA suite constants in Go/Java/C#/Rust, `.properties`,
+ * etc.). Language-agnostic because the suite identifiers are the same tokens
+ * everywhere — this is the cross-language TLS gap the legacy-version rule misses.
+ */
+const tlsClassicalKexDetector: Detector = {
+  id: "tls-cipher-suite",
+  description: "Classical TLS key-exchange cipher suites (ECDHE/DHE) in any config",
+  scope: "config",
+  language: "any",
+  rules: [RULE_TLS_CLASSICAL_KEX],
+  appliesTo: () => true,
+  detect({ file, content }): Finding[] {
+    const findings: Finding[] = [];
+    eachMatch(RE_TLS_CLASSICAL_KEX, content, (m) => {
+      const tok = m[0];
+      const algorithm: Finding["algorithm"] = tok.includes("ECDH") ? "ECDH" : "DH";
+      findings.push(
+        findingFromRule(
+          RULE_TLS_CLASSICAL_KEX,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            algorithm,
+            message: `Classical TLS key-exchange suite "${tok}…" (${algorithm}) is harvest-now-decrypt-later exposed.`,
+          },
+        ),
+      );
+    });
+    return findings;
+  },
+};
+
 /** All built-in source/config detectors, in run order. */
 export const sourceDetectors: Detector[] = [
   nodeCryptoDetector,
@@ -913,4 +975,5 @@ export const sourceDetectors: Detector[] = [
   jwtDetector,
   tlsDetector,
   sshCertDetector,
+  tlsClassicalKexDetector,
 ];

@@ -61,40 +61,42 @@ guard; the enumerated false negatives are the point.
 
 ## Current measured results
 
-Baseline (2026-07-15), `@quantakrypto/core`:
+2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap
+(baseline before that fix was 0.645):
 
-**Overall: detection recall 0.645** (107 / 166; 8 caught unclassified; 59 false
+**Overall: detection recall 0.711** (118 / 166; 8 caught unclassified; 48 false
 negatives).
 
 | By language | recall |     | By difficulty | recall |
 | ----------- | ------ | --- | ------------- | ------ |
-| python      | 0.905  |     | canonical     | 0.811  |
-| js          | 0.789  |     | config        | 0.740  |
-| c           | 0.733  |     | uncommon      | 0.659  |
-| rust        | 0.611  |     | adversarial   | 0.368  |
-| ruby        | 0.600  |     | aliased       | 0.316  |
-| go          | 0.565  |     |               |        |
-| csharp      | 0.556  |     |               |        |
-| java        | 0.481  |     |               |        |
+| python      | 0.952  |     | config        | 0.960  |
+| js          | 0.895  |     | canonical     | 0.811  |
+| c           | 0.867  |     | uncommon      | 0.659  |
+| rust        | 0.667  |     | adversarial   | 0.368  |
+| ruby        | 0.640  |     | aliased       | 0.316  |
+| go          | 0.609  |     |               |        |
+| csharp      | 0.611  |     |               |        |
+| java        | 0.556  |     |               |        |
 
-The shape is the finding: the scanner is strong on **canonical** idioms (0.81) and
-weak where the algorithm identity is **obscured** — `aliased` (0.32, renamed
-imports / wrappers) and `adversarial` (0.37, algorithm names assembled at
-runtime).
+The shape is the finding: the scanner is strong on **canonical** (0.81) and
+**config** (0.96) idioms, and weak where the algorithm identity is **obscured** —
+`aliased` (0.32, renamed imports / wrappers) and `adversarial` (0.37, algorithm
+names assembled at runtime). Those two bands are the lexical ceiling.
 
 ## What the false negatives tell us
 
 Grouping the 59 misses by root cause separates the *closable* gaps from the
 *lexical ceiling*:
 
-**Closable detector gaps (worth fixing):**
+**Closable detector gaps:**
 
-- **Classical TLS key-exchange config, all languages** (~11 misses). The existing
-  TLS rules flag legacy _versions_ and disabled cert-validation, but not classical
-  cipher suites (`ECDHE-RSA`, `ECDHE-ECDSA`, `DHE-RSA`, `TLS_ECDHE_*`) — which are
-  exactly the Shor-broken key exchange a PQC scanner should surface. (Matches the
-  audit's "cross-language TLS" gap.)
-- **Library/identifier forms not yet covered:** Go/Rust JWT `SigningMethodRS256` /
+- ✅ **Classical TLS key-exchange config, all languages** (was ~11 misses,
+  **closed**). A language-agnostic `tls-classical-kex` detector now flags classical
+  cipher suites (`ECDHE-RSA`, `ECDHE-ECDSA`, `DHE-RSA`, `TLS_ECDHE_*`) — the
+  Shor-broken key exchange the legacy-*version* rule missed. This lifted config
+  recall 0.74 → 0.96 and overall 0.645 → 0.711 (the audit's "cross-language TLS"
+  gap).
+- **Library/identifier forms not yet covered** (next up): Go/Rust JWT `SigningMethodRS256` /
   `Algorithm::RS256` identifier forms; libsodium `crypto_sign_ed25519_keypair`;
   the `ed25519`/`rbnacl` Ruby gems; BouncyCastle `Ed25519`/`X25519`/`X448`/DH
   agreement classes in Java/C#. Each is a bounded, additive rule.

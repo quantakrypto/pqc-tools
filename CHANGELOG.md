@@ -18,9 +18,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   guarded by a floor (not gated at 1.000 like the tuned benchmark, since
   real-world recall < 1 is expected). The per-difficulty split — `canonical`
   0.81 vs `aliased` 0.32 / `adversarial` 0.37 — quantifies the lexical ceiling
-  and names the closable gaps (cross-language classical-TLS key-exchange config;
-  Go/Rust JWT identifier forms; libsodium/BouncyCastle/rbnacl library forms). See
+  and names the closable gaps. See
   [`docs/validation/recall-benchmark.md`](docs/validation/recall-benchmark.md).
+- **`tls-classical-kex` detector** (language-agnostic, config scope) — flags
+  classical TLS key-exchange cipher suites (`ECDHE-RSA`/`ECDHE-ECDSA`/`DHE-RSA`,
+  OpenSSL and IANA spellings) as harvest-now-decrypt-later exposure, the
+  cross-language TLS gap the legacy-*version* rule missed. Closes the first
+  cluster the recall benchmark surfaced: **config recall 0.74 → 0.96, overall
+  0.645 → 0.711**, tuned benchmark held at 1.000.
 
 ## [0.4.3] — 2026-07-15
 
