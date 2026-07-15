@@ -48,6 +48,7 @@ OPTIONS
                                 never changes the exit code). Needs an API key in
                                 QK_LLM_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY
   --triage-floor <level>        Only triage findings at/above this level (default: medium)
+  --max-findings <n>            Cap findings sent to the LLM during triage (default: 100; spend guard)
   --context <level>             Source shared with the LLM: metadata|snippet|
                                 function|file (default: snippet; secrets always redacted)
   --dry-run                     With --triage, print the exact payload that would

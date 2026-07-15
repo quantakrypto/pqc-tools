@@ -1,7 +1,8 @@
 /**
- * Anthropic Messages API adapter (native fetch, zero deps). The system + user +
- * schema are bundled into a single user message so {@link completeWith} can
- * uniformly repair-retry; the API key travels only in the `x-api-key` header.
+ * Anthropic Messages API adapter (native fetch, zero deps). The rubric travels
+ * in the top-level `system` field and the untrusted repo content in the user
+ * message (instruction/data separation); {@link completeWith} drives the
+ * repair-retry. The API key travels only in the `x-api-key` header.
  */
 import type { LlmClient, LlmConfig, LlmRequest } from "./client.js";
 import { completeWith } from "./loop.js";
@@ -11,8 +12,10 @@ const DEFAULT_BASE = "https://api.anthropic.com";
 export function anthropicClient(config: LlmConfig, fetchImpl: typeof fetch = fetch): LlmClient {
   const base = (config.baseURL ?? DEFAULT_BASE).replace(/\/+$/, "");
 
-  function makeCall(maxTokens: number): (prompt: string) => Promise<string> {
-    return async (prompt) => {
+  function makeCall(
+    maxTokens: number,
+  ): (payload: { system: string; user: string }) => Promise<string> {
+    return async ({ system, user }) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), config.timeoutMs ?? 30_000);
       try {
@@ -28,7 +31,8 @@ export function anthropicClient(config: LlmConfig, fetchImpl: typeof fetch = fet
             model: config.model,
             max_tokens: maxTokens,
             temperature: config.temperature ?? 0,
-            messages: [{ role: "user", content: prompt }],
+            system,
+            messages: [{ role: "user", content: user }],
           }),
         });
         if (!res.ok) throw new Error(`anthropic: HTTP ${res.status}`);

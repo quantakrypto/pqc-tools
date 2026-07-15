@@ -91,6 +91,8 @@ export interface QscanOptions {
   triage: boolean;
   /** Only triage findings at/above this seriousness (`--triage-floor`). Default: medium. */
   triageFloor?: Severity;
+  /** Cap findings sent to the LLM during triage (`--max-findings`; spend guard). */
+  maxFindings?: number;
   /** How much source context leaves the machine (`--context`). Default: snippet. */
   contextLevel?: ContextLevel;
   /** Print the exact triage payload and exit without calling the provider (`--dry-run`). */
@@ -284,6 +286,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--triage-floor":
         options.triageFloor = asSeverity(takeValue());
+        break;
+      case "--max-findings":
+        options.maxFindings = asInt(takeValue(), "--max-findings");
         break;
       case "--context":
         options.contextLevel = asContextLevel(takeValue());

@@ -33,6 +33,11 @@ export interface RemediateOptions {
   mode: RemediateMode;
   /** Use a BYOK LLM to propose fixes codemods can't. */
   llm: boolean;
+  /** Actually write LLM-proposed fixes in `apply` mode (they are otherwise shown
+   * as diffs and held back — an LLM rewrite must be reviewed, not auto-applied). */
+  applyLlm?: boolean;
+  /** Cap how many findings are sent to the LLM (spend/DoS guard). */
+  maxLlm?: number;
   provider?: LlmProvider;
   model?: string;
 }
@@ -70,6 +75,9 @@ export interface RemediateHooks {
 }
 
 export const REMEDIATE_EXIT = { OK: 0, CHANGES: 0, ERROR: 2 } as const;
+
+/** Default per-run cap on paid LLM fix proposals (spend/DoS guard; override with --max-llm). */
+export const DEFAULT_MAX_LLM = 25;
 
 function envKey(provider: LlmProvider): string | undefined {
   return (
@@ -119,7 +127,7 @@ async function defaultOpenDraftPr(root: string, plan: DraftPrPlan): Promise<{ ur
     for (const p of plan.patches) {
       await fsWriteFile(path.resolve(dir, p.path), p.newContent, "utf8");
     }
-    await exec("git", ["-C", dir, "add", ...plan.patches.map((p) => p.path)]);
+    await exec("git", ["-C", dir, "add", "--", ...plan.patches.map((p) => p.path)]);
     await exec("git", ["-C", dir, "commit", "-m", plan.title]);
     await exec("git", ["-C", dir, "push", "-u", "origin", plan.branch]);
     const { stdout } = await exec(
@@ -146,19 +154,24 @@ function prBody(
   rejected: RejectedPatch[],
   options: RemediateOptions,
 ): string {
+  const codemodN = patches.filter((p) => p.patch.source === "codemod").length;
+  const llmN = patches.length - codemodN;
   const lines: string[] = [
     "Automated post-quantum remediation from `qremediate`.",
     "",
-    `**${patches.length} fix(es)** — each passed the verify_fix gate (finding gone, no new finding) and the patch policy.`,
+    `**${patches.length} fix(es)** — ${codemodN} deterministic codemod fix(es) and ${llmN} LLM-proposed. ` +
+      `Each cleared the verify_fix gate (target finding gone, no new finding) and the patch policy.`,
     "",
   ];
   for (const vp of patches) {
     lines.push(`- \`${vp.patch.path}\` — ${vp.finding.ruleId} (${vp.patch.source})`);
   }
-  if (options.llm) {
+  if (llmN > 0) {
     lines.push(
       "",
-      `LLM-proposed fixes were included; context shared at the \`file\` level with secrets redacted.`,
+      `⚠️ The ${llmN} LLM-proposed fix(es) are **crypto-verified, not security-reviewed**: the gate ` +
+        `only proves the crypto finding is gone, not that the rest of the rewrite is safe. Read every ` +
+        `LLM diff before merging. Context was shared at the \`file\` level with secrets redacted (best-effort).`,
     );
   }
   if (rejected.length) {
@@ -191,16 +204,18 @@ export async function runRemediate(
   // Build the optional LLM patch source (codemods always run first).
   const provider: LlmProvider = options.provider ?? "anthropic";
   const model = options.model ?? defaultModel(provider);
-  let llmSource: ((finding: Finding, content: string) => Promise<Patch | null>) | undefined =
-    hooks.llmPatchSource;
-  if (!llmSource && options.llm) {
+  const maxLlm = options.maxLlm ?? DEFAULT_MAX_LLM;
+  let llmCalls = 0;
+  let llmCapHit = false;
+  let baseLlmSource = hooks.llmPatchSource;
+  if (!baseLlmSource && options.llm) {
     const key = hooks.resolveKey ? hooks.resolveKey() : envKey(provider);
     if (!key) {
       stderr(
         "qremediate: --llm needs an API key (QK_LLM_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY). Using codemods only.\n",
       );
     } else {
-      llmSource = async (finding) => {
+      baseLlmSource = async (finding) => {
         const agent = await import("@quantakrypto/agent");
         const client = agent.resolveClient({ provider, model, apiKey: key });
         const proposal = await agent.proposeFix(finding, {
@@ -218,6 +233,18 @@ export async function runRemediate(
       };
     }
   }
+  // Spend/DoS guard: cap the number of paid LLM proposals per run.
+  const llmSource: ((finding: Finding, content: string) => Promise<Patch | null>) | undefined =
+    baseLlmSource
+      ? async (finding, content) => {
+          if (llmCalls >= maxLlm) {
+            llmCapHit = true;
+            return null;
+          }
+          llmCalls++;
+          return baseLlmSource!(finding, content);
+        }
+      : undefined;
 
   const patchSource = async (finding: Finding, content: string): Promise<Patch | null> => {
     const codemod = codemodFor(finding);
@@ -283,20 +310,38 @@ export async function runRemediate(
 
   const written: string[] = [];
   const diffs: string[] = [];
+  const heldBack: VerifiedPatch[] = [];
   for (const vp of patches) {
     const abs = path.resolve(root, vp.patch.path);
     const before = contentCache.get(abs) ?? (await readContent(vp.finding));
-    if (options.mode === "apply") {
+    // An LLM rewrite is only crypto-verified, not security-reviewed — never write
+    // it in `apply` mode without an explicit `--apply-llm` acknowledgement. It is
+    // shown as a diff to review instead. Deterministic codemods write normally.
+    const holdForReview =
+      options.mode === "apply" && vp.patch.source === "llm" && !options.applyLlm;
+    if (options.mode === "apply" && !holdForReview) {
       await writeFile(abs, vp.patch.newContent);
       written.push(vp.patch.path);
     } else {
+      if (holdForReview) heldBack.push(vp);
       diffs.push(unifiedDiff(vp.patch.path, before, vp.patch.newContent));
     }
   }
 
-  const body = options.mode === "diff" ? `${diffs.join("\n\n")}\n\n` : "";
+  const showDiffs = options.mode === "diff" || heldBack.length > 0;
+  const body = showDiffs ? `${diffs.join("\n\n")}\n\n` : "";
   return {
-    output: body + summarize(findings, patches, rem.rejected, options.mode, written),
+    output:
+      body +
+      summarize(
+        findings,
+        patches,
+        rem.rejected,
+        options.mode,
+        written,
+        heldBack,
+        llmCapHit ? maxLlm : 0,
+      ),
     exitCode: REMEDIATE_EXIT.OK,
     written,
   };
@@ -308,15 +353,35 @@ function summarize(
   rejected: RejectedPatch[],
   mode: RemediateMode,
   written: string[],
+  heldBack: VerifiedPatch[] = [],
+  llmCapMax = 0,
 ): string {
+  const codemodN = patches.filter((p) => p.patch.source === "codemod").length;
+  const llmN = patches.length - codemodN;
   const lines: string[] = [];
   lines.push(
-    `qremediate: ${findings.length} finding(s), ${patches.length} verified fix(es), ${rejected.length} not auto-fixable.`,
+    `qremediate: ${findings.length} finding(s), ${patches.length} candidate fix(es) ` +
+      `(${codemodN} codemod-verified, ${llmN} LLM-proposed), ${rejected.length} not auto-fixable.`,
   );
   if (mode === "apply" && written.length) {
     lines.push(`Wrote: ${written.join(", ")}`);
+  }
+  if (heldBack.length) {
+    lines.push(
+      `Held back ${heldBack.length} LLM fix(es) (shown as diffs above): crypto-verified but ` +
+        `NOT security-reviewed — read them, then re-run with --apply-llm to write them.`,
+    );
   } else if (mode === "diff" && patches.length) {
-    lines.push("Review the diff above, then re-run with --mode apply to write it.");
+    lines.push(
+      llmN > 0
+        ? "Review the diff above — codemod fixes are deterministic; LLM fixes need a human read. Then --mode apply (add --apply-llm for the LLM ones)."
+        : "Review the diff above, then re-run with --mode apply to write it.",
+    );
+  }
+  if (llmCapMax) {
+    lines.push(
+      `Note: hit the --max-llm cap (${llmCapMax}); some findings were not sent to the LLM — raise it to cover more.`,
+    );
   }
   if (rejected.length) {
     lines.push("Not auto-fixed (needs review or the LLM layer):");
@@ -368,6 +433,21 @@ export function parseRemediateArgs(
       case "--llm":
         options.llm = true;
         break;
+      case "--apply-llm":
+        options.applyLlm = true;
+        break;
+      case "--max-llm": {
+        const v = take();
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 0) {
+          return {
+            kind: "error",
+            message: `invalid --max-llm "${v ?? ""}" (expected a non-negative integer)`,
+          };
+        }
+        options.maxLlm = n;
+        break;
+      }
       case "--llm-provider": {
         const v = take();
         if (v !== "anthropic" && v !== "openai-compatible") {
@@ -390,21 +470,29 @@ export function parseRemediateArgs(
   return { kind: "run", options };
 }
 
-export const REMEDIATE_HELP = `qremediate — apply deterministic, verified fixes for insecure crypto findings
+export const REMEDIATE_HELP = `qremediate — apply verified codemod fixes (and, with --llm, crypto-verified LLM proposals) for insecure crypto findings
 
 USAGE
-  qremediate [path] [--mode diff|apply|pr] [--llm] [--llm-provider <p>] [--llm-model <m>]
+  qremediate [path] [--mode diff|apply|pr] [--llm] [--apply-llm] [--max-llm N]
+             [--llm-provider <p>] [--llm-model <m>]
 
 OPTIONS
-  --mode diff    Print a unified diff of every verified fix (default; writes nothing)
-  --mode apply   Write verified fixes into the working tree
-  --mode pr      Commit verified fixes to a new branch and open a DRAFT PR (never merges)
+  --mode diff    Print a unified diff of every candidate fix (default; writes nothing)
+  --mode apply   Write deterministic codemod fixes into the working tree
+                 (LLM fixes are held back as diffs unless --apply-llm is given)
+  --mode pr      Commit fixes to a new branch and open a DRAFT PR (never merges)
   --llm          Also let a BYOK LLM propose fixes codemods can't (needs an API key)
+  --apply-llm    In apply mode, also write LLM fixes (only after you've read them)
+  --max-llm N    Cap paid LLM proposals per run (default ${DEFAULT_MAX_LLM}; spend guard)
   --llm-provider anthropic | openai-compatible (default: anthropic)
   --llm-model    Model id for the BYOK provider
   -h, --help     Show this help
   -v, --version  Show version
 
-Every fix must pass the verify_fix gate (the finding is gone, no new finding) and
-the patch policy (only files with findings + dependency manifests). Never merges.
+Every fix must clear the verify_fix gate (target finding gone, no new finding) and
+the patch policy (only files with findings + dependency manifests). Codemod fixes
+are deterministic; LLM fixes are **crypto-verified, not security-reviewed** — the
+gate proves the crypto is gone, not that the rewrite is safe, and the pipeline
+rejects any LLM patch that adds a network/exec sink or rewrites too much. Review
+LLM diffs before applying. Never merges.
 `;

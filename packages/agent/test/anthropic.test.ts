@@ -43,6 +43,39 @@ test("adapter throws on persistently invalid JSON (after repair)", async () => {
   await assert.rejects(() => client.complete({ system: "s", user: "u", schema, maxTokens: 256 }));
 });
 
+test("rubric goes in the system field; untrusted content stays in the user message", async () => {
+  let sent: { system?: string; messages?: { role: string; content: string }[] } = {};
+  const capFetch = (async (_url: string, init: { body: string }) => {
+    sent = JSON.parse(init.body);
+    return new Response(
+      JSON.stringify({
+        content: [{ type: "text", text: JSON.stringify({ exposureScore: 1, priority: "later" }) }],
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const client = anthropicClient(
+    { provider: "anthropic", model: "claude-x", apiKey: "k" },
+    capFetch,
+  );
+  await client.complete({
+    system: "RUBRIC_MARKER",
+    user: "UNTRUSTED_MARKER",
+    schema,
+    maxTokens: 128,
+  });
+  assert.match(sent.system ?? "", /RUBRIC_MARKER/, "rubric is in the system field");
+  assert.match(sent.system ?? "", /untrusted/i, "system carries the anti-injection guard");
+  assert.equal(sent.messages?.length, 1);
+  assert.equal(sent.messages?.[0].role, "user");
+  assert.match(sent.messages?.[0].content ?? "", /UNTRUSTED_MARKER/);
+  assert.doesNotMatch(
+    sent.messages?.[0].content ?? "",
+    /RUBRIC_MARKER/,
+    "rubric is NOT in the user turn",
+  );
+});
+
 test("adapter surfaces an HTTP error", async () => {
   const errFetch = (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch;
   const client = anthropicClient(

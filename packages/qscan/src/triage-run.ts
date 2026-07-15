@@ -35,6 +35,18 @@ const SEVERITY_RANK: Record<Severity, number> = {
   info: 4,
 };
 
+/** Default cap on findings sent to the LLM per triage run (spend/DoS guard). */
+export const DEFAULT_MAX_TRIAGE = 100;
+
+/** The model's `rationale` is untrusted text that lands in JSON/SARIF output.
+ * Strip control characters and clamp length so a prompt-injected rationale can't
+ * smuggle escape sequences or unbounded content into a downstream consumer. */
+function sanitizeRationale(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  const clean = s.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  return clean.length > 500 ? `${clean.slice(0, 497)}…` : clean;
+}
+
 /** Injectable triage function (default wraps `@quantakrypto/agent`). */
 export type TriageFn = (findings: readonly Finding[]) => Promise<Map<string, TriageVerdict>>;
 
@@ -45,6 +57,8 @@ export interface RunTriageOptions {
   provider?: LlmProvider;
   model?: string;
   cacheFile?: string;
+  /** Cap on findings sent to the LLM (spend/DoS guard; default DEFAULT_MAX_TRIAGE). */
+  maxFindings?: number;
   /** Base directory for resolving finding file paths (defaults to result.root). */
   root?: string;
   // --- injectables for testing ---
@@ -128,12 +142,29 @@ export async function runTriage(
       });
     });
 
+  // Spend/DoS guard: triage only up to maxFindings (top by severity among those
+  // at/above the floor). The rest keep their deterministic order and no annotation.
+  const maxFindings = opts.maxFindings ?? DEFAULT_MAX_TRIAGE;
+  const toTriage =
+    targets.length > maxFindings
+      ? [...targets].sort(compareFindings).slice(0, maxFindings)
+      : result.findings;
+  if (targets.length > maxFindings) {
+    stderr(
+      `qscan: --triage capped at ${maxFindings} findings (${targets.length} at/above floor); raise --max-findings to triage more.\n`,
+    );
+  }
+
   try {
-    const verdicts = await triageFn(result.findings);
+    const verdicts = await triageFn(toTriage);
     for (const f of result.findings) {
       const v = verdicts.get(fingerprintFinding(f));
       if (v) {
-        f.triage = { exposureScore: v.exposureScore, priority: v.priority, rationale: v.rationale };
+        f.triage = {
+          exposureScore: v.exposureScore,
+          priority: v.priority,
+          rationale: sanitizeRationale(v.rationale),
+        };
       }
     }
     // Re-sort by exposure (desc), falling back to the stable finding order.

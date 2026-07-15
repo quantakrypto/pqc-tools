@@ -219,6 +219,7 @@ export async function runQscan(
     const triaged = await runTriage(result, {
       level: options.contextLevel ?? "snippet",
       floor: options.triageFloor,
+      maxFindings: options.maxFindings,
       dryRun: options.dryRun,
       provider: options.llmProvider,
       model: options.llmModel,

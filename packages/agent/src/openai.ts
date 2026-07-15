@@ -14,8 +14,10 @@ export function openAiCompatibleClient(
 ): LlmClient {
   const base = (config.baseURL ?? DEFAULT_BASE).replace(/\/+$/, "");
 
-  function makeCall(maxTokens: number): (prompt: string) => Promise<string> {
-    return async (prompt) => {
+  function makeCall(
+    maxTokens: number,
+  ): (payload: { system: string; user: string }) => Promise<string> {
+    return async ({ system, user }) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), config.timeoutMs ?? 30_000);
       try {
@@ -30,7 +32,10 @@ export function openAiCompatibleClient(
             model: config.model,
             max_tokens: maxTokens,
             temperature: config.temperature ?? 0,
-            messages: [{ role: "user", content: prompt }],
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
           }),
         });
         if (!res.ok) throw new Error(`openai-compatible: HTTP ${res.status}`);
