@@ -10,7 +10,9 @@
  * downstream tools can reuse them without reaching into internal paths.
  */
 
-import { changedFiles, scan, scanParallel } from "@quantakrypto/core";
+import process from "node:process";
+
+import { buildReadinessReport, changedFiles, scan, scanParallel } from "@quantakrypto/core";
 import type {
   Baseline,
   Finding,
@@ -285,6 +287,16 @@ export function renderReport(
       return renderSarif(result, { redactSnippets });
     case "cbom":
       return renderCbom(result);
+    case "evidence":
+      // ISO A.8.24 readiness report; repo/commit come from CI env when present.
+      return JSON.stringify(
+        buildReadinessReport(result, {
+          repository: process.env.GITHUB_REPOSITORY,
+          commit: process.env.GITHUB_SHA,
+        }),
+        null,
+        2,
+      );
     case "human":
     default:
       return renderHuman(result, { color, topN, tier });

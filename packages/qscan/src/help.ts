@@ -17,9 +17,12 @@ ARGUMENTS
   path                          Directory or file to scan (default: ".")
 
 OPTIONS
-  --format <human|json|sarif|cbom>
+  --format <human|json|sarif|cbom|evidence>
                                 Output format (default: human)
   --cbom                        Alias for --format cbom (CycloneDX CBOM)
+  --format evidence             ISO 27001 A.8.24 readiness report — findings +
+                                inventory + CBOM + a deterministic content hash
+                                (sign/timestamp it with an external signer)
   -o, --output <file>           Write the report to a file instead of stdout
   --severity-threshold <level>  Fail (exit 1) on findings at/above this level;
                                 one of critical|high|medium|low|info

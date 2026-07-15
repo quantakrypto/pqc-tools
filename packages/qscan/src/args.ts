@@ -30,9 +30,9 @@ export { meetsThreshold, SEVERITY_ORDER, severityRank };
  * {@link ReportFormat} with `"cbom"` (a CycloneDX cryptographic bill of
  * materials), which qScan renders locally via core's `toCbom`.
  */
-export type QscanFormat = ReportFormat | "cbom";
+export type QscanFormat = ReportFormat | "cbom" | "evidence";
 
-const FORMATS: readonly QscanFormat[] = ["human", "json", "sarif", "cbom"];
+const FORMATS: readonly QscanFormat[] = ["human", "json", "sarif", "cbom", "evidence"];
 
 /** Fully-resolved options the CLI/programmatic runner operates on. */
 export interface QscanOptions {

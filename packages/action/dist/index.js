@@ -5553,6 +5553,57 @@ var init_cbom = __esm({
   }
 });
 
+// ../core/dist/evidence.js
+import { createHash as createHash4 } from "node:crypto";
+function canonicalize(value) {
+  if (Array.isArray(value))
+    return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort()) {
+      out[k] = canonicalize(value[k]);
+    }
+    return out;
+  }
+  return value;
+}
+function buildReadinessReport(result, opts = {}) {
+  const findings = result.findings.map((f) => ({
+    ruleId: f.ruleId,
+    ...f.algorithm ? { algorithm: f.algorithm } : {},
+    severity: f.severity,
+    hndl: f.hndl,
+    file: f.location.file,
+    line: f.location.line
+  }));
+  const hashableBody = {
+    reportType: "quantakrypto-readiness",
+    specVersion: 1,
+    subject: {
+      repository: opts.repository ?? null,
+      commit: opts.commit ?? null,
+      scannedRoot: result.root
+    },
+    tool: { name: "qScan", version: VERSION },
+    inventory: result.inventory,
+    findings
+  };
+  const contentHash = "sha256:" + createHash4("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
+  return {
+    ...hashableBody,
+    subject: { ...hashableBody.subject, scanTimeUtc: result.finishedAt },
+    cbom: toCbom(result),
+    attestation: { contentHash, timestamp: null, signature: null }
+  };
+}
+var init_evidence = __esm({
+  "../core/dist/evidence.js"() {
+    "use strict";
+    init_cbom();
+    init_version();
+  }
+});
+
 // ../core/dist/index.js
 var init_dist = __esm({
   "../core/dist/index.js"() {
@@ -5582,6 +5633,7 @@ var init_dist = __esm({
     init_severity();
     init_report();
     init_cbom();
+    init_evidence();
     init_remediation();
     init_cwe();
   }
@@ -6142,6 +6194,7 @@ import { pathToFileURL } from "node:url";
 
 // ../qscan/dist/index.js
 init_dist();
+import process4 from "node:process";
 
 // ../qscan/dist/baseline.js
 init_dist();
@@ -6469,6 +6522,11 @@ function renderReport(result, format, opts = {}) {
       return renderSarif(result, { redactSnippets });
     case "cbom":
       return renderCbom(result);
+    case "evidence":
+      return JSON.stringify(buildReadinessReport(result, {
+        repository: process4.env.GITHUB_REPOSITORY,
+        commit: process4.env.GITHUB_SHA
+      }), null, 2);
     case "human":
     default:
       return renderHuman(result, { color, topN, tier });
