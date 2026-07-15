@@ -263,7 +263,7 @@ function eachMatch(re, content, onMatch) {
       g.lastIndex++;
   }
 }
-var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, C_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
+var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, C_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
 var init_detect_utils = __esm({
   "../core/dist/detect-utils.js"() {
     "use strict";
@@ -287,6 +287,19 @@ var init_detect_utils = __esm({
     RUST_EXTENSIONS = [".rs"];
     RUBY_EXTENSIONS = [".rb"];
     C_EXTENSIONS = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
+    DOC_EXTENSIONS = [
+      ".md",
+      ".markdown",
+      ".mdown",
+      ".mkd",
+      ".rst",
+      ".adoc",
+      ".asciidoc",
+      ".textile",
+      ".org",
+      ".rdoc",
+      ".pod"
+    ];
     JWT_HOST_EXTENSIONS = [
       ...JS_TS_EXTENSIONS,
       ...PYTHON_EXTENSIONS,
@@ -1032,6 +1045,20 @@ var init_dependencies = __esm({
         algorithms: ["RSA", "ECDSA", "ECDH"],
         severity: "medium"
       },
+      {
+        name: "github.com/cloudflare/circl",
+        ecosystem: "go",
+        reason: "Cloudflare CIRCL \u2014 classical ECDH/EdDSA curves (X25519, X448, Ed25519, P-256).",
+        algorithms: ["ECDH", "EdDSA"],
+        severity: "medium"
+      },
+      {
+        name: "github.com/decred/dcrd/dcrec/secp256k1/v4",
+        ecosystem: "go",
+        reason: "decred secp256k1 \u2014 classical ECDSA/ECDH on the secp256k1 curve (blockchain keys).",
+        algorithms: ["ECDSA", "ECDH"],
+        severity: "medium"
+      },
       // --- Maven (Java) ---
       {
         name: "bcprov-jdk18on",
@@ -1480,6 +1507,47 @@ function commentSpans(content, style) {
   }
   return spans;
 }
+function pythonDocstringSpans(content) {
+  const spans = [];
+  const n = content.length;
+  let i = 0;
+  while (i < n) {
+    const c = content[i];
+    if (c === "#") {
+      i++;
+      while (i < n && content[i] !== "\n")
+        i++;
+      continue;
+    }
+    if ((c === '"' || c === "'") && content[i + 1] === c && content[i + 2] === c) {
+      const start = i;
+      i += 3;
+      while (i < n && !(content[i] === c && content[i + 1] === c && content[i + 2] === c))
+        i++;
+      i = Math.min(n, i + 3);
+      spans.push([start, i]);
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const q = c;
+      i++;
+      while (i < n) {
+        if (content[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (content[i] === q) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return spans;
+}
 function offsetInSpans(spans, offset) {
   let lo = 0;
   let hi = spans.length - 1;
@@ -1522,6 +1590,79 @@ function stripCommentFindings(findings, content, file) {
   if (!style)
     return findings;
   const spans = commentSpans(content, style);
+  const docSpans = style === "hash" ? pythonDocstringSpans(content) : [];
+  if (spans.length === 0 && docSpans.length === 0)
+    return findings;
+  const lineStarts = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n")
+      lineStarts.push(i + 1);
+  }
+  return findings.filter((f) => {
+    const start = lineStarts[f.location.line - 1] ?? 0;
+    const offset = start + ((f.location.column ?? 1) - 1);
+    if (offsetInSpans(spans, offset))
+      return false;
+    if (docSpans.length > 0 && !f.ruleId.startsWith("pem-") && offsetInSpans(docSpans, offset)) {
+      return false;
+    }
+    return true;
+  });
+}
+function stringSpans(content, style) {
+  const spans = [];
+  const n = content.length;
+  let i = 0;
+  while (i < n) {
+    const c = content[i];
+    if (style === "c" && c === "/" && content[i + 1] === "/") {
+      i += 2;
+      while (i < n && content[i] !== "\n")
+        i++;
+      continue;
+    }
+    if (style === "c" && c === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < n && !(content[i] === "*" && content[i + 1] === "/"))
+        i++;
+      i = Math.min(n, i + 2);
+      continue;
+    }
+    if (style === "hash" && c === "#") {
+      i++;
+      while (i < n && content[i] !== "\n")
+        i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      const start = i;
+      i++;
+      while (i < n) {
+        if (content[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (content[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      spans.push([start, i]);
+      continue;
+    }
+    i++;
+  }
+  return spans;
+}
+function stripStringLiteralFindings(findings, content, file, ruleIds) {
+  if (findings.length === 0 || !findings.some((f) => ruleIds.has(f.ruleId)))
+    return findings;
+  const style = commentStyleForFile(file);
+  if (!style)
+    return findings;
+  const spans = stringSpans(content, style);
   if (spans.length === 0)
     return findings;
   const lineStarts = [0];
@@ -1530,6 +1671,8 @@ function stripCommentFindings(findings, content, file) {
       lineStarts.push(i + 1);
   }
   return findings.filter((f) => {
+    if (!ruleIds.has(f.ruleId))
+      return true;
     const start = lineStarts[f.location.line - 1] ?? 0;
     const offset = start + ((f.location.column ?? 1) - 1);
     return !offsetInSpans(spans, offset);
@@ -1627,7 +1770,7 @@ var init_cache = __esm({
 });
 
 // ../core/dist/detectors/source.js
-var RE_GENERATE_KEYPAIR, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RULE_JWT_ALG, RULE_JOSE_ECDH, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, sshCertDetector, sourceDetectors;
+var RE_GENERATE_KEYPAIR, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
 var init_source = __esm({
   "../core/dist/detectors/source.js"() {
     "use strict";
@@ -2057,6 +2200,7 @@ var init_source = __esm({
         return findings;
       }
     };
+    RE_JOSE_KEM = /['"`](RSA-OAEP(?:-(?:256|384|512))?|RSA1_5)['"`]/g;
     RULE_JWT_ALG = {
       id: "jwt-classical-alg",
       title: "Classical JWT/JOSE algorithm",
@@ -2083,6 +2227,19 @@ var init_source = __esm({
       message: "JOSE ECDH-ES performs classical ECDH key agreement \u2014 harvest-now-decrypt-later exposed.",
       remediation: "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption."
     };
+    RULE_JOSE_RSA_OAEP = {
+      id: "jose-rsa-oaep",
+      title: "JOSE RSA key-transport algorithm",
+      description: "JWE RSA-OAEP / RSA-OAEP-256/384/512 / RSA1_5 key encryption",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "medium",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "JOSE RSA key transport (RSA-OAEP / RSA1_5) is classical RSA encryption \u2014 harvest-now-decrypt-later exposed.",
+      remediation: "Track IETF PQC JOSE/COSE; adopt hybrid X25519MLKEM768 KEM-based encryption."
+    };
     jwtDetector = {
       id: "jwt-jose",
       description: "Classical JWT/JOSE algorithms (RS/PS/ES/EdDSA) and ECDH-ES key agreement",
@@ -2091,7 +2248,7 @@ var init_source = __esm({
       // signal in JS/TS or Python (e.g. PyJWT `algorithm="RS256"`), so this detector
       // is un-gated from JS-only to the JWT host surfaces.
       language: "any",
-      rules: [RULE_JWT_ALG, RULE_JOSE_ECDH],
+      rules: [RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP],
       appliesTo: (f) => hasExtension(f, JWT_HOST_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
@@ -2114,6 +2271,12 @@ var init_source = __esm({
           findings.push(findingFromRule(RULE_JOSE_ECDH, { file, content, index: m.index, matchLength: m[0].length }, {
             title: `JOSE key agreement ${m[1]}`,
             message: `JOSE "${m[1]}" performs classical ECDH key agreement \u2014 harvest-now-decrypt-later exposed.`
+          }));
+        });
+        eachMatch(RE_JOSE_KEM, content, (m) => {
+          findings.push(findingFromRule(RULE_JOSE_RSA_OAEP, { file, content, index: m.index, matchLength: m[0].length }, {
+            title: `JOSE RSA key transport ${m[1]}`,
+            message: `JOSE "${m[1]}" is classical RSA key transport \u2014 harvest-now-decrypt-later exposed.`
           }));
         });
         return findings;
@@ -2188,6 +2351,7 @@ var init_source = __esm({
     };
     RE_SSH_PUBKEY = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521))\b/g;
     RE_CERT_SIG_ALG = /\b(sha(?:1|256|384|512)WithRSAEncryption|ecdsa-with-SHA(?:1|256|384|512)|rsassaPss|dsaWithSHA(?:1|256))\b/g;
+    RE_SSH_KEX = /\b(diffie-hellman-group(?:1|14|15|16|17|18)(?:-sha1|-sha256|-sha512)?|diffie-hellman-group-exchange-sha(?:1|256)|ecdh-sha2-nistp(?:256|384|521)|curve25519-sha256)\b/g;
     RULE_SSH_PUBKEY = {
       id: "ssh-public-key",
       title: "Classical SSH public key",
@@ -2215,13 +2379,28 @@ var init_source = __esm({
       message: "A classical certificate signature algorithm (RSA/ECDSA/DSA) is a quantum forgery surface.",
       remediation: "Plan re-issuance with PQC-capable CAs as ML-DSA certificate profiles mature."
     };
+    RULE_SSH_KEX = {
+      id: "ssh-kex-classical",
+      title: "Classical SSH key exchange",
+      description: "diffie-hellman-group* / group-exchange / ecdh-sha2-* / curve25519-sha256 kex",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical SSH key-exchange algorithm (finite-field DH / ECDH / X25519) is harvest-now-decrypt-later exposed.",
+      remediation: "Prefer the mlkem768x25519-sha256 KEX (ML-KEM-768 hybrid, OpenSSH 10 default); sntrup761x25519 is an acceptable interim."
+    };
     sshCertDetector = {
       id: "ssh-cert",
       description: "SSH public keys and TLS/X.509 certificate signature algorithms in config",
       scope: "config",
       language: "any",
-      rules: [RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG],
-      appliesTo: () => true,
+      rules: [RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX],
+      // Skip prose/docs: a changelog or README that merely mentions `ssh-rsa` in a
+      // sentence is not crypto config. PEM material is caught by its own detector.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
         eachMatch(RE_SSH_PUBKEY, content, (m) => {
@@ -2242,6 +2421,49 @@ var init_source = __esm({
             message: `Certificate signature algorithm "${tok}" is classical (RSA/ECDSA/DSA) \u2014 a quantum forgery surface.`
           }));
         });
+        eachMatch(RE_SSH_KEX, content, (m) => {
+          const tok = m[1];
+          const algorithm = tok.startsWith("diffie-hellman") ? "DH" : tok.startsWith("ecdh") ? "ECDH" : "X25519";
+          findings.push(findingFromRule(RULE_SSH_KEX, { file, content, index: m.index, matchLength: m[0].length }, {
+            title: `Classical SSH key exchange (${tok})`,
+            algorithm,
+            message: `SSH key-exchange "${tok}" is classical (${algorithm}) \u2014 harvest-now-decrypt-later exposed.`
+          }));
+        });
+        return findings;
+      }
+    };
+    RE_TLS_CLASSICAL_KEX = /\b(?:TLS_)?(?:ECDHE|ECDH|DHE)[-_](?:RSA|ECDSA|DSS)/g;
+    RULE_TLS_CLASSICAL_KEX = {
+      id: "tls-classical-kex",
+      title: "Classical TLS key-exchange cipher suite",
+      description: "ECDHE / DHE cipher suites negotiate Shor-broken key exchange",
+      category: "tls",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical TLS key exchange (ECDHE/DHE) is harvest-now-decrypt-later exposed \u2014 the session key can be recorded now and recovered by a quantum attacker.",
+      remediation: "Adopt a PQC-hybrid TLS 1.3 key exchange (e.g. X25519MLKEM768) as your stack and peers support it; keep classical suites only as a transitional fallback."
+    };
+    tlsClassicalKexDetector = {
+      id: "tls-cipher-suite",
+      description: "Classical TLS key-exchange cipher suites (ECDHE/DHE) in any config",
+      scope: "config",
+      language: "any",
+      rules: [RULE_TLS_CLASSICAL_KEX],
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        eachMatch(RE_TLS_CLASSICAL_KEX, content, (m) => {
+          const tok = m[0];
+          const algorithm = tok.includes("ECDH") ? "ECDH" : "DH";
+          findings.push(findingFromRule(RULE_TLS_CLASSICAL_KEX, { file, content, index: m.index, matchLength: m[0].length }, {
+            algorithm,
+            message: `Classical TLS key-exchange suite "${tok}\u2026" (${algorithm}) is harvest-now-decrypt-later exposed.`
+          }));
+        });
         return findings;
       }
     };
@@ -2251,7 +2473,8 @@ var init_source = __esm({
       libraryDetector,
       jwtDetector,
       tlsDetector,
-      sshCertDetector
+      sshCertDetector,
+      tlsClassicalKexDetector
     ];
   }
 });
@@ -2480,7 +2703,7 @@ var init_python = __esm({
 });
 
 // ../core/dist/detectors/go.js
-var RE_GO_RSA_KEYGEN, RE_GO_RSA_ENCRYPT, RE_GO_RSA_SIGN, RE_GO_ECDSA, RE_GO_ECDH, RE_GO_X25519, RE_GO_ED25519, RE_GO_DSA, RE_GO_RSA_DECRYPT, RE_GO_RSA_VERIFY, RE_GO_ECDSA_VERIFY, RE_GO_ED25519_VERIFY, RE_GO_ECDH_CLASSIC, RE_GO_TLS_SKIP_VERIFY, RE_GO_TLS_LEGACY_VERSION, RULE_GO_RSA_KEYGEN, RULE_GO_RSA_ENCRYPT, RULE_GO_RSA_SIGN, RULE_GO_ECDSA, RULE_GO_ECDH, RULE_GO_X25519, RULE_GO_ED25519, RULE_GO_DSA, RULE_GO_RSA_DECRYPT, RULE_GO_RSA_VERIFY, RULE_GO_ECDSA_VERIFY, RULE_GO_ED25519_VERIFY, RULE_GO_ECDH_CLASSIC, RULE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_LEGACY_VERSION, goDetector;
+var RE_GO_RSA_KEYGEN, RE_GO_RSA_ENCRYPT, RE_GO_RSA_SIGN, RE_GO_ECDSA, RE_GO_ECDH, RE_GO_X25519, RE_GO_ED25519, RE_GO_DSA, RE_GO_RSA_DECRYPT, RE_GO_RSA_VERIFY, RE_GO_ECDSA_VERIFY, RE_GO_ED25519_VERIFY, RE_GO_ECDH_CLASSIC, RE_GO_TLS_SKIP_VERIFY, RE_GO_TLS_LEGACY_VERSION, RE_GO_JWT_SIGNINGMETHOD, RULE_GO_RSA_KEYGEN, RULE_GO_RSA_ENCRYPT, RULE_GO_RSA_SIGN, RULE_GO_ECDSA, RULE_GO_ECDH, RULE_GO_X25519, RULE_GO_ED25519, RULE_GO_DSA, RULE_GO_RSA_DECRYPT, RULE_GO_RSA_VERIFY, RULE_GO_ECDSA_VERIFY, RULE_GO_ED25519_VERIFY, RULE_GO_ECDH_CLASSIC, RULE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_LEGACY_VERSION, RULE_GO_JWT_SIGNINGMETHOD, RE_GO_X509_PARSE, RULE_GO_X509_PARSE, goDetector;
 var init_go = __esm({
   "../core/dist/detectors/go.js"() {
     "use strict";
@@ -2501,6 +2724,7 @@ var init_go = __esm({
     RE_GO_ECDH_CLASSIC = /\belliptic\.GenerateKey\s*\(|\.ScalarMult\s*\(/g;
     RE_GO_TLS_SKIP_VERIFY = /InsecureSkipVerify:\s*true/g;
     RE_GO_TLS_LEGACY_VERSION = /MinVersion:\s*tls\.Version(?:TLS1[01]|SSL30)/g;
+    RE_GO_JWT_SIGNINGMETHOD = /\bSigningMethod(RS|PS|ES)(?:256|384|512)\b|\bSigningMethodEdDSA\b/g;
     RULE_GO_RSA_KEYGEN = {
       id: "go-rsa-keygen",
       title: "Go RSA key generation",
@@ -2686,6 +2910,34 @@ var init_go = __esm({
       message: "MinVersion pins a deprecated TLS/SSL floor (TLS 1.0/1.1 or SSL 3.0) in Go; require TLS 1.3.",
       remediation: "Set MinVersion: tls.VersionTLS13 and prefer PQC-hybrid key exchange."
     };
+    RULE_GO_JWT_SIGNINGMETHOD = {
+      id: "go-jwt-signingmethod",
+      title: "Go identifier-form JWT signing method",
+      description: "golang-jwt SigningMethodRS/PS/ES* / SigningMethodEdDSA identifier",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "unknown",
+      // representative umbrella; refined per-match (RSA/ECDSA/EdDSA)
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical JWT signature algorithm (Go golang-jwt, identifier form) is used, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms"
+    };
+    RE_GO_X509_PARSE = /\bx509\.(?:ParsePKCS1PrivateKey|ParsePKCS8PrivateKey|ParsePKIXPublicKey|ParseECPrivateKey|ParsePKCS1PublicKey|MarshalPKCS1PrivateKey|MarshalPKCS8PrivateKey|MarshalPKIXPublicKey|MarshalECPrivateKey|ParseCertificates?|ParseCertificateRequest|CreateCertificate|CreateCertificateRequest)\b/g;
+    RULE_GO_X509_PARSE = {
+      id: "go-x509-parse",
+      title: "Go x509 classical key/certificate handling",
+      description: "x509.Parse*/Marshal*/Create* for RSA/EC/PKIX keys and X.509 certificates",
+      category: "certificate",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "This code parses/marshals classical asymmetric key or X.509 certificate material (x509.*), a quantum forgery/harvest surface.",
+      remediation: "Inventory the key/cert types handled here; plan PQC (ML-DSA) certificate + key migration."
+    };
     goDetector = {
       id: "go-crypto",
       description: "Classical asymmetric crypto in Go (crypto/rsa, ecdsa, ecdh, ed25519, dsa)",
@@ -2706,7 +2958,9 @@ var init_go = __esm({
         RULE_GO_ED25519_VERIFY,
         RULE_GO_ECDH_CLASSIC,
         RULE_GO_TLS_SKIP_VERIFY,
-        RULE_GO_TLS_LEGACY_VERSION
+        RULE_GO_TLS_LEGACY_VERSION,
+        RULE_GO_JWT_SIGNINGMETHOD,
+        RULE_GO_X509_PARSE
       ],
       appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
       detect({ file, content }) {
@@ -2727,6 +2981,11 @@ var init_go = __esm({
         add(RE_GO_ECDH_CLASSIC, RULE_GO_ECDH_CLASSIC);
         add(RE_GO_TLS_SKIP_VERIFY, RULE_GO_TLS_SKIP_VERIFY);
         add(RE_GO_TLS_LEGACY_VERSION, RULE_GO_TLS_LEGACY_VERSION);
+        add(RE_GO_X509_PARSE, RULE_GO_X509_PARSE);
+        eachMatch(RE_GO_JWT_SIGNINGMETHOD, content, (m) => {
+          const algorithm = m[1] === "ES" ? "ECDSA" : m[1] ? "RSA" : "EdDSA";
+          findings.push(findingFromRule(RULE_GO_JWT_SIGNINGMETHOD, { file, content, index: m.index, matchLength: m[0].length }, { algorithm }));
+        });
         return findings;
       }
     };
@@ -2757,7 +3016,7 @@ function classifyGetInstance(factory, rawAlg) {
     return RULE_JAVA_DH;
   return null;
 }
-var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RE_JAVA_JWT_ALG, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, RULE_JAVA_JWT_ALG, BC_CLASS_RULES, javaDetector;
+var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_BC_CURVE, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RE_JAVA_JWT_ALG, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_BC_X448, RULE_JAVA_BC_X25519, RULE_JAVA_BC_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, RULE_JAVA_JWT_ALG, BC_CLASS_RULES, BC_CURVE_CLASS_RULES, javaDetector;
 var init_java = __esm({
   "../core/dist/detectors/java.js"() {
     "use strict";
@@ -2765,6 +3024,7 @@ var init_java = __esm({
     init_cwe();
     RE_JAVA_GETINSTANCE = /\b(KeyPairGenerator|Signature|Cipher|KeyAgreement|KeyFactory)\s*\.\s*getInstance\s*\(\s*"([^"]+)"/g;
     RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
+    RE_JAVA_BC_CURVE = /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
     RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
     RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
     RE_JAVA_JWT_ALG = /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
@@ -2880,6 +3140,42 @@ var init_java = __esm({
       cwe: CWE_BROKEN_CRYPTO,
       message: "Ed25519/Ed448 (Java/JCA) is a modern but still classical signature scheme."
     };
+    RULE_JAVA_BC_X448 = {
+      id: "java-bc-x448",
+      title: "Java/Kotlin X448 key agreement (BouncyCastle lightweight API)",
+      description: "BouncyCastle X448KeyPairGenerator / X448Agreement / X448PrivateKeyParameters",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X448",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X448 (Java/Kotlin, BouncyCastle lightweight API) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+    };
+    RULE_JAVA_BC_X25519 = {
+      id: "java-bc-x25519",
+      title: "Java/Kotlin X25519 key agreement (BouncyCastle lightweight API)",
+      description: "BouncyCastle X25519KeyPairGenerator / X25519Agreement",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 (Java/Kotlin, BouncyCastle lightweight API) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+    };
+    RULE_JAVA_BC_EDDSA = {
+      id: "java-bc-eddsa",
+      title: "Java/Kotlin Ed25519/Ed448 signature (BouncyCastle lightweight API)",
+      description: "BouncyCastle Ed448KeyPairGenerator / Ed448Signer / Ed25519KeyPairGenerator / Ed25519Signer",
+      category: "signature",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ed25519/Ed448 (Java/Kotlin, BouncyCastle lightweight API) is a modern but still classical signature scheme."
+    };
     RULE_JAVA_TLS_LEGACY = {
       id: "java-tls-legacy-version",
       title: "Legacy SSL/TLS version requested",
@@ -2933,6 +3229,17 @@ var init_java = __esm({
       RSAEngine: RULE_JAVA_RSA,
       OAEPEncoding: RULE_JAVA_RSA
     };
+    BC_CURVE_CLASS_RULES = {
+      X448KeyPairGenerator: RULE_JAVA_BC_X448,
+      X448Agreement: RULE_JAVA_BC_X448,
+      X448PrivateKeyParameters: RULE_JAVA_BC_X448,
+      X25519KeyPairGenerator: RULE_JAVA_BC_X25519,
+      X25519Agreement: RULE_JAVA_BC_X25519,
+      Ed448KeyPairGenerator: RULE_JAVA_BC_EDDSA,
+      Ed448Signer: RULE_JAVA_BC_EDDSA,
+      Ed25519KeyPairGenerator: RULE_JAVA_BC_EDDSA,
+      Ed25519Signer: RULE_JAVA_BC_EDDSA
+    };
     javaDetector = {
       id: "java-crypto",
       description: "Classical asymmetric crypto in Java/Kotlin (JCA getInstance + BouncyCastle)",
@@ -2948,6 +3255,9 @@ var init_java = __esm({
         RULE_JAVA_DH,
         RULE_JAVA_XDH,
         RULE_JAVA_EDDSA,
+        RULE_JAVA_BC_X448,
+        RULE_JAVA_BC_X25519,
+        RULE_JAVA_BC_EDDSA,
         RULE_JAVA_TLS_LEGACY,
         RULE_JAVA_TLS_NOVERIFY,
         RULE_JAVA_JWT_ALG
@@ -2963,6 +3273,12 @@ var init_java = __esm({
         });
         eachMatch(RE_JAVA_BC, content, (m) => {
           const rule = BC_CLASS_RULES[m[1]];
+          if (!rule)
+            return;
+          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+        });
+        eachMatch(RE_JAVA_BC_CURVE, content, (m) => {
+          const rule = BC_CURVE_CLASS_RULES[m[1]];
           if (!rule)
             return;
           findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
@@ -2998,7 +3314,7 @@ var init_java = __esm({
 });
 
 // ../core/dist/detectors/csharp.js
-var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RE_CS_TLS_CERT_VALIDATION, RE_CS_TLS_LEGACY_VERSION, RE_CS_JWT_ALG, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY, RULE_CS_JWT_ALG, csharpDetector;
+var RE_CS_RSA, RE_CS_ECDSA, RE_CS_ECDH, RE_CS_DSA, RE_CS_TLS_CERT_VALIDATION, RE_CS_TLS_LEGACY_VERSION, RE_CS_JWT_ALG, RE_CS_BC_EDDSA, RE_CS_BC_X25519, RE_CS_BC_X448, RE_CS_BC_DH, RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY, RULE_CS_JWT_ALG, RULE_CS_BC_EDDSA, RULE_CS_BC_X25519, RULE_CS_BC_X448, RULE_CS_BC_DH, csharpDetector;
 var init_csharp = __esm({
   "../core/dist/detectors/csharp.js"() {
     "use strict";
@@ -3011,6 +3327,10 @@ var init_csharp = __esm({
     RE_CS_TLS_CERT_VALIDATION = /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
     RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
     RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
+    RE_CS_BC_EDDSA = /\bEd25519(?:KeyPairGenerator|Signer|PrivateKeyParameters)\b/g;
+    RE_CS_BC_X25519 = /\bX25519(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
+    RE_CS_BC_X448 = /\bX448(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
+    RE_CS_BC_DH = /\bDH(?:ParametersGenerator|BasicAgreement|BasicKeyPairGenerator|KeyPairGenerator|Parameters)\b/g;
     RULE_CS_RSA = {
       id: "csharp-rsa",
       title: "C# RSA key/usage",
@@ -3098,6 +3418,55 @@ var init_csharp = __esm({
       message: "A classical JWT/JOSE signature algorithm (.NET, identifier form) is used, forgeable by a quantum attacker.",
       remediation: "ML-DSA-65 (FIPS 204); track IETF PQC JOSE/COSE algorithms"
     };
+    RULE_CS_BC_EDDSA = {
+      id: "csharp-bouncycastle-eddsa",
+      title: "C# Ed25519 signature (BouncyCastle)",
+      description: "Org.BouncyCastle Ed25519KeyPairGenerator / Ed25519Signer / Ed25519PrivateKeyParameters",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical Ed25519 signing (BouncyCastle) is forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_CS_BC_X25519 = {
+      id: "csharp-bouncycastle-x25519",
+      title: "C# X25519 key agreement (BouncyCastle)",
+      description: "Org.BouncyCastle X25519KeyPairGenerator / X25519Agreement / X25519PrivateKeyParameters",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 Diffie-Hellman key agreement (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_CS_BC_X448 = {
+      id: "csharp-bouncycastle-x448",
+      title: "C# X448 key agreement (BouncyCastle)",
+      description: "Org.BouncyCastle X448KeyPairGenerator / X448Agreement / X448PrivateKeyParameters",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "X448",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X448 Diffie-Hellman key agreement (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
+    RULE_CS_BC_DH = {
+      id: "csharp-bouncycastle-dh",
+      title: "C# finite-field Diffie-Hellman (BouncyCastle)",
+      description: "Org.BouncyCastle DHParametersGenerator / DHBasicAgreement / DHKeyPairGenerator / DHParameters",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Finite-field Diffie-Hellman (BouncyCastle) is broken by Shor's algorithm (harvest-now-decrypt-later)."
+    };
     csharpDetector = {
       id: "csharp-crypto",
       description: "Classical asymmetric crypto (System.Security.Cryptography) and insecure TLS config in C#/.NET",
@@ -3110,7 +3479,11 @@ var init_csharp = __esm({
         RULE_CS_DSA,
         RULE_CS_TLS_CERT,
         RULE_CS_TLS_LEGACY,
-        RULE_CS_JWT_ALG
+        RULE_CS_JWT_ALG,
+        RULE_CS_BC_EDDSA,
+        RULE_CS_BC_X25519,
+        RULE_CS_BC_X448,
+        RULE_CS_BC_DH
       ],
       appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
       detect({ file, content }) {
@@ -3123,6 +3496,10 @@ var init_csharp = __esm({
         add(RE_CS_TLS_CERT_VALIDATION, RULE_CS_TLS_CERT);
         add(RE_CS_TLS_LEGACY_VERSION, RULE_CS_TLS_LEGACY);
         add(RE_CS_JWT_ALG, RULE_CS_JWT_ALG);
+        add(RE_CS_BC_EDDSA, RULE_CS_BC_EDDSA);
+        add(RE_CS_BC_X25519, RULE_CS_BC_X25519);
+        add(RE_CS_BC_X448, RULE_CS_BC_X448);
+        add(RE_CS_BC_DH, RULE_CS_BC_DH);
         return findings;
       }
     };
@@ -3130,7 +3507,7 @@ var init_csharp = __esm({
 });
 
 // ../core/dist/detectors/rust.js
-var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, rustDetector;
+var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_JWT_ALG, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_JWT_ALGORITHM, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, rustDetector;
 var init_rust = __esm({
   "../core/dist/detectors/rust.js"() {
     "use strict";
@@ -3148,6 +3525,7 @@ var init_rust = __esm({
     RE_RUST_RING_X25519 = /\bagreement::X25519\b/g;
     RE_RUST_BARE_X25519 = /(?<![:\w])EphemeralSecret::new\s*\(/g;
     RE_RUST_BARE_SIGNINGKEY = /(?<![:\w])SigningKey::(?:generate|random)\s*\(/g;
+    RE_RUST_JWT_ALG = /\bAlgorithm\s*::(RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\s*::EdDSA\b/g;
     RE_RUST_TLS_ACCEPT_INVALID = /\bdanger_accept_invalid_certs\s*\(\s*true/g;
     RE_RUST_TLS_DANGEROUS = /\.dangerous\s*\(\s*\)/g;
     RULE_RUST_RSA = {
@@ -3298,6 +3676,20 @@ var init_rust = __esm({
       message: "Classical signature key from an unqualified `SigningKey` (ed25519-dalek Ed25519 / k256 ECDSA) \u2014 forgeable by a quantum attacker.",
       remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
     };
+    RULE_RUST_JWT_ALGORITHM = {
+      id: "rust-jwt-algorithm",
+      title: "Rust jsonwebtoken classical signature algorithm",
+      description: "jsonwebtoken Algorithm::{RS,PS,ES}* / Algorithm::EdDSA enum variant",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      // Representative family; refined per-finding (RS*/PS* → RSA, ES* → ECDSA, EdDSA).
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Selects a classical JWT signature algorithm (jsonwebtoken RS*/PS*/ES*/EdDSA), forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
     RULE_RUST_TLS_ACCEPT_INVALID = {
       id: "rust-tls-accept-invalid-certs",
       title: "Rust TLS certificate verification disabled",
@@ -3340,6 +3732,7 @@ var init_rust = __esm({
         RULE_RUST_RING_X25519,
         RULE_RUST_BARE_X25519,
         RULE_RUST_BARE_SIGNINGKEY,
+        RULE_RUST_JWT_ALGORITHM,
         RULE_RUST_TLS_ACCEPT_INVALID,
         RULE_RUST_TLS_DANGEROUS
       ],
@@ -3359,6 +3752,11 @@ var init_rust = __esm({
         add(RE_RUST_RING_X25519, RULE_RUST_RING_X25519);
         add(RE_RUST_BARE_X25519, RULE_RUST_BARE_X25519);
         add(RE_RUST_BARE_SIGNINGKEY, RULE_RUST_BARE_SIGNINGKEY);
+        eachMatch(RE_RUST_JWT_ALG, content, (m) => {
+          const prefix = m[1];
+          const algorithm = prefix === void 0 ? "EdDSA" : prefix === "ES" ? "ECDSA" : "RSA";
+          findings.push(findingFromRule(RULE_RUST_JWT_ALGORITHM, { file, content, index: m.index, matchLength: m[0].length }, { algorithm }));
+        });
         add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
         add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
         return findings;
@@ -3368,7 +3766,7 @@ var init_rust = __esm({
 });
 
 // ../core/dist/detectors/ruby.js
-var RE_RB_RSA, RE_RB_EC, RE_RB_DSA, RE_RB_DH, RE_RB_RSA_CRYPT, RE_RB_DH_AGREE, RE_RB_PKEY_READ, RE_RB_ED25519, RE_RB_TLS_VERIFY_NONE, RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH, RULE_RB_RSA_CRYPT, RULE_RB_DH_AGREE, RULE_RB_PKEY_READ, RULE_RB_ED25519, RULE_RB_TLS_VERIFY_NONE, rubyDetector;
+var RE_RB_RSA, RE_RB_EC, RE_RB_DSA, RE_RB_DH, RE_RB_RSA_CRYPT, RE_RB_DH_AGREE, RE_RB_PKEY_READ, RE_RB_ED25519, RE_RB_ED25519_GEM, RE_RB_RBNACL, RE_RB_TLS_VERIFY_NONE, RULE_RB_RSA, RULE_RB_EC, RULE_RB_DSA, RULE_RB_DH, RULE_RB_RSA_CRYPT, RULE_RB_DH_AGREE, RULE_RB_PKEY_READ, RULE_RB_ED25519, RULE_RB_ED25519_GEM, RULE_RB_RBNACL, RULE_RB_TLS_VERIFY_NONE, rubyDetector;
 var init_ruby = __esm({
   "../core/dist/detectors/ruby.js"() {
     "use strict";
@@ -3382,6 +3780,8 @@ var init_ruby = __esm({
     RE_RB_DH_AGREE = /\bdh_compute_key\s*\(/g;
     RE_RB_PKEY_READ = /\bOpenSSL::PKey\.read\s*\(/g;
     RE_RB_ED25519 = /\bOpenSSL::PKey\.generate_key\s*\(\s*["']ED25519["']/g;
+    RE_RB_ED25519_GEM = /\bEd25519::(?:SigningKey|VerifyKey)\b/g;
+    RE_RB_RBNACL = /\bRbNaCl::(?:PrivateKey|Box|GroupElement)\b/g;
     RE_RB_TLS_VERIFY_NONE = /\bOpenSSL::SSL::VERIFY_NONE\b/g;
     RULE_RB_RSA = {
       id: "ruby-rsa",
@@ -3483,6 +3883,31 @@ var init_ruby = __esm({
       message: "Generates an Ed25519 signing key (Ruby/OpenSSL) \u2014 modern but classical, and forgeable by a quantum attacker.",
       remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
     };
+    RULE_RB_ED25519_GEM = {
+      id: "ruby-ed25519-gem",
+      title: "Ruby Ed25519 signature (ed25519 gem)",
+      description: "ed25519 gem Ed25519::SigningKey / Ed25519::VerifyKey",
+      category: "signature",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ed25519 signing/verification via the `ed25519` gem \u2014 modern but classical, and forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+    };
+    RULE_RB_RBNACL = {
+      id: "ruby-rbnacl",
+      title: "Ruby X25519 key agreement (rbnacl)",
+      description: "rbnacl (libsodium) RbNaCl::PrivateKey / Box / GroupElement",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Curve25519/X25519 key agreement via the `rbnacl` gem (libsodium) \u2014 modern but classical key agreement, harvest-now-decrypt-later exposed."
+    };
     RULE_RB_TLS_VERIFY_NONE = {
       id: "ruby-tls-verify-none",
       title: "Ruby TLS certificate verification disabled",
@@ -3509,6 +3934,8 @@ var init_ruby = __esm({
         RULE_RB_DH_AGREE,
         RULE_RB_PKEY_READ,
         RULE_RB_ED25519,
+        RULE_RB_ED25519_GEM,
+        RULE_RB_RBNACL,
         RULE_RB_TLS_VERIFY_NONE
       ],
       appliesTo: (f) => hasExtension(f, RUBY_EXTENSIONS),
@@ -3523,6 +3950,8 @@ var init_ruby = __esm({
         add(RE_RB_DH_AGREE, RULE_RB_DH_AGREE);
         add(RE_RB_PKEY_READ, RULE_RB_PKEY_READ);
         add(RE_RB_ED25519, RULE_RB_ED25519);
+        add(RE_RB_ED25519_GEM, RULE_RB_ED25519_GEM);
+        add(RE_RB_RBNACL, RULE_RB_RBNACL);
         add(RE_RB_TLS_VERIFY_NONE, RULE_RB_TLS_VERIFY_NONE);
         return findings;
       }
@@ -3547,8 +3976,8 @@ var init_c = __esm({
     RE_C_EVP_DERIVE = /\bEVP_PKEY_derive\s*\(/g;
     RE_C_EVP_CRYPT = /\bEVP_PKEY_(?:encrypt|decrypt)\s*\(/g;
     RE_C_EVP_SIGN = /\bEVP_DigestSign(?:Init)?\s*\(|\bEVP_DigestVerify(?:Init)?\s*\(/g;
-    RE_C_SODIUM_BOX = /\bcrypto_box_(?:seed_)?keypair\s*\(/g;
-    RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:seed_)?keypair\s*\(/g;
+    RE_C_SODIUM_BOX = /\bcrypto_box_(?:curve25519xsalsa20poly1305_)?(?:seed_)?keypair\s*\(|\bcrypto_kx_keypair\s*\(|\bcrypto_scalarmult_(?:curve25519|base)\s*\(/g;
+    RE_C_SODIUM_SIGN = /\bcrypto_sign_(?:ed25519_)?(?:seed_)?keypair\s*\(/g;
     RE_C_ECDSA_VERIFY = /\bECDSA_verify\s*\(/g;
     RE_C_RSA_VERIFY = /\bRSA_verify\s*\(/g;
     RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
@@ -3682,7 +4111,7 @@ var init_c = __esm({
     RULE_C_SODIUM_BOX = {
       id: "c-libsodium-box",
       title: "libsodium X25519 key pair",
-      description: "libsodium crypto_box_keypair (X25519 key agreement)",
+      description: "libsodium crypto_box / crypto_kx keypair + crypto_scalarmult (X25519 key agreement)",
       category: "key-exchange",
       severity: "medium",
       confidence: "high",
@@ -3694,7 +4123,7 @@ var init_c = __esm({
     RULE_C_SODIUM_SIGN = {
       id: "c-libsodium-sign",
       title: "libsodium Ed25519 key pair",
-      description: "libsodium crypto_sign_keypair (Ed25519 signatures)",
+      description: "libsodium crypto_sign(_ed25519)(_seed)_keypair (Ed25519 signatures)",
       category: "signature",
       severity: "low",
       confidence: "high",
@@ -4276,6 +4705,20 @@ var init_registry = __esm({
 function penaltyFor(weight, occurrence) {
   return weight / Math.sqrt(occurrence);
 }
+function isTestOrFixturePath(file) {
+  const f = file.toLowerCase().replace(/\\/g, "/");
+  if (/(?:^|\/)(?:tests?|__tests__|testdata|test-data|fixtures?|examples?|demos?|samples?|specs?|mocks?|docs?|benchmarks?|e2e)\//.test(f)) {
+    return true;
+  }
+  const base = f.slice(f.lastIndexOf("/") + 1);
+  if (/(?:^|[_.-])(?:test|spec)\.[a-z0-9]+$/.test(base))
+    return true;
+  if (/^test_[^/]+\.py$/.test(base))
+    return true;
+  if (/^changelog/.test(base) || /\.(?:md|markdown|rst|adoc|asciidoc)$/.test(base))
+    return true;
+  return false;
+}
 function readinessScore(findings) {
   if (findings.length === 0)
     return 100;
@@ -4289,7 +4732,8 @@ function readinessScore(findings) {
   let penalty = 0;
   for (const f of findings) {
     seen[f.severity] += 1;
-    penalty += penaltyFor(SEVERITY_WEIGHT[f.severity], seen[f.severity]);
+    const weight = SEVERITY_WEIGHT[f.severity] * (isTestOrFixturePath(f.location.file) ? TEST_PATH_WEIGHT : 1);
+    penalty += penaltyFor(weight, seen[f.severity]);
   }
   return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));
 }
@@ -4322,7 +4766,7 @@ function buildInventory(findings) {
     readinessScore: readinessScore(findings)
   };
 }
-var SEVERITIES, SEVERITY_WEIGHT, SCORE_SCALE;
+var SEVERITIES, SEVERITY_WEIGHT, SCORE_SCALE, TEST_PATH_WEIGHT;
 var init_inventory = __esm({
   "../core/dist/inventory.js"() {
     "use strict";
@@ -4335,6 +4779,7 @@ var init_inventory = __esm({
       info: 1
     };
     SCORE_SCALE = 100;
+    TEST_PATH_WEIGHT = 0.15;
   }
 });
 
@@ -4382,6 +4827,7 @@ function detectFile(file, content, dets, toggles, disabledRules) {
     out.push(...det.detect({ file, content }));
   }
   out = stripCommentFindings(out, content, file);
+  out = stripStringLiteralFindings(out, content, file, CODE_ONLY_RULES);
   out = stripIgnoredFindings(out, content);
   if (toggles.deps && isManifestFile(file)) {
     out.push(...scanManifest(file, content));
@@ -4502,6 +4948,7 @@ async function* filterExplicitFiles(files, options) {
   for (const rel of filterExplicitFileList(files, options))
     yield rel;
 }
+var CODE_ONLY_RULES;
 var init_scan = __esm({
   "../core/dist/scan.js"() {
     "use strict";
@@ -4514,6 +4961,7 @@ var init_scan = __esm({
     init_inventory();
     init_errors();
     init_version();
+    CODE_ONLY_RULES = /* @__PURE__ */ new Set(["go-jwt-signingmethod"]);
   }
 });
 
