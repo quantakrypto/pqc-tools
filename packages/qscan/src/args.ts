@@ -9,10 +9,12 @@
  */
 
 import { meetsThreshold, SEVERITY_ORDER, severityRank } from "@quantakrypto/core";
-import type { ContextLevel, ReportFormat, Severity } from "@quantakrypto/core";
+import type { ContextLevel, ReportFormat, SecurityTier, Severity } from "@quantakrypto/core";
 
 /** Valid context levels for `--context` (how much source triage/remediate sends). */
 const CONTEXT_LEVELS: readonly ContextLevel[] = ["metadata", "snippet", "function", "file"];
+/** Valid CNSA security tiers for `--tier` (report migration-target guidance). */
+const SECURITY_TIERS: readonly SecurityTier[] = ["category-3", "category-5"];
 /** Valid `--llm-provider` values. */
 const LLM_PROVIDERS = ["anthropic", "openai-compatible"] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
@@ -93,6 +95,8 @@ export interface QscanOptions {
   triageFloor?: Severity;
   /** Cap findings sent to the LLM during triage (`--max-findings`; spend guard). */
   maxFindings?: number;
+  /** CNSA security tier for the migration-targets footer (`--tier`). Default: none. */
+  tier?: SecurityTier;
   /** How much source context leaves the machine (`--context`). Default: snippet. */
   contextLevel?: ContextLevel;
   /** Print the exact triage payload and exit without calling the provider (`--dry-run`). */
@@ -290,6 +294,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--max-findings":
         options.maxFindings = asInt(takeValue(), "--max-findings");
         break;
+      case "--tier":
+        options.tier = asTier(takeValue());
+        break;
       case "--context":
         options.contextLevel = asContextLevel(takeValue());
         break;
@@ -409,6 +416,12 @@ export function asContextLevel(value: string): ContextLevel {
   throw new ArgError(
     `invalid --context "${value}" (expected one of: ${CONTEXT_LEVELS.join(", ")})`,
   );
+}
+
+/** Validate/normalize a `--tier` value. */
+export function asTier(value: string): SecurityTier {
+  if ((SECURITY_TIERS as readonly string[]).includes(value)) return value as SecurityTier;
+  throw new ArgError(`invalid --tier "${value}" (expected one of: ${SECURITY_TIERS.join(", ")})`);
 }
 
 /** Validate/normalize a `--llm-provider` value. */

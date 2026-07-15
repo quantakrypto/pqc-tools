@@ -280,8 +280,8 @@ const nodeCryptoDetector: Detector = {
         },
         dsa: { algo: "DSA", cat: "signature", sev: "high", hndl: false, label: "DSA" },
         dh: { algo: "DH", cat: "key-exchange", sev: "high", hndl: true, label: "Diffie-Hellman" },
-        x25519: { algo: "X25519", cat: "key-exchange", sev: "low", hndl: true, label: "X25519" },
-        x448: { algo: "X448", cat: "key-exchange", sev: "low", hndl: true, label: "X448" },
+        x25519: { algo: "X25519", cat: "key-exchange", sev: "medium", hndl: true, label: "X25519" },
+        x448: { algo: "X448", cat: "key-exchange", sev: "medium", hndl: true, label: "X448" },
         ed25519: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed25519" },
         ed448: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed448" },
       };

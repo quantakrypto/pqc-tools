@@ -43,7 +43,26 @@ function isConfidentialityFamily(algorithm) {
 function isSignatureFamily(algorithm) {
   return algorithm === "RSA" || algorithm === "ECDSA" || algorithm === "EdDSA" || algorithm === "DSA";
 }
-var REMEDIATIONS;
+function remediationForTier(algorithm, tier = "category-3") {
+  const base = REMEDIATIONS[algorithm];
+  const params = TIER_PARAMS[tier];
+  const isConf = isConfidentialityFamily(algorithm);
+  const primary = isConf ? params.kem : params.signature;
+  if (tier === "category-5") {
+    const hybridNote = isConf ? " If a hybrid TLS group is required, use SecP384r1MLKEM1024 (draft-ietf-tls-ecdhe-mlkem) \u2014 not X25519MLKEM768, whose ML-KEM-768 component does not meet CNSA 2.0." : "";
+    return {
+      algorithm,
+      recommendation: `${primary} \u2014 CNSA 2.0 mandates this parameter set (hybrids optional)`,
+      detail: `${base.detail} ${params.note} For CNSA 2.0 / national-security systems use ${params.kem} (KEM) and ${params.signature} (signatures).${hybridNote}`
+    };
+  }
+  return {
+    algorithm,
+    recommendation: `${base.recommendation} \u2014 ${tier}: ${primary}`,
+    detail: `${base.detail} ${params.note} For this tier use ${params.kem} (KEM) and ${params.signature} (signatures).`
+  };
+}
+var REMEDIATIONS, TIER_PARAMS;
 var init_remediation = __esm({
   "../core/dist/remediation.js"() {
     "use strict";
@@ -97,6 +116,18 @@ var init_remediation = __esm({
         algorithm: "unknown",
         recommendation: "review for post-quantum migration",
         detail: "This usage involves classical public-key cryptography. Audit it and plan a migration to NIST PQC standards (ML-KEM / FIPS 203, ML-DSA / FIPS 204)."
+      }
+    };
+    TIER_PARAMS = {
+      "category-3": {
+        kem: "ML-KEM-768 (FIPS 203)",
+        signature: "ML-DSA-65 (FIPS 204)",
+        note: "NIST Category 3 \u2014 default for general commercial use."
+      },
+      "category-5": {
+        kem: "ML-KEM-1024 (FIPS 203)",
+        signature: "ML-DSA-87 (FIPS 204)",
+        note: "NIST Category 5 \u2014 CNSA 2.0 for national-security systems and long-lived secrets (2030/2033 milestones)."
       }
     };
   }
@@ -1690,8 +1721,8 @@ var init_source = __esm({
             },
             dsa: { algo: "DSA", cat: "signature", sev: "high", hndl: false, label: "DSA" },
             dh: { algo: "DH", cat: "key-exchange", sev: "high", hndl: true, label: "Diffie-Hellman" },
-            x25519: { algo: "X25519", cat: "key-exchange", sev: "low", hndl: true, label: "X25519" },
-            x448: { algo: "X448", cat: "key-exchange", sev: "low", hndl: true, label: "X448" },
+            x25519: { algo: "X25519", cat: "key-exchange", sev: "medium", hndl: true, label: "X25519" },
+            x448: { algo: "X448", cat: "key-exchange", sev: "medium", hndl: true, label: "X448" },
             ed25519: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed25519" },
             ed448: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed448" }
           };
@@ -2271,7 +2302,7 @@ var init_python = __esm({
       title: "Python X25519 key exchange",
       description: "cryptography X25519PrivateKey.generate",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X25519",
       hndl: true,
@@ -2283,7 +2314,7 @@ var init_python = __esm({
       title: "Python X448 key exchange",
       description: "cryptography X448PrivateKey.generate",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X448",
       hndl: true,
@@ -2458,7 +2489,7 @@ var init_go = __esm({
       title: "Go X25519 key exchange",
       description: "crypto/ecdh X25519 key agreement",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X25519",
       hndl: true,
@@ -2750,7 +2781,7 @@ var init_java = __esm({
       title: "Java X25519/X448 key agreement",
       description: "JCA XDH / X25519 / X448 (KeyPairGenerator / KeyAgreement)",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X25519",
       hndl: true,
@@ -2956,7 +2987,14 @@ var init_csharp = __esm({
       description: "Classical asymmetric crypto (System.Security.Cryptography) and insecure TLS config in C#/.NET",
       scope: "source",
       language: "csharp",
-      rules: [RULE_CS_RSA, RULE_CS_ECDSA, RULE_CS_ECDH, RULE_CS_DSA, RULE_CS_TLS_CERT, RULE_CS_TLS_LEGACY],
+      rules: [
+        RULE_CS_RSA,
+        RULE_CS_ECDSA,
+        RULE_CS_ECDH,
+        RULE_CS_DSA,
+        RULE_CS_TLS_CERT,
+        RULE_CS_TLS_LEGACY
+      ],
       appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
@@ -3048,7 +3086,7 @@ var init_rust = __esm({
       title: "Rust X25519 key agreement",
       description: "x25519-dalek EphemeralSecret/StaticSecret",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X25519",
       hndl: true,
@@ -3110,7 +3148,7 @@ var init_rust = __esm({
       title: "Rust ring X25519 key agreement",
       description: "ring agreement::X25519",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "high",
       algorithm: "X25519",
       hndl: true,
@@ -3122,7 +3160,7 @@ var init_rust = __esm({
       title: "Rust X25519 key agreement (unqualified)",
       description: "bare EphemeralSecret::new (x25519-dalek imported via `use`)",
       category: "key-exchange",
-      severity: "low",
+      severity: "medium",
       confidence: "medium",
       algorithm: "X25519",
       hndl: true,
@@ -5077,6 +5115,27 @@ function toJson(result, opts) {
     }))
   };
 }
+function formatTierGuidance(byAlgorithm, tier) {
+  const label = tier === "category-5" ? "CNSA 2.0 (Category 5)" : "Category 3 (commercial)";
+  const out = [`${label} migration targets:`];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [k, n] of Object.entries(byAlgorithm)) {
+    if (n <= 0)
+      continue;
+    const fam = k;
+    if (fam === "unknown" || !remediationFor(fam))
+      continue;
+    const rem = remediationForTier(fam, tier);
+    if (seen.has(rem.recommendation))
+      continue;
+    seen.add(rem.recommendation);
+    out.push(`  ${fam} \u2192 ${rem.recommendation}`);
+  }
+  if (tier === "category-5") {
+    out.push("  CNSA 2.0 mandates ML-KEM-1024 / ML-DSA-87 for national-security systems and long-lived secrets (2030/2033 milestones).");
+  }
+  return out;
+}
 var SARIF_SCHEMA, INFORMATION_URI;
 var init_report = __esm({
   "../core/dist/report.js"() {
@@ -5084,6 +5143,7 @@ var init_report = __esm({
     init_version();
     init_severity();
     init_detect_utils();
+    init_remediation();
     SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json";
     INFORMATION_URI = "https://github.com/quantakrypto/pqc-tools";
   }
@@ -5924,6 +5984,13 @@ function renderHuman(result, opts = {}) {
   }
   lines.push("");
   lines.push(`${c.dim}Next step:${c.reset} ${nextStep(findings)}`);
+  if (opts.tier) {
+    lines.push("");
+    const g = formatTierGuidance(inventory.byAlgorithm, opts.tier);
+    lines.push(`${c.bold}${g[0]}${c.reset}`);
+    for (const t of g.slice(1))
+      lines.push(`${c.cyan}${t}${c.reset}`);
+  }
   return lines.join("\n");
 }
 function nextStep(findings) {
@@ -6086,13 +6153,14 @@ async function runQscan(opts, hooks = {}) {
     report: renderReport(result, options.format, {
       color: hooks.color ?? false,
       redactSnippets: options.noSnippets,
-      topN: options.topN
+      topN: options.topN,
+      tier: options.tier
     }),
     exitCode
   };
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0 } = typeof opts === "boolean" ? { color: opts } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0 } = typeof opts === "boolean" ? { color: opts } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
@@ -6102,7 +6170,7 @@ function renderReport(result, format, opts = {}) {
       return renderCbom(result);
     case "human":
     default:
-      return renderHuman(result, { color, topN });
+      return renderHuman(result, { color, topN, tier });
   }
 }
 

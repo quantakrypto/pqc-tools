@@ -104,7 +104,7 @@ export { vulnerableDependencies, DEP_VULNERABLE_RULE, isManifestFile } from "./d
 export { SEVERITY_ORDER, severityRank, meetsThreshold, sarifLevel } from "./severity.js";
 
 // Reporters.
-export { toSarif, toJson, formatSummary } from "./report.js";
+export { toSarif, toJson, formatSummary, formatTierGuidance } from "./report.js";
 export type { ReportOptions } from "./report.js";
 
 // CycloneDX 1.6 cryptographic bill of materials (CBOM) export.

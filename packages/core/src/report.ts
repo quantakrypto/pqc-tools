@@ -3,10 +3,12 @@
  * or a human-readable text summary. No third-party dependencies — ANSI colour
  * is emitted with raw escape codes and is off by default.
  */
-import type { Finding, RuleMeta, ScanResult, Severity } from "./types.js";
+import type { AlgorithmFamily, Finding, RuleMeta, ScanResult, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 import { SEVERITY_ORDER, sarifLevel } from "./severity.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "./detect-utils.js";
+import { remediationFor, remediationForTier } from "./remediation.js";
+import type { SecurityTier } from "./remediation.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
 export interface SarifLog {
@@ -327,7 +329,10 @@ function scoreColor(score: number): string {
  * Render a human-readable summary of a scan result. Colour is off by default;
  * pass `{ color: true }` to emit ANSI escape codes.
  */
-export function formatSummary(result: ScanResult, options?: { color?: boolean }): string {
+export function formatSummary(
+  result: ScanResult,
+  options?: { color?: boolean; tier?: SecurityTier },
+): string {
   const color = options?.color ?? false;
   const c = (code: string, text: string): string => (color ? `${code}${text}${ANSI.reset}` : text);
 
@@ -427,5 +432,39 @@ export function formatSummary(result: ScanResult, options?: { color?: boolean })
     );
   }
 
+  if (options?.tier) {
+    lines.push("", ...formatTierGuidance(inv.byAlgorithm, options.tier));
+  }
+
   return lines.join("\n");
+}
+
+/**
+ * Per-family migration targets for a CNSA security tier — surfaces the otherwise
+ * library-only {@link remediationForTier} in human reports. Category 5 shows the
+ * ML-KEM-1024 / ML-DSA-87 sets CNSA 2.0 mandates for national-security systems and
+ * long-lived secrets. Returns plain (un-coloured) lines; the caller styles them.
+ */
+export function formatTierGuidance(
+  byAlgorithm: Record<string, number>,
+  tier: SecurityTier,
+): string[] {
+  const label = tier === "category-5" ? "CNSA 2.0 (Category 5)" : "Category 3 (commercial)";
+  const out: string[] = [`${label} migration targets:`];
+  const seen = new Set<string>();
+  for (const [k, n] of Object.entries(byAlgorithm)) {
+    if (n <= 0) continue;
+    const fam = k as AlgorithmFamily;
+    if (fam === "unknown" || !remediationFor(fam)) continue; // skip unmapped families
+    const rem = remediationForTier(fam, tier);
+    if (seen.has(rem.recommendation)) continue;
+    seen.add(rem.recommendation);
+    out.push(`  ${fam} → ${rem.recommendation}`);
+  }
+  if (tier === "category-5") {
+    out.push(
+      "  CNSA 2.0 mandates ML-KEM-1024 / ML-DSA-87 for national-security systems and long-lived secrets (2030/2033 milestones).",
+    );
+  }
+  return out;
 }

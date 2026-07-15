@@ -11,7 +11,13 @@
  */
 
 import { changedFiles, scan, scanParallel } from "@quantakrypto/core";
-import type { Baseline, Finding, ParallelScanOptions, ScanResult } from "@quantakrypto/core";
+import type {
+  Baseline,
+  Finding,
+  ParallelScanOptions,
+  ScanResult,
+  SecurityTier,
+} from "@quantakrypto/core";
 
 import { applyBaseline, readBaseline, saveBaseline } from "./baseline.js";
 import { defaultOptions, meetsThreshold } from "./args.js";
@@ -241,6 +247,7 @@ export async function runQscan(
       color: hooks.color ?? false,
       redactSnippets: options.noSnippets,
       topN: options.topN,
+      tier: options.tier,
     }),
     exitCode,
   };
@@ -254,6 +261,8 @@ export interface RenderReportOptions {
   redactSnippets?: boolean;
   /** How many findings the human report lists (`--top N`). */
   topN?: number;
+  /** CNSA security tier for the migration-targets footer (`--tier`). */
+  tier?: SecurityTier;
 }
 
 /** Render a scan result in the requested format. */
@@ -267,6 +276,7 @@ export function renderReport(
     color = false,
     redactSnippets = false,
     topN = undefined,
+    tier = undefined,
   } = typeof opts === "boolean" ? { color: opts } : opts;
   switch (format) {
     case "json":
@@ -277,7 +287,7 @@ export function renderReport(
       return renderCbom(result);
     case "human":
     default:
-      return renderHuman(result, { color, topN });
+      return renderHuman(result, { color, topN, tier });
   }
 }
 

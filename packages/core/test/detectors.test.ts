@@ -244,11 +244,14 @@ test("every source finding carries a CWE id (P2-6)", () => {
   }
 });
 
-test("Node crypto x25519/ed25519 are flagged low", () => {
+test("Node crypto x25519 is medium (HNDL key agreement); ed25519 is low (signature)", () => {
+  // X25519 is a confidentiality/key-agreement primitive — as Shor-broken as P-256
+  // ECDH and the internet's largest harvest-now-decrypt-later surface — so it is
+  // rated medium, not low (standards audit). Ed25519 is a signature (deferrable) → low.
   const x = byRule(run("a.js", "generateKeyPairSync('x25519');"), "node-crypto-keygen");
   assert.ok(x);
   assert.equal(x.algorithm, "X25519");
-  assert.equal(x.severity, "low");
+  assert.equal(x.severity, "medium");
 
   const ed = byRule(run("a.js", "generateKeyPairSync('ed25519');"), "node-crypto-keygen");
   assert.ok(ed);

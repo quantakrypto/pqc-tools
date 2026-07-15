@@ -20,6 +20,15 @@ test("renderHuman warns when no analyzable source was scanned", () => {
   assert.doesNotMatch(out, /No quantum-vulnerable cryptography detected/);
 });
 
+test("renderHuman --tier category-5 surfaces the CNSA 2.0 migration targets", () => {
+  const result = makeResult([makeFinding({ algorithm: "RSA" })]);
+  const out = renderHuman(result, { tier: "category-5" });
+  assert.match(out, /CNSA 2\.0 \(Category 5\) migration targets/);
+  assert.match(out, /ML-KEM-1024/);
+  // Without --tier the CNSA footer is absent (opt-in).
+  assert.doesNotMatch(renderHuman(result), /CNSA 2\.0 \(Category 5\)/);
+});
+
 test("renderHuman reports a normal clean result when analyzable source was scanned", () => {
   const result = { ...makeResult([]), filesScanned: 12, analyzedFiles: 9 };
   const out = renderHuman(result);

@@ -15,13 +15,20 @@ import {
   ANALYZABLE_LANGUAGES_LABEL,
   defaultRegistry,
   DEP_VULNERABLE_RULE,
+  formatTierGuidance,
   SEVERITY_ORDER,
   severityRank,
   toCbom,
   toJson,
   toSarif,
 } from "@quantakrypto/core";
-import type { Finding, ReportOptions, ScanResult, Severity } from "@quantakrypto/core";
+import type {
+  Finding,
+  ReportOptions,
+  ScanResult,
+  SecurityTier,
+  Severity,
+} from "@quantakrypto/core";
 
 /** Minimal ANSI palette. Empty strings when color is disabled. */
 interface Palette {
@@ -91,7 +98,7 @@ export function renderCbom(result: ScanResult): string {
  */
 export function renderHuman(
   result: ScanResult,
-  opts: { color?: boolean; topN?: number } = {},
+  opts: { color?: boolean; topN?: number; tier?: SecurityTier } = {},
 ): string {
   const c = opts.color ? COLOR : PLAIN;
   const topN = opts.topN ?? 5;
@@ -186,6 +193,14 @@ export function renderHuman(
   }
   lines.push("");
   lines.push(`${c.dim}Next step:${c.reset} ${nextStep(findings)}`);
+
+  // CNSA security-tier migration targets (`--tier`), surfacing remediationForTier.
+  if (opts.tier) {
+    lines.push("");
+    const g = formatTierGuidance(inventory.byAlgorithm, opts.tier);
+    lines.push(`${c.bold}${g[0]}${c.reset}`);
+    for (const t of g.slice(1)) lines.push(`${c.cyan}${t}${c.reset}`);
+  }
 
   return lines.join("\n");
 }

@@ -130,7 +130,7 @@ const RULE_GO_X25519: RuleMeta = {
   title: "Go X25519 key exchange",
   description: "crypto/ecdh X25519 key agreement",
   category: "key-exchange",
-  severity: "low",
+  severity: "medium",
   confidence: "high",
   algorithm: "X25519",
   hndl: true,

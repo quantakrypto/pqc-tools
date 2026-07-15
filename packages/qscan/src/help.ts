@@ -41,6 +41,8 @@ OPTIONS
   --concurrency <n>             Worker count for --parallel (implies --parallel);
                                 0 forces the in-process serial path
   --top <n>                     List <n> findings in the human report (default: 5)
+  --tier <category-3|category-5> Add CNSA migration targets to the report footer
+                                (category-5 = CNSA 2.0: ML-KEM-1024 / ML-DSA-87)
   --cache [file]                Reuse findings for unchanged files across runs
                                 (default file: .quantakrypto-cache.json)
   --triage                      BYOK LLM pass that re-ranks findings by real

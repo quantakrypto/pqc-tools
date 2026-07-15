@@ -146,7 +146,7 @@ const RULE_JAVA_XDH: RuleMeta = {
   title: "Java X25519/X448 key agreement",
   description: "JCA XDH / X25519 / X448 (KeyPairGenerator / KeyAgreement)",
   category: "key-exchange",
-  severity: "low",
+  severity: "medium",
   confidence: "high",
   algorithm: "X25519",
   hndl: true,
