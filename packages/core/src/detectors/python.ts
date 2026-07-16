@@ -241,6 +241,63 @@ const RULE_PY_TLS_LEGACY: RuleMeta = {
     "Use ssl.PROTOCOL_TLS_CLIENT with minimum_version = ssl.TLSVersion.TLSv1_3 and prefer PQC-hybrid key exchange.",
 };
 
+/**
+ * Aliasable `cryptography` / PyCryptodome modules → the (method, rule) pairs
+ * reachable through them. Lets an aliased module import
+ * (`from ... import rsa as _rsa` → `_rsa.generate_private_key(`) resolve back to
+ * the same rule the direct `rsa.generate_private_key(` would fire, since the
+ * detector's regexes are module-qualified and miss a renamed prefix.
+ */
+const PY_MODULE_RULES: Record<string, ReadonlyArray<{ method: string; rule: RuleMeta }>> = {
+  rsa: [{ method: "generate_private_key", rule: RULE_PY_RSA_KEYGEN }],
+  ec: [
+    { method: "generate_private_key", rule: RULE_PY_EC_KEYGEN },
+    { method: "ECDSA", rule: RULE_PY_ECDSA },
+    { method: "ECDH", rule: RULE_PY_ECDH },
+  ],
+  dsa: [{ method: "generate_private_key", rule: RULE_PY_HAZMAT_DSA }],
+  dh: [{ method: "generate_parameters", rule: RULE_PY_DH }],
+  padding: [{ method: "OAEP", rule: RULE_PY_RSA_ENCRYPT }],
+  // PyCryptodome factory modules (`.generate(`).
+  RSA: [{ method: "generate", rule: RULE_PY_RSA_KEYGEN }],
+  ECC: [{ method: "generate", rule: RULE_PY_EC_KEYGEN }],
+  DSA: [{ method: "generate", rule: RULE_PY_DSA }],
+};
+
+/** Escape a string for interpolation into a dynamically-built RegExp. */
+function escapePyRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Collect module aliases for the aliasable crypto modules, so a later
+ * `<alias>.<method>(` call still resolves. Handles both `from <path> import
+ * <mod> as <alias>` (including comma-separated specifiers) and the bare
+ * `import <path.mod> as <alias>`. Returns Map<module, alias[]>; an alias equal to
+ * its own module name is skipped (matched directly already).
+ */
+function collectPyModuleAliases(content: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (mod: string, alias: string): void => {
+    if (!alias || alias === mod || !(mod in PY_MODULE_RULES)) return;
+    const list = out.get(mod) ?? [];
+    if (!list.includes(alias)) list.push(alias);
+    out.set(mod, list);
+  };
+  // `from <path> import a as b, c as d` — scan the import list for `X as Y`.
+  const fromRe = /(?:^|\n)[ \t]*from\s+[\w.]+\s+import\s+([^\n#]+)/g;
+  for (let m = fromRe.exec(content); m; m = fromRe.exec(content)) {
+    const specRe = /([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+    for (let s = specRe.exec(m[1]); s; s = specRe.exec(m[1])) add(s[1], s[2]);
+  }
+  // `import <path.mod> as <alias>` — the aliased module is the last dotted segment.
+  const impRe = /(?:^|\n)[ \t]*import\s+([\w.]+)\s+as\s+([A-Za-z_]\w*)/g;
+  for (let m = impRe.exec(content); m; m = impRe.exec(content)) {
+    add(m[1].split(".").pop() ?? m[1], m[2]);
+  }
+  return out;
+}
+
 /** Detects classical asymmetric crypto in Python source. */
 export const pythonDetector: Detector = {
   id: "python-crypto",
@@ -285,6 +342,20 @@ export const pythonDetector: Detector = {
     add(RE_PY_EDDSA, RULE_PY_EDDSA);
     add(RE_PY_TLS_REJECT, RULE_PY_TLS_REJECT);
     add(RE_PY_TLS_LEGACY, RULE_PY_TLS_LEGACY);
+
+    // Module-alias resolution: `from ... import rsa as _rsa` then
+    // `_rsa.generate_private_key(` — the direct regexes are module-qualified
+    // (`\brsa\.`) and miss a renamed prefix. Runs on the ORIGINAL content so
+    // locations stay exact; fires only for an alias explicitly bound to a known
+    // crypto module, so precision is unaffected.
+    for (const [mod, aliasList] of collectPyModuleAliases(content)) {
+      for (const alias of aliasList) {
+        const a = escapePyRe(alias);
+        for (const { method, rule } of PY_MODULE_RULES[mod]) {
+          add(new RegExp(`\\b${a}\\.${method}\\s*\\(`, "g"), rule);
+        }
+      }
+    }
 
     return findings;
   },

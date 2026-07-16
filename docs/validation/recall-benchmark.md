@@ -65,7 +65,7 @@ guard; the enumerated false negatives are the point.
 library-form gaps, and the gaps a real-repo validation run surfaced (initial
 baseline was 0.645):
 
-**Overall: detection recall 0.830** (146 / 176; 10 caught unclassified; 30 false
+**Overall: detection recall 0.835** (147 / 176; 10 caught unclassified; 29 false
 negatives).
 
 | By difficulty | recall |
@@ -74,20 +74,28 @@ negatives).
 | uncommon      | 0.913  |
 | canonical     | 0.892  |
 | adversarial   | 0.474  |
-| aliased       | 0.368  |
+| aliased       | 0.421  |
 
 The shape is the finding: the scanner catches **config** (1.00), **uncommon**
 (0.90), and **canonical** (0.89) idioms well, and is bounded where the algorithm
-identity is **obscured** — `aliased` (0.37, renamed imports / wrappers) and
+identity is **obscured** — `aliased` (0.42, renamed imports / wrappers) and
 `adversarial` (0.47, algorithm names assembled at runtime). Those two bands are
-the lexical ceiling, and they are where the residual 30 false negatives live.
+the lexical ceiling, and they are where the residual 29 false negatives live.
 
-**Import-alias resolution (JS/TS)** now follows `import { generateKeyPairSync as
-gk } from 'node:crypto'` and the CommonJS `const { createECDH: mk } =
-require(...)` destructure-rename for the keygen / ECDH / DH constructors, so an
-aliased call still detects — lifting `aliased` 0.32 → 0.37 (and overall 0.824 →
-0.830) with precision held at 1.000. Aliases in other languages (Python module
-`as`, Java/Rust/Ruby renames) remain the residual `aliased` gap.
+**Import-alias resolution** now follows renamed imports so an aliased call still
+detects, lifting `aliased` 0.32 → 0.42 (overall 0.824 → 0.835) with precision
+held at 1.000:
+
+- **JS/TS** — `import { generateKeyPairSync as gk } from 'node:crypto'` and the
+  CommonJS `const { createECDH: mk } = require(...)` destructure-rename, for the
+  keygen / ECDH / DH constructors.
+- **Python** — module aliases `from ...asymmetric import rsa as _rsa` (and
+  comma-separated / PyCryptodome `import ...RSA as _R`), resolving
+  `_rsa.generate_private_key(` / `_ec.ECDSA(` / `_ec.ECDH(` / `_R.generate(` back
+  to their rule.
+
+Aliases in the remaining languages (Java/Rust/Ruby renames, and runtime
+name-assembly in the `adversarial` band) are the residual `aliased` gap.
 
 ## What the false negatives tell us
 

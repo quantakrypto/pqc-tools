@@ -35,6 +35,53 @@ test("cryptography: RSA key generation", () => {
   assert.equal(f.location.line, 2);
 });
 
+test("module-alias: `import rsa as _rsa` then `_rsa.generate_private_key` resolves", () => {
+  const src = [
+    "from cryptography.hazmat.primitives.asymmetric import rsa as _rsa",
+    "key = _rsa.generate_private_key(public_exponent=65537, key_size=3072)",
+  ].join("\n");
+  const f = byRule(run("keys.py", src), "python-rsa-keygen");
+  assert.ok(f, "aliased rsa keygen detected");
+  assert.equal(f.algorithm, "RSA");
+  assert.equal(f.hndl, true);
+  assert.equal(f.location.line, 2, "location points at the aliased call, not the import");
+});
+
+test("module-alias: comma-separated `ec as _ec` resolves keygen/ECDSA/ECDH", () => {
+  const src = [
+    "from cryptography.hazmat.primitives.asymmetric import rsa as _rsa, ec as _ec",
+    "sk = _ec.generate_private_key(_ec.SECP256R1())",
+    "sig = _ec.ECDSA(hashes.SHA256())",
+    "shared = priv.exchange(_ec.ECDH(), peer)",
+  ].join("\n");
+  const findings = run("k.py", src);
+  assert.equal(byRule(findings, "python-ec-keygen")?.hndl, true);
+  assert.equal(byRule(findings, "python-ecdsa")?.algorithm, "ECDSA");
+  assert.equal(byRule(findings, "python-ecdh")?.hndl, true);
+});
+
+test("module-alias: PyCryptodome `import ...RSA as _R` then `_R.generate` resolves", () => {
+  const src = ["import Crypto.PublicKey.RSA as _R", "k = _R.generate(2048)"].join("\n");
+  assert.equal(byRule(run("k.py", src), "python-rsa-keygen")?.algorithm, "RSA");
+});
+
+test("module-alias: an alias bound to a NON-crypto module does not fire (precision)", () => {
+  // `_rsa` here is a stats module, not the crypto one — `_rsa.generate_private_key`
+  // is not a real call, but even a coincidental `.generate(` must stay silent.
+  const src = ["import numpy as _rsa", "x = _rsa.generate(2048)"].join("\n");
+  // numpy is not aliasable, so nothing binds `_rsa` to a crypto module.
+  assert.equal(byRule(run("k.py", src), "python-rsa-keygen"), undefined);
+});
+
+test("module-alias: a non-aliased call is NOT double-counted by the alias pass", () => {
+  const src = [
+    "from cryptography.hazmat.primitives.asymmetric import rsa",
+    "key = rsa.generate_private_key(public_exponent=65537, key_size=2048)",
+  ].join("\n");
+  const hits = run("keys.py", src).filter((f) => f.ruleId === "python-rsa-keygen");
+  assert.equal(hits.length, 1, "one call → exactly one finding");
+});
+
 test("PyCryptodome: RSA.generate and ECC.generate", () => {
   const rsa = byRule(run("a.py", "key = RSA.generate(2048)"), "python-rsa-keygen");
   assert.equal(rsa?.algorithm, "RSA");

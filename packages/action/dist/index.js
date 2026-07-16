@@ -2564,7 +2564,32 @@ var init_source = __esm({
 });
 
 // ../core/dist/detectors/python.js
-var RE_PY_RSA_KEYGEN, RE_PY_RSA_ENCRYPT, RE_PY_EC_KEYGEN, RE_PY_ECDSA, RE_PY_ECDH, RE_PY_DSA, RE_PY_HAZMAT_DSA, RE_PY_DH, RE_PY_X25519, RE_PY_X448, RE_PY_EDDSA, RE_PY_TLS_REJECT, RE_PY_TLS_LEGACY, RULE_PY_RSA_KEYGEN, RULE_PY_RSA_ENCRYPT, RULE_PY_EC_KEYGEN, RULE_PY_ECDSA, RULE_PY_ECDH, RULE_PY_DSA, RULE_PY_HAZMAT_DSA, RULE_PY_DH, RULE_PY_X25519, RULE_PY_X448, RULE_PY_EDDSA, RULE_PY_TLS_REJECT, RULE_PY_TLS_LEGACY, pythonDetector;
+function escapePyRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function collectPyModuleAliases(content) {
+  const out = /* @__PURE__ */ new Map();
+  const add = (mod, alias) => {
+    if (!alias || alias === mod || !(mod in PY_MODULE_RULES))
+      return;
+    const list = out.get(mod) ?? [];
+    if (!list.includes(alias))
+      list.push(alias);
+    out.set(mod, list);
+  };
+  const fromRe = /(?:^|\n)[ \t]*from\s+[\w.]+\s+import\s+([^\n#]+)/g;
+  for (let m = fromRe.exec(content); m; m = fromRe.exec(content)) {
+    const specRe = /([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+    for (let s = specRe.exec(m[1]); s; s = specRe.exec(m[1]))
+      add(s[1], s[2]);
+  }
+  const impRe = /(?:^|\n)[ \t]*import\s+([\w.]+)\s+as\s+([A-Za-z_]\w*)/g;
+  for (let m = impRe.exec(content); m; m = impRe.exec(content)) {
+    add(m[1].split(".").pop() ?? m[1], m[2]);
+  }
+  return out;
+}
+var RE_PY_RSA_KEYGEN, RE_PY_RSA_ENCRYPT, RE_PY_EC_KEYGEN, RE_PY_ECDSA, RE_PY_ECDH, RE_PY_DSA, RE_PY_HAZMAT_DSA, RE_PY_DH, RE_PY_X25519, RE_PY_X448, RE_PY_EDDSA, RE_PY_TLS_REJECT, RE_PY_TLS_LEGACY, RULE_PY_RSA_KEYGEN, RULE_PY_RSA_ENCRYPT, RULE_PY_EC_KEYGEN, RULE_PY_ECDSA, RULE_PY_ECDH, RULE_PY_DSA, RULE_PY_HAZMAT_DSA, RULE_PY_DH, RULE_PY_X25519, RULE_PY_X448, RULE_PY_EDDSA, RULE_PY_TLS_REJECT, RULE_PY_TLS_LEGACY, PY_MODULE_RULES, pythonDetector;
 var init_python = __esm({
   "../core/dist/detectors/python.js"() {
     "use strict";
@@ -2743,6 +2768,21 @@ var init_python = __esm({
       message: "TLS 1.0 (ssl.PROTOCOL_TLSv1) is deprecated and insecure; require TLS 1.3.",
       remediation: "Use ssl.PROTOCOL_TLS_CLIENT with minimum_version = ssl.TLSVersion.TLSv1_3 and prefer PQC-hybrid key exchange."
     };
+    PY_MODULE_RULES = {
+      rsa: [{ method: "generate_private_key", rule: RULE_PY_RSA_KEYGEN }],
+      ec: [
+        { method: "generate_private_key", rule: RULE_PY_EC_KEYGEN },
+        { method: "ECDSA", rule: RULE_PY_ECDSA },
+        { method: "ECDH", rule: RULE_PY_ECDH }
+      ],
+      dsa: [{ method: "generate_private_key", rule: RULE_PY_HAZMAT_DSA }],
+      dh: [{ method: "generate_parameters", rule: RULE_PY_DH }],
+      padding: [{ method: "OAEP", rule: RULE_PY_RSA_ENCRYPT }],
+      // PyCryptodome factory modules (`.generate(`).
+      RSA: [{ method: "generate", rule: RULE_PY_RSA_KEYGEN }],
+      ECC: [{ method: "generate", rule: RULE_PY_EC_KEYGEN }],
+      DSA: [{ method: "generate", rule: RULE_PY_DSA }]
+    };
     pythonDetector = {
       id: "python-crypto",
       description: "Classical asymmetric crypto in Python (cryptography, PyCryptodome, paramiko)",
@@ -2780,6 +2820,14 @@ var init_python = __esm({
         add(RE_PY_EDDSA, RULE_PY_EDDSA);
         add(RE_PY_TLS_REJECT, RULE_PY_TLS_REJECT);
         add(RE_PY_TLS_LEGACY, RULE_PY_TLS_LEGACY);
+        for (const [mod, aliasList] of collectPyModuleAliases(content)) {
+          for (const alias of aliasList) {
+            const a = escapePyRe(alias);
+            for (const { method, rule } of PY_MODULE_RULES[mod]) {
+              add(new RegExp(`\\b${a}\\.${method}\\s*\\(`, "g"), rule);
+            }
+          }
+        }
         return findings;
       }
     };
