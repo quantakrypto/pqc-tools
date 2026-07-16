@@ -39,8 +39,15 @@ test("gpg --detach-sign is flagged as RSA signing", () => {
 });
 
 test("jarsigner, codesign and minisign are detected", () => {
-  assert.ok(rule(run("Jenkinsfile", "sh 'jarsigner -keystore ks.jks app.jar alias'"), "ci-jarsigner"));
-  assert.ok(rule(run(".github/workflows/mac.yml", "run: codesign --sign 'Dev ID' MyApp.app"), "ci-codesign"));
+  assert.ok(
+    rule(run("Jenkinsfile", "sh 'jarsigner -keystore ks.jks app.jar alias'"), "ci-jarsigner"),
+  );
+  assert.ok(
+    rule(
+      run(".github/workflows/mac.yml", "run: codesign --sign 'Dev ID' MyApp.app"),
+      "ci-codesign",
+    ),
+  );
   assert.ok(rule(run(".github/workflows/rel.yml", "run: minisign -Sm dist/app"), "ci-minisign"));
 });
 
@@ -51,7 +58,9 @@ test("CI signing detector is gated to pipeline files (not arbitrary scripts/docs
     [],
   );
   assert.deepEqual(
-    run("README.md", "We sign releases with gpg --detach-sign.").filter((f) => f.ruleId.startsWith("ci-")),
+    run("README.md", "We sign releases with gpg --detach-sign.").filter((f) =>
+      f.ruleId.startsWith("ci-"),
+    ),
     [],
   );
 });

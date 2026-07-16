@@ -1,0 +1,46 @@
+{
+  "name": "@quantakrypto/qprobe",
+  "version": "0.1.0",
+  "description": "qProbe — actively inspect live TLS/SSH endpoints you OWN for post-quantum readiness (hybrid KEX, classical certs). Gated behind an ownership attestation. Zero runtime dependencies.",
+  "license": "Apache-2.0",
+  "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
+  "homepage": "https://github.com/quantakrypto/pqc-tools/tree/main/packages/qprobe#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quantakrypto/pqc-tools.git",
+    "directory": "packages/qprobe"
+  },
+  "bugs": {
+    "url": "https://github.com/quantakrypto/pqc-tools/issues"
+  },
+  "type": "module",
+  "bin": {
+    "qprobe": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "THREAT-MODEL.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@quantakrypto/core": "0.4.3"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --import tsx --test test/*.test.ts"
+  }
+}

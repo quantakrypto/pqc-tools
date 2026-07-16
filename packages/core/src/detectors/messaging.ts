@@ -35,7 +35,8 @@ const MQ_RULES: MqRule[] = [
       confidence: "high",
       hndl: false,
       cwe: CWE_RISKY_PRIMITIVE,
-      message: "Kafka broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
+      message:
+        "Kafka broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
       remediation: "Require TLS 1.3 and track PQC-hybrid KEX (X25519MLKEM768).",
     },
   },
@@ -50,7 +51,8 @@ const MQ_RULES: MqRule[] = [
       confidence: "high",
       hndl: false,
       cwe: CWE_RISKY_PRIMITIVE,
-      message: "MQTT broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
+      message:
+        "MQTT broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
       remediation: "Require TLS 1.3 and track PQC-hybrid KEX for device fleets.",
     },
   },
@@ -68,7 +70,8 @@ const MQ_RULES: MqRule[] = [
       cwe: CWE_BROKEN_CRYPTO,
       message:
         "Broker TLS is pinned to a classical (EC)DHE/RSA cipher suite; the key exchange is harvest-now-decrypt-later exposed.",
-      remediation: "Move to TLS 1.3 with a PQC-hybrid group (X25519MLKEM768) once the broker/runtime supports it.",
+      remediation:
+        "Move to TLS 1.3 with a PQC-hybrid group (X25519MLKEM768) once the broker/runtime supports it.",
     },
   },
 ];

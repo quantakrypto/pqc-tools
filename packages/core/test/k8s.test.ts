@@ -35,14 +35,16 @@ test("cert-manager ECDSA privateKey algorithm is flagged", () => {
 });
 
 test("cert-manager RSA key is flagged as HNDL", () => {
-  const y = "kind: Issuer\napiVersion: cert-manager.io/v1\nspec:\n  privateKey:\n    algorithm: RSA\n";
+  const y =
+    "kind: Issuer\napiVersion: cert-manager.io/v1\nspec:\n  privateKey:\n    algorithm: RSA\n";
   const f = rule(run("issuer.yaml", y), "k8s-certmanager-rsa");
   assert.equal(f?.algorithm, "RSA");
   assert.equal(f?.hndl, true);
 });
 
 test("Istio legacy TLS floor is flagged", () => {
-  const y = "kind: DestinationRule\nspec:\n  trafficPolicy:\n    tls:\n      minProtocolVersion: TLSV1_0\n";
+  const y =
+    "kind: DestinationRule\nspec:\n  trafficPolicy:\n    tls:\n      minProtocolVersion: TLSV1_0\n";
   assert.ok(rule(run("dr.yaml", y), "k8s-istio-legacy-tls"));
 });
 

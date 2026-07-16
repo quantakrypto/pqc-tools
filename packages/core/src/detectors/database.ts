@@ -60,12 +60,26 @@ export const databaseDetector: Detector = {
     const findings: Finding[] = [];
     if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {
       eachMatch(RE_PGCRYPTO, content, (m) =>
-        findings.push(findingFromRule(RULE_PGCRYPTO, { file, content, index: m.index, matchLength: m[0].length })),
+        findings.push(
+          findingFromRule(RULE_PGCRYPTO, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length,
+          }),
+        ),
       );
     }
     if (content.includes("sslmode")) {
       eachMatch(RE_WEAK_SSLMODE, content, (m) =>
-        findings.push(findingFromRule(RULE_WEAK_SSLMODE, { file, content, index: m.index, matchLength: m[0].length })),
+        findings.push(
+          findingFromRule(RULE_WEAK_SSLMODE, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length,
+          }),
+        ),
       );
     }
     return findings;

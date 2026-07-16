@@ -33,7 +33,8 @@ const RULE_CM_RSA: RuleMeta = {
   hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message: "cert-manager mints certificates with a classical RSA key, which is not quantum-safe.",
-  remediation: "Plan migration to PQC certificate keys (ML-DSA-65) as the CA/issuer chain adds support.",
+  remediation:
+    "Plan migration to PQC certificate keys (ML-DSA-65) as the CA/issuer chain adds support.",
 };
 const RULE_CM_ECDSA: RuleMeta = {
   id: "k8s-certmanager-ecdsa",
@@ -45,7 +46,8 @@ const RULE_CM_ECDSA: RuleMeta = {
   algorithm: "ECDSA",
   hndl: false,
   cwe: CWE_BROKEN_CRYPTO,
-  message: "cert-manager mints certificates with a classical ECDSA key, forgeable by a quantum attacker.",
+  message:
+    "cert-manager mints certificates with a classical ECDSA key, forgeable by a quantum attacker.",
   remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys.",
 };
 const RULE_CM_ED25519: RuleMeta = {
@@ -58,7 +60,8 @@ const RULE_CM_ED25519: RuleMeta = {
   algorithm: "EdDSA",
   hndl: false,
   cwe: CWE_BROKEN_CRYPTO,
-  message: "cert-manager mints certificates with a classical Ed25519 key, forgeable by a quantum attacker.",
+  message:
+    "cert-manager mints certificates with a classical Ed25519 key, forgeable by a quantum attacker.",
   remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys.",
 };
 const RULE_ISTIO_LEGACY_TLS: RuleMeta = {
@@ -72,7 +75,8 @@ const RULE_ISTIO_LEGACY_TLS: RuleMeta = {
   cwe: CWE_RISKY_PRIMITIVE,
   message:
     "Istio mesh TLS floor allows TLS 1.0/1.1; its classical (EC)DHE key exchange is weak and harvestable.",
-  remediation: "Raise minProtocolVersion to TLSV1_3 and track PQC-hybrid mesh KEX (X25519MLKEM768).",
+  remediation:
+    "Raise minProtocolVersion to TLSV1_3 and track PQC-hybrid mesh KEX (X25519MLKEM768).",
 };
 
 /** Detects classical cert-manager keys and legacy Istio TLS floors in K8s YAML. */
@@ -85,14 +89,17 @@ export const k8sDetector: Detector = {
   appliesTo: (f) => hasExtension(f, K8S_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const isCertManager =
-      content.includes("cert-manager.io") || /kind:\s*["']?(?:Certificate|Issuer|ClusterIssuer)\b/.test(content);
+      content.includes("cert-manager.io") ||
+      /kind:\s*["']?(?:Certificate|Issuer|ClusterIssuer)\b/.test(content);
     const isIstio = content.includes("minProtocolVersion");
     if (!isCertManager && !isIstio) return [];
 
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, content, (m) =>
-        findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })),
+        findings.push(
+          findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
+        ),
       );
     if (isCertManager) {
       add(RE_CM_RSA, RULE_CM_RSA);

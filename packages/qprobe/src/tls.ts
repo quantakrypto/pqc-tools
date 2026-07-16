@@ -1,0 +1,132 @@
+/**
+ * TLS endpoint inspection. Two engines:
+ *  1. `probeTlsNegotiated` — a normal `node:tls` handshake to read what the server
+ *     actually negotiates: TLS version, cipher suite, ephemeral key-exchange group
+ *     (the harvestable part), and the leaf certificate's public-key type/size.
+ *  2. `probeHybridSupport` — a raw ClientHello (clienthello.ts) advertising
+ *     X25519MLKEM768, to detect PQC-HYBRID support that Node's bundled OpenSSL
+ *     cannot itself negotiate.
+ *
+ * `engine disposes`: we read the negotiated reality and disconnect; we never
+ * modify the endpoint.
+ */
+import { connect as tlsConnect } from "node:tls";
+import { connect as netConnect } from "node:net";
+import {
+  buildClientHello,
+  readServerHello,
+  GROUP_X25519MLKEM768,
+  type ServerHelloInfo,
+} from "./clienthello.js";
+
+export interface TlsNegotiated {
+  protocol?: string;
+  cipher?: string;
+  /** Ephemeral key-exchange group, e.g. "X25519", "P-256", "DH". */
+  kexGroup?: string;
+  kexType?: string;
+  /** Leaf certificate public-key summary. */
+  certKeyType?: string;
+  certKeyBits?: number;
+  certSubject?: string;
+  error?: string;
+}
+
+/** Perform a normal TLS handshake and read the negotiated parameters. */
+export function probeTlsNegotiated(
+  host: string,
+  port: number,
+  opts: { servername?: string; timeoutMs?: number } = {},
+): Promise<TlsNegotiated> {
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (r: TlsNegotiated) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      resolve(r);
+    };
+    // SNI must not be an IP literal (RFC 6066); omit it for bare IPs.
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+    const servername = opts.servername ?? (isIp ? undefined : host);
+    const socket = tlsConnect({
+      host,
+      port,
+      servername,
+      rejectUnauthorized: false, // we inspect posture; we do not assert trust
+      minVersion: "TLSv1.2",
+    });
+    socket.setTimeout(timeoutMs);
+    socket.on("timeout", () => finish({ error: "timeout" }));
+    socket.on("error", (e) => finish({ error: e.message }));
+    socket.on("secureConnect", () => {
+      const cipher = socket.getCipher();
+      const kex = socket.getEphemeralKeyInfo();
+      const cert = socket.getPeerCertificate(false);
+      const cn = cert?.subject?.CN;
+      finish({
+        protocol: socket.getProtocol() ?? undefined,
+        cipher: cipher?.standardName ?? cipher?.name,
+        kexGroup: kex && "name" in kex ? kex.name : undefined,
+        kexType: kex && "type" in kex ? kex.type : undefined,
+        certKeyType: cert?.asn1Curve ? `EC(${cert.asn1Curve})` : cert?.pubkey ? "RSA" : undefined,
+        certKeyBits: typeof cert?.bits === "number" ? cert.bits : undefined,
+        certSubject: Array.isArray(cn) ? cn[0] : cn,
+      });
+    });
+  });
+}
+
+export interface HybridSupport {
+  /** True only when the server SELECTED the hybrid group (proof of support). */
+  hybridSelected: boolean;
+  selectedGroup?: number;
+  isHelloRetryRequest?: boolean;
+  negotiatedVersion?: number;
+  error?: string;
+}
+
+/**
+ * Send a raw ClientHello advertising X25519MLKEM768 and read the group the server
+ * selects. A server that supports+prefers the hybrid group answers with a
+ * HelloRetryRequest selecting 0x11EC — positive proof of PQC-hybrid support.
+ */
+export function probeHybridSupport(
+  host: string,
+  port: number,
+  opts: { servername?: string; timeoutMs?: number } = {},
+): Promise<HybridSupport> {
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  return new Promise((resolve) => {
+    let buf = Buffer.alloc(0);
+    let done = false;
+    const finish = (r: HybridSupport) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      resolve(r);
+    };
+    const socket = netConnect({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => {
+      socket.write(buildClientHello({ serverName: opts.servername ?? host }));
+    });
+    socket.on("timeout", () => finish({ hybridSelected: false, error: "timeout" }));
+    socket.on("error", (e) => finish({ hybridSelected: false, error: e.message }));
+    socket.on("data", (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      const sh: ServerHelloInfo | undefined = readServerHello(buf);
+      if (!sh) {
+        if (buf.length > 64 * 1024) finish({ hybridSelected: false, error: "no ServerHello" });
+        return;
+      }
+      finish({
+        hybridSelected: sh.selectedGroup === GROUP_X25519MLKEM768,
+        selectedGroup: sh.selectedGroup,
+        isHelloRetryRequest: sh.isHelloRetryRequest,
+        negotiatedVersion: sh.negotiatedVersion,
+      });
+    });
+  });
+}

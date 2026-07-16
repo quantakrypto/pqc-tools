@@ -6,6 +6,7 @@
     { "path": "packages/qscan" },
     { "path": "packages/mcp" },
     { "path": "packages/action" },
-    { "path": "packages/sieve" }
+    { "path": "packages/sieve" },
+    { "path": "packages/qprobe" }
   ]
 }

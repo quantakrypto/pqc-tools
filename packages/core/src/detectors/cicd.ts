@@ -96,7 +96,8 @@ const CI_RULES: CiRule[] = [
       cwe: CWE_BROKEN_CRYPTO,
       message:
         "CI pipeline signs JARs with jarsigner (classical RSA/DSA/EC signing key); forgeable once a CRQC exists.",
-      remediation: "Plan migration to a PQC signature scheme (ML-DSA-65 / SLH-DSA) as the JDK adds support.",
+      remediation:
+        "Plan migration to a PQC signature scheme (ML-DSA-65 / SLH-DSA) as the JDK adds support.",
     },
   },
   {

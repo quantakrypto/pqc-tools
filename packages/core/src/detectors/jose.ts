@@ -65,14 +65,19 @@ const JOSE_RULES: JoseRule[] = [
 /** Detects classical JWE key-management (`alg`) values in JOSE tokens/config. */
 export const joseDetector: Detector = {
   id: "jose-jwe-keymgmt",
-  description: "Classical JWE key-management algorithms (RSA-OAEP, ECDH-ES) — confidentiality, HNDL",
+  description:
+    "Classical JWE key-management algorithms (RSA-OAEP, ECDH-ES) — confidentiality, HNDL",
   scope: "config",
   language: "any",
   rules: JOSE_RULES.map((r) => r.meta),
   appliesTo: () => true,
   detect({ file, content }): Finding[] {
     // Fast reject: no JOSE key-management alg token present.
-    if (!content.includes("RSA-OAEP") && !content.includes("RSA1_5") && !content.includes("ECDH-ES")) {
+    if (
+      !content.includes("RSA-OAEP") &&
+      !content.includes("RSA1_5") &&
+      !content.includes("ECDH-ES")
+    ) {
       return [];
     }
     const findings: Finding[] = [];

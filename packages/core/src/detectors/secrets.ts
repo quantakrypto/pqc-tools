@@ -85,7 +85,8 @@ const SECRET_RULES: SecretRule[] = [
 /** Detects secrets encrypted at rest with classical asymmetric key wrapping. */
 export const secretsDetector: Detector = {
   id: "secrets-at-rest",
-  description: "Secrets wrapped at rest with classical asymmetric crypto (SOPS/age, PGP, Sealed Secrets)",
+  description:
+    "Secrets wrapped at rest with classical asymmetric crypto (SOPS/age, PGP, Sealed Secrets)",
   scope: "config",
   language: "any",
   rules: SECRET_RULES.map((r) => r.meta),

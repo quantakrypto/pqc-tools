@@ -48,7 +48,9 @@ test("sslmode=verify-full is NOT flagged", () => {
 
 test("pgcrypto text in a non-.sql file does NOT fire the pgcrypto rule", () => {
   assert.deepEqual(
-    run("notes.md", "we use pgp_pub_encrypt in the db").filter((f) => f.ruleId === "db-pgcrypto-pubkey"),
+    run("notes.md", "we use pgp_pub_encrypt in the db").filter(
+      (f) => f.ruleId === "db-pgcrypto-pubkey",
+    ),
     [],
   );
 });

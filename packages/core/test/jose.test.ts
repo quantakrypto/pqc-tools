@@ -27,7 +27,10 @@ test("JWE alg RSA-OAEP-256 is flagged as RSA KEM, HNDL", () => {
 });
 
 test("JWE alg ECDH-ES+A128KW is flagged as ECDH key agreement, HNDL", () => {
-  const f = rule(run("header.json", '{ "alg": "ECDH-ES+A128KW", "enc": "A128GCM" }'), "jose-jwe-ecdh");
+  const f = rule(
+    run("header.json", '{ "alg": "ECDH-ES+A128KW", "enc": "A128GCM" }'),
+    "jose-jwe-ecdh",
+  );
   assert.equal(f?.algorithm, "ECDH");
   assert.equal(f?.category, "key-exchange");
   assert.equal(f?.hndl, true);
