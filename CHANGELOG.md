@@ -24,6 +24,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
   Together these lift recall's `aliased` bucket 0.32 → 0.47 and overall recall
   0.824 → **0.847**, with precision held at 1.000.
+- **Cloud KMS SDK detection (AWS KMS)** — a config-scope detector for classical
+  keys minted at *runtime* via the AWS KMS SDK (the app-code counterpart to the
+  Terraform IaC detector): `CreateKey` / `GenerateDataKeyPair` with a
+  `KeySpec` / `KeyPairSpec` / legacy `CustomerMasterKeySpec` of `RSA_*` or `ECC_*`.
+  One lexical rule catches every SDK language (JS/TS, Python/boto3, Java, Go, CLI,
+  JSON) and both the `key: val` and quoted-JSON `"key": val` forms; the case-
+  sensitive PascalCase field name means it never double-counts with Terraform's
+  snake_case `customer_master_key_spec`. Symmetric (`SYMMETRIC_DEFAULT`) keys stay
+  silent.
 - **Terraform / OpenTofu (IaC) detection** — a new config-scope detector for the
   classical keys and CMKs that infrastructure code provisions (never visible to
   the language packs): hashicorp/tls `tls_private_key` (`algorithm = "RSA"/"ECDSA"`),

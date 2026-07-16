@@ -5050,6 +5050,63 @@ var init_terraform = __esm({
   }
 });
 
+// ../core/dist/detectors/cloud-kms.js
+var SPEC_KEYS, RE_KMS_RSA, RE_KMS_EC, RULE_KMS_RSA, RULE_KMS_EC, cloudKmsDetector;
+var init_cloud_kms = __esm({
+  "../core/dist/detectors/cloud-kms.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    SPEC_KEYS = "KeySpec|KeyPairSpec|CustomerMasterKeySpec";
+    RE_KMS_RSA = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"]RSA_\\d+['"]`, "g");
+    RE_KMS_EC = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"]ECC_[A-Z0-9_]+['"]`, "g");
+    RULE_KMS_RSA = {
+      id: "cloud-kms-rsa",
+      title: "AWS KMS RSA key",
+      description: "AWS KMS CreateKey / GenerateDataKeyPair with an RSA_* key spec",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Mints a classical RSA key via the AWS KMS SDK (harvest-now-decrypt-later exposed for encryption).",
+      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
+    };
+    RULE_KMS_EC = {
+      id: "cloud-kms-ec",
+      title: "AWS KMS EC key",
+      description: "AWS KMS CreateKey / GenerateDataKeyPair with an ECC_* key spec",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Mints a classical EC key via the AWS KMS SDK; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    cloudKmsDetector = {
+      id: "cloud-kms",
+      description: "Classical asymmetric keys minted via a cloud KMS SDK (AWS KMS)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_KMS_RSA, RULE_KMS_EC],
+      appliesTo: () => true,
+      detect({ file, content }) {
+        if (!content.includes("KeySpec") && !content.includes("KeyPairSpec") && !content.includes("CustomerMasterKeySpec")) {
+          return [];
+        }
+        const findings = [];
+        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_KMS_RSA, RULE_KMS_RSA);
+        add(RE_KMS_EC, RULE_KMS_EC);
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/stateful-hbs.js
 var STATEFUL_HBS_REMEDIATION, HBS_RULES, statefulHbsDetector;
 var init_stateful_hbs = __esm({
@@ -5210,6 +5267,7 @@ var init_registry = __esm({
     init_pem();
     init_jwk();
     init_terraform();
+    init_cloud_kms();
     init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
@@ -5288,6 +5346,7 @@ var init_registry = __esm({
       pemDetector,
       jwkDetector,
       terraformDetector,
+      cloudKmsDetector,
       statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
