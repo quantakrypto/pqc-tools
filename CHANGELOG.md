@@ -6,6 +6,36 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — infrastructure post-quantum readiness
+
+- **Six new config-scope detectors** in `@quantakrypto/core`, surfaced
+  automatically by qScan, the Action and MCP (no new install) — each gated and
+  tested with clean-negative cases to hold the precision bar:
+  - **`cicd`** — classical artifact/code signing in CI/CD pipelines (cosign/ECDSA,
+    GPG/RSA, `jarsigner`, `codesign`, minisign/Ed25519). Signature-side exposure
+    (`hndl:false`): forgeable once a CRQC exists.
+  - **`secrets`** — secrets wrapped at rest with classical asymmetric crypto:
+    SOPS/age recipients (X25519), PGP MESSAGE blocks (RSA/ElGamal), Bitnami
+    Sealed Secrets (RSA-OAEP). The sharpest harvest-now-decrypt-later story
+    (ciphertext committed to git is retroactively un-fixable). Symmetric
+    ansible-vault is intentionally out of scope.
+  - **`jose`** — JWE key-management algorithms (`RSA-OAEP`, `ECDH-ES`) —
+    confidentiality, HNDL-exposed; complements the JWK detector.
+  - **`k8s`** — cert-manager `privateKey.algorithm` (RSA/ECDSA/Ed25519) and Istio
+    legacy TLS floors, gated by a cert-manager / Istio marker.
+  - **`messaging`** — Kafka/MQTT legacy TLS protocols and classical (EC)DHE cipher
+    suites in broker config.
+  - **`database`** — pgcrypto public-key encryption (`pgp_pub_encrypt`) and libpq
+    `sslmode` without certificate verification.
+- **`@quantakrypto/qprobe`** — a new package for **active** post-quantum readiness
+  probing of live TLS/SSH endpoints you own. The only package that opens sockets,
+  isolated like `@quantakrypto/agent` and **hard-gated** behind an ownership
+  attestation (`--i-own-this` / `--owned-hosts`) enforced in code before any
+  network I/O; refuses CIDR/ranges/wildcards/lists. Detects PQC-hybrid TLS support
+  (X25519MLKEM768) via a hand-rolled raw ClientHello, reads SSH `KEXINIT`
+  algorithms, and reports the negotiated reality without ever modifying an endpoint
+  ("engine disposes"). Ships a `THREAT-MODEL.md`. Zero runtime dependencies.
+
 ### Added / Changed (standards currency + guidance wiring)
 
 - **Import-alias resolution (JS/TS + Python + Rust).** Detectors now follow

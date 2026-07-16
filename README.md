@@ -28,7 +28,8 @@ with **zero runtime dependencies** (Node built-ins only).
 | **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
 | **[Sieve](packages/sieve)** (`@quantakrypto/sieve`) | Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA (FIPS 205) implementations, driven over a JSON stdin/stdout protocol. | `npx @quantakrypto/sieve --help` |
 | **[Action](packages/action)** (`@quantakrypto/action`) | GitHub Action that runs qScan in CI, uploads SARIF, annotates the diff, and fails the build only on **new** quantum-vulnerable crypto. | `uses: quantakrypto/pqc-tools/packages/action@v1` |
-| **[agent](packages/agent)** (`@quantakrypto/agent`) | Optional, zero-dependency BYOK (bring-your-own-key) LLM client (native `fetch`; Anthropic + OpenAI-compatible adapters) that powers qScan `--triage` and `qremediate --llm`. The only networked package. | `npm i @quantakrypto/agent` |
+| **[agent](packages/agent)** (`@quantakrypto/agent`) | Optional, zero-dependency BYOK (bring-your-own-key) LLM client (native `fetch`; Anthropic + OpenAI-compatible adapters) that powers qScan `--triage` and `qremediate --llm`. Networked, key-holding — kept isolated (see also qProbe). | `npm i @quantakrypto/agent` |
+| **[qProbe](packages/qprobe)** (`@quantakrypto/qprobe`) | Actively probes **live TLS/SSH endpoints you own** for post-quantum readiness — PQC-hybrid key exchange (X25519MLKEM768) and classical certificate posture. Gated behind an ownership attestation; reports, never modifies ("engine disposes"). See [THREAT-MODEL](packages/qprobe/THREAT-MODEL.md). | `npx @quantakrypto/qprobe --i-own-this host` |
 
 All four of qScan, MCP, the Action, and agent share the engine in
 **[`@quantakrypto/core`](packages/core)** (`npm i @quantakrypto/core`) — detectors,
@@ -36,6 +37,16 @@ the vulnerable-dependency DB, the readiness score, SARIF/JSON/CBOM reporting, an
 offline agent-plane primitives (context redactor, `verify_fix` gate, codemods, patch
 policy). Sieve is standalone: it tests *other* implementations and implements no
 crypto itself.
+
+**Infrastructure coverage.** Beyond application source, the shared `core` engine
+carries **config-scope detectors** for Terraform/OpenTofu IaC and cloud KMS, JSON
+Web Keys, Kubernetes / cert-manager / Istio, CI/CD artifact & code signing
+(cosign/GPG/jarsigner/codesign/minisign), secrets at rest (SOPS/age, PGP, Sealed
+Secrets), message brokers (Kafka/MQTT), databases (pgcrypto, libpq `sslmode`), and
+JOSE/JWE key management — so `qscan`, the Action, and MCP flag **infrastructure**
+crypto with no extra install. **qProbe** adds the live-endpoint dimension (see the
+table above). The narrative anchor for infrastructure is *harvest now, decrypt
+later*: data and secrets captured today are decryptable once a CRQC exists.
 
 ## Quick start
 
@@ -93,7 +104,8 @@ quantakrypto-tools/
 │   ├── mcp/      @quantakrypto/mcp     — MCP server (stdio now, HTTP scaffold for hosting)
 │   ├── action/   @quantakrypto/action — GitHub Action
 │   ├── sieve/    @quantakrypto/sieve   — conformance battery + JSON protocol
-│   └── agent/    @quantakrypto/agent   — opt-in BYOK LLM client (triage + remediation)
+│   ├── agent/    @quantakrypto/agent   — opt-in BYOK LLM client (triage + remediation)
+│   └── qprobe/   @quantakrypto/qprobe  — active TLS/SSH endpoint probing (gated; the only prober)
 ├── docs/         architecture, hosted-MCP design, improvement roadmap
 └── examples/     end-to-end examples
 ```
