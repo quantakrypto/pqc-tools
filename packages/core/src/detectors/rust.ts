@@ -115,6 +115,18 @@ const RULE_RUST_X25519: RuleMeta = {
   cwe: CWE_BROKEN_CRYPTO,
   message: "X25519 (Rust) is modern but still classical key agreement — harvest-now-decrypt-later.",
 };
+const RULE_RUST_X448: RuleMeta = {
+  id: "rust-x448",
+  title: "Rust X448 key agreement",
+  description: "the `x448` crate Secret key agreement",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X448",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "X448 (Rust) is modern but still classical key agreement — harvest-now-decrypt-later.",
+};
 const RULE_RUST_OPENSSL_RSA: RuleMeta = {
   id: "rust-openssl-rsa",
   title: "Rust openssl RSA key generation",
@@ -251,6 +263,51 @@ const RULE_RUST_TLS_DANGEROUS: RuleMeta = {
   remediation: "Avoid the dangerous() escape hatch; keep the default certificate verifier.",
 };
 
+/**
+ * Aliasable Rust crypto types (`<crate>::<OrigType>` → rule). A renamed `use`
+ * (`use x25519_dalek::{EphemeralSecret as MontgomerySecret}`) binds the alias to a
+ * classical-key type; a later `MontgomerySecret::<ctor>(` is that key's
+ * construction. The `::`-qualified and braced rules above miss this because the
+ * call site uses the renamed identifier, not the original path.
+ */
+const RUST_ALIASABLE: Record<string, RuleMeta> = {
+  "x25519_dalek::EphemeralSecret": RULE_RUST_X25519,
+  "x25519_dalek::StaticSecret": RULE_RUST_X25519,
+  "x448::Secret": RULE_RUST_X448,
+  "ed25519_dalek::SigningKey": RULE_RUST_ED25519,
+  "ed25519_dalek::Keypair": RULE_RUST_ED25519,
+  "ed25519_dalek::SecretKey": RULE_RUST_ED25519,
+};
+
+/** Escape a string for interpolation into a dynamically-built RegExp. */
+function escapeRustRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Collect `use <crate>::<OrigType> as <Alias>` bindings (braced or single) that
+ * rename an aliasable crypto type, returning {alias, rule} pairs. An alias equal
+ * to its own type name is skipped (the qualified/bare rules already catch it).
+ */
+function collectRustTypeAliases(content: string): Array<{ alias: string; rule: RuleMeta }> {
+  const out: Array<{ alias: string; rule: RuleMeta }> = [];
+  const push = (crate: string, orig: string, alias: string): void => {
+    if (!alias || alias === orig) return;
+    const rule = RUST_ALIASABLE[`${crate}::${orig}`];
+    if (rule) out.push({ alias, rule });
+  };
+  // Braced: `use <crate>::{ Orig as Alias, ... }`.
+  const braced = /\buse\s+([\w:]+)::\{([^}]*)\}/g;
+  for (let m = braced.exec(content); m; m = braced.exec(content)) {
+    const specRe = /([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+    for (let s = specRe.exec(m[2]); s; s = specRe.exec(m[2])) push(m[1], s[1], s[2]);
+  }
+  // Single: `use <crate>::Orig as Alias;`.
+  const single = /\buse\s+([\w:]+)::([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+  for (let m = single.exec(content); m; m = single.exec(content)) push(m[1], m[2], m[3]);
+  return out;
+}
+
 /** Detects classical asymmetric crypto in Rust (rsa, ring, dalek, p256/k256). */
 export const rustDetector: Detector = {
   id: "rust-crypto",
@@ -263,6 +320,7 @@ export const rustDetector: Detector = {
     RULE_RUST_ECDH,
     RULE_RUST_ED25519,
     RULE_RUST_X25519,
+    RULE_RUST_X448,
     RULE_RUST_OPENSSL_RSA,
     RULE_RUST_OPENSSL_EC,
     RULE_RUST_OPENSSL_DSA,
@@ -311,6 +369,19 @@ export const rustDetector: Detector = {
     });
     add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
     add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
+
+    // Type-alias resolution: `use x25519_dalek::{EphemeralSecret as MontgomerySecret}`
+    // then `MontgomerySecret::random_from_rng(` — the braced+renamed `use` defeats
+    // the `::`-qualified rules. Match the aliased type's construction calls; runs
+    // on the ORIGINAL content so locations stay exact, and fires only for an alias
+    // explicitly bound to a known crypto type (precision-safe).
+    for (const { alias, rule } of collectRustTypeAliases(content)) {
+      const a = escapeRustRe(alias);
+      add(
+        new RegExp(`\\b${a}::(?:new|random|random_from_rng|generate|from_bytes)\\s*\\(`, "g"),
+        rule,
+      );
+    }
     return findings;
   },
 };

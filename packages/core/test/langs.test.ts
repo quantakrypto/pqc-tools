@@ -57,6 +57,37 @@ test("Rust: rsa / p256 ecdsa+ecdh / dalek ed25519+x25519", () => {
   );
 });
 
+test("Rust type-alias: braced `use ... as` resolves x25519 / x448 / ed25519", () => {
+  // The braced+renamed `use` defeats the ::-qualified rules; alias resolution
+  // recovers the classification from the construction call.
+  const x25519 = [
+    "use x25519_dalek::{EphemeralSecret as MontgomerySecret, PublicKey as MP};",
+    "let m = MontgomerySecret::random_from_rng(OsRng);",
+  ].join("\n");
+  assert.equal(rule(run("h.rs", x25519), "rust-x25519")?.algorithm, "X25519");
+
+  const x448 = ["use x448::{Secret as WideSecret};", "let w = WideSecret::new(&mut OsRng);"].join(
+    "\n",
+  );
+  const w = rule(run("h.rs", x448), "rust-x448");
+  assert.equal(w?.algorithm, "X448");
+  assert.equal(w?.hndl, true);
+
+  const ed = [
+    "use ed25519_dalek::SigningKey as Signer;",
+    "let s = Signer::generate(&mut OsRng);",
+  ].join("\n");
+  assert.equal(rule(run("h.rs", ed), "rust-ed25519")?.algorithm, "EdDSA");
+});
+
+test("Rust type-alias: a non-crypto `use ... as` (e.g. Mutex) does not fire", () => {
+  const src = ["use std::sync::Mutex as WideLock;", "let g = WideLock::new(());"].join("\n");
+  assert.deepEqual(
+    run("h.rs", src).filter((f) => f.ruleId.startsWith("rust-")),
+    [],
+  );
+});
+
 test("Ruby: OpenSSL::PKey::{RSA,EC,DSA,DH}", () => {
   assert.equal(rule(run("k.rb", "k = OpenSSL::PKey::RSA.new(2048)"), "ruby-rsa")?.hndl, true);
   const ec = rule(run("k.rb", 'k = OpenSSL::PKey::EC.generate("prime256v1")'), "ruby-ec");

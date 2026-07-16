@@ -3639,7 +3639,30 @@ var init_csharp = __esm({
 });
 
 // ../core/dist/detectors/rust.js
-var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_JWT_ALG, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_JWT_ALGORITHM, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, rustDetector;
+function escapeRustRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function collectRustTypeAliases(content) {
+  const out = [];
+  const push = (crate, orig, alias) => {
+    if (!alias || alias === orig)
+      return;
+    const rule = RUST_ALIASABLE[`${crate}::${orig}`];
+    if (rule)
+      out.push({ alias, rule });
+  };
+  const braced = /\buse\s+([\w:]+)::\{([^}]*)\}/g;
+  for (let m = braced.exec(content); m; m = braced.exec(content)) {
+    const specRe = /([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+    for (let s = specRe.exec(m[2]); s; s = specRe.exec(m[2]))
+      push(m[1], s[1], s[2]);
+  }
+  const single = /\buse\s+([\w:]+)::([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)/g;
+  for (let m = single.exec(content); m; m = single.exec(content))
+    push(m[1], m[2], m[3]);
+  return out;
+}
+var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_JWT_ALG, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_X448, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_JWT_ALGORITHM, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, RUST_ALIASABLE, rustDetector;
 var init_rust = __esm({
   "../core/dist/detectors/rust.js"() {
     "use strict";
@@ -3720,6 +3743,18 @@ var init_rust = __esm({
       hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message: "X25519 (Rust) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
+    };
+    RULE_RUST_X448 = {
+      id: "rust-x448",
+      title: "Rust X448 key agreement",
+      description: "the `x448` crate Secret key agreement",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X448",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X448 (Rust) is modern but still classical key agreement \u2014 harvest-now-decrypt-later."
     };
     RULE_RUST_OPENSSL_RSA = {
       id: "rust-openssl-rsa",
@@ -3846,6 +3881,14 @@ var init_rust = __esm({
       message: "rustls `.dangerous()` opts into disabling certificate verification (MITM risk).",
       remediation: "Avoid the dangerous() escape hatch; keep the default certificate verifier."
     };
+    RUST_ALIASABLE = {
+      "x25519_dalek::EphemeralSecret": RULE_RUST_X25519,
+      "x25519_dalek::StaticSecret": RULE_RUST_X25519,
+      "x448::Secret": RULE_RUST_X448,
+      "ed25519_dalek::SigningKey": RULE_RUST_ED25519,
+      "ed25519_dalek::Keypair": RULE_RUST_ED25519,
+      "ed25519_dalek::SecretKey": RULE_RUST_ED25519
+    };
     rustDetector = {
       id: "rust-crypto",
       description: "Classical asymmetric crypto in Rust (rsa, ring, *-dalek, p256/k256)",
@@ -3857,6 +3900,7 @@ var init_rust = __esm({
         RULE_RUST_ECDH,
         RULE_RUST_ED25519,
         RULE_RUST_X25519,
+        RULE_RUST_X448,
         RULE_RUST_OPENSSL_RSA,
         RULE_RUST_OPENSSL_EC,
         RULE_RUST_OPENSSL_DSA,
@@ -3891,6 +3935,10 @@ var init_rust = __esm({
         });
         add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
         add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
+        for (const { alias, rule } of collectRustTypeAliases(content)) {
+          const a = escapeRustRe(alias);
+          add(new RegExp(`\\b${a}::(?:new|random|random_from_rng|generate|from_bytes)\\s*\\(`, "g"), rule);
+        }
         return findings;
       }
     };

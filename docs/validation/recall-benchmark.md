@@ -65,7 +65,7 @@ guard; the enumerated false negatives are the point.
 library-form gaps, and the gaps a real-repo validation run surfaced (initial
 baseline was 0.645):
 
-**Overall: detection recall 0.835** (147 / 176; 10 caught unclassified; 29 false
+**Overall: detection recall 0.847** (149 / 176; 10 caught unclassified; 27 false
 negatives).
 
 | By difficulty | recall |
@@ -74,16 +74,16 @@ negatives).
 | uncommon      | 0.913  |
 | canonical     | 0.892  |
 | adversarial   | 0.474  |
-| aliased       | 0.421  |
+| aliased       | 0.474  |
 
 The shape is the finding: the scanner catches **config** (1.00), **uncommon**
 (0.90), and **canonical** (0.89) idioms well, and is bounded where the algorithm
-identity is **obscured** — `aliased` (0.42, renamed imports / wrappers) and
+identity is **obscured** — `aliased` (0.47, renamed imports / wrappers) and
 `adversarial` (0.47, algorithm names assembled at runtime). Those two bands are
-the lexical ceiling, and they are where the residual 29 false negatives live.
+the lexical ceiling, and they are where the residual 27 false negatives live.
 
 **Import-alias resolution** now follows renamed imports so an aliased call still
-detects, lifting `aliased` 0.32 → 0.42 (overall 0.824 → 0.835) with precision
+detects, lifting `aliased` 0.32 → 0.47 (overall 0.824 → 0.847) with precision
 held at 1.000:
 
 - **JS/TS** — `import { generateKeyPairSync as gk } from 'node:crypto'` and the
@@ -91,11 +91,14 @@ held at 1.000:
   keygen / ECDH / DH constructors.
 - **Python** — module aliases `from ...asymmetric import rsa as _rsa` (and
   comma-separated / PyCryptodome `import ...RSA as _R`), resolving
-  `_rsa.generate_private_key(` / `_ec.ECDSA(` / `_ec.ECDH(` / `_R.generate(` back
-  to their rule.
+  `_rsa.generate_private_key(` / `_ec.ECDSA(` / `_ec.ECDH(` / `_R.generate(`.
+- **Rust** — braced/renamed `use x25519_dalek::{EphemeralSecret as
+  MontgomerySecret}` (and `x448`, `ed25519_dalek`), resolving the aliased type's
+  construction call (`MontgomerySecret::random_from_rng(`). This also added the
+  `x448` crate to the catalog.
 
-Aliases in the remaining languages (Java/Rust/Ruby renames, and runtime
-name-assembly in the `adversarial` band) are the residual `aliased` gap.
+Aliases in the remaining languages (Java/Ruby renames) and runtime name-assembly
+in the `adversarial` band are the residual gap.
 
 ## What the false negatives tell us
 
