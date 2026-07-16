@@ -28,9 +28,15 @@ export {
   AttestationError,
   type AttestationInput,
 } from "./attest.js";
-export * from "./tls.js";
-export * from "./ssh.js";
-export * from "./clienthello.js";
+// Only TYPES from the network modules are public — the socket-opening functions
+// (probeTlsNegotiated / probeHybridSupport / probeSsh) are intentionally NOT
+// re-exported, so `runProbe` (which authorizes first) is the sole public entry
+// that performs network I/O. This keeps the THREAT-MODEL invariant true at the
+// package API boundary, not just in the CLI.
+export type { TlsNegotiated, HybridSupport } from "./tls.js";
+export type { SshProbeResult, KexInit } from "./ssh.js";
+export { PQ_SSH_KEX } from "./ssh.js";
+export * from "./clienthello.js"; // pure byte codec — no network
 export { classifyTls, classifySsh } from "./classify.js";
 
 export type ProbeMode = "tls" | "ssh";
@@ -52,8 +58,12 @@ export function resolveMode(target: Target, mode: ProbeMode | "auto"): ProbeMode
   return target.port === 22 ? "ssh" : "tls";
 }
 
-/** Probe a single endpoint. Assumes authorization has already been granted. */
-export async function probeEndpoint(
+/**
+ * Probe a single endpoint. INTERNAL — not exported, because it performs network
+ * I/O without checking authorization; only {@link runProbe} (which authorizes
+ * first) may reach it. Assumes authorization has already been granted.
+ */
+async function probeEndpoint(
   target: Target,
   mode: ProbeMode,
   opts: { servername?: string; timeoutMs?: number } = {},

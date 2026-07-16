@@ -104,6 +104,10 @@ export function probeSsh(host: string, port: number, timeoutMs = 8000): Promise<
     socket.on("error", (e) => finish({ pqKexOffered: false, error: e.message }));
     socket.on("data", (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
+      if (buf.length > 512 * 1024) {
+        finish({ pqKexOffered: false, error: "response too large" });
+        return;
+      }
       const end = bannerEnd(buf);
       if (end === undefined) return;
       const banner = buf.subarray(0, end).toString("ascii").trim();

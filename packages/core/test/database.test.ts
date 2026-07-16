@@ -54,3 +54,12 @@ test("pgcrypto text in a non-.sql file does NOT fire the pgcrypto rule", () => {
     [],
   );
 });
+
+test("an sslmode example in markdown prose is NOT flagged", () => {
+  assert.deepEqual(
+    run("README.md", "Set `sslmode=require` in your connection string.").filter((f) =>
+      f.ruleId.startsWith("db-"),
+    ),
+    [],
+  );
+});

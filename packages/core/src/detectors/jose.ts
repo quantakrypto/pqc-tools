@@ -15,7 +15,7 @@
  * the detector applies to any file (config, JSON, source) after a fast reject.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface JoseRule {
@@ -70,7 +70,8 @@ export const joseDetector: Detector = {
   scope: "config",
   language: "any",
   rules: JOSE_RULES.map((r) => r.meta),
-  appliesTo: () => true,
+  // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: no JOSE key-management alg token present.
     if (

@@ -47,3 +47,12 @@ test("a JWS signature alg (RS256) does NOT trigger the JWE key-mgmt detector", (
     [],
   );
 });
+
+test("a JOSE alg shown in markdown prose is NOT flagged (docs are out of scope)", () => {
+  assert.deepEqual(
+    run("README.md", 'Example JWE header: `{"alg":"RSA-OAEP-256"}`.').filter((f) =>
+      f.ruleId.startsWith("jose-"),
+    ),
+    [],
+  );
+});

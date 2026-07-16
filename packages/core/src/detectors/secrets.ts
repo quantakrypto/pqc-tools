@@ -16,7 +16,7 @@
  * broken, so it is out of scope for a *classical-asymmetric* readiness signal.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface SecretRule {
@@ -90,7 +90,8 @@ export const secretsDetector: Detector = {
   scope: "config",
   language: "any",
   rules: SECRET_RULES.map((r) => r.meta),
-  appliesTo: () => true,
+  // Skip prose/docs: a tutorial showing an example age recipient is not a secret store.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: none of the distinctive markers present.
     if (

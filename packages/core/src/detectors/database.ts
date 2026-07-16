@@ -12,7 +12,7 @@
  *    TLS session it does (or doesn't) negotiate is both MITM-able and harvestable.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION } from "../cwe.js";
 
 const RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
@@ -55,7 +55,8 @@ export const databaseDetector: Detector = {
   scope: "config",
   language: "any",
   rules: [RULE_PGCRYPTO, RULE_WEAK_SSLMODE],
-  appliesTo: () => true,
+  // Skip prose/docs: a README showing `sslmode=require` is not a live connection string.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
     if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {

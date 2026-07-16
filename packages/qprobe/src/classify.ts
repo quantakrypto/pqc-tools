@@ -50,19 +50,25 @@ export function classifyTls(target: Target, neg: TlsNegotiated, hybrid: HybridSu
     });
   }
 
-  // Only flag classical KEX when the server did NOT select a PQC-hybrid group.
+  // Flag classical KEX when the server did NOT select a PQC-hybrid group. The
+  // negotiated group (from node:tls, which cannot do hybrid) is factual; only the
+  // "did not select hybrid" claim depends on the raw probe, so soften it when the
+  // hybrid probe was inconclusive (e.g. a firewall dropped the raw ClientHello).
   const fam = classicalKexFamily(neg.kexGroup);
   if (!hybrid.hybridSelected && fam) {
+    const hybridNote = hybrid.error
+      ? "the PQC-hybrid probe was inconclusive"
+      : "the server did not select a PQC-hybrid group (X25519MLKEM768)";
     out.push({
       ruleId: "qprobe-tls-classical-kex",
       title: "Classical TLS key exchange (no PQC hybrid)",
       category: "key-exchange",
       severity: "medium",
-      confidence: "high",
+      confidence: hybrid.error ? "medium" : "high",
       algorithm: fam,
       hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
-      message: `TLS key exchange is classical ${neg.kexGroup}; the session key is harvest-now-decrypt-later exposed and the server did not select a PQC-hybrid group (X25519MLKEM768).`,
+      message: `TLS key exchange is classical ${neg.kexGroup}; the session key is harvest-now-decrypt-later exposed and ${hybridNote}.`,
       remediation: "Enable a PQC-hybrid key-exchange group (X25519MLKEM768) on the TLS terminator.",
       location: loc,
     });

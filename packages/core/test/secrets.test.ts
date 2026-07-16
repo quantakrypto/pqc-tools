@@ -63,3 +63,12 @@ test("symmetric ansible-vault and ordinary text produce no secrets- findings", (
     [],
   );
 });
+
+test("an example age recipient in markdown docs is NOT flagged", () => {
+  const md =
+    "Add your recipient: `age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`.";
+  assert.deepEqual(
+    run("docs/guide.md", md).filter((f) => f.ruleId.startsWith("secrets-")),
+    [],
+  );
+});
