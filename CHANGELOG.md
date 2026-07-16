@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Import-alias resolution (JS/TS).** The source detector now follows
+  `import { generateKeyPairSync as gk } from 'node:crypto'` and the CommonJS
+  `const { createECDH: mk } = require(...)` destructure-rename for the keygen /
+  ECDH / DH constructors, so an aliased call still detects. Precision-safe (the
+  alias is only ever bound to a known crypto symbol, and the alias regexes run on
+  the original text so locations stay exact) — recall's `aliased` bucket lifts
+  0.32 → 0.37 and overall recall 0.824 → **0.830**, with precision held at 1.000.
 - **Terraform / OpenTofu (IaC) detection** — a new config-scope detector for the
   classical keys and CMKs that infrastructure code provisions (never visible to
   the language packs): hashicorp/tls `tls_private_key` (`algorithm = "RSA"/"ECDSA"`),

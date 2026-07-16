@@ -1779,13 +1779,97 @@ var init_cache = __esm({
 });
 
 // ../core/dist/detectors/source.js
-var RE_GENERATE_KEYPAIR, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
+function pushKeygenFinding(findings, rawType, file, content, index, matchLength) {
+  const info2 = KEYGEN_INFO[rawType.toLowerCase()];
+  if (!info2)
+    return;
+  findings.push(findingFromRule(RULE_NODE_KEYGEN, { file, content, index, matchLength }, {
+    title: `${info2.label} key generation`,
+    category: info2.cat,
+    severity: info2.sev,
+    algorithm: info2.algo,
+    hndl: info2.hndl,
+    message: info2.message ?? `Generates a classical ${info2.label} key pair, which is not quantum-safe.`,
+    ...info2.remediation ? { remediation: info2.remediation } : {}
+  }));
+}
+function collectCryptoAliases(content) {
+  const out = /* @__PURE__ */ new Map();
+  const add = (canonical, alias) => {
+    if (!alias || alias === canonical)
+      return;
+    const list = out.get(canonical) ?? [];
+    if (!list.includes(alias))
+      list.push(alias);
+    out.set(canonical, list);
+  };
+  const esm = /import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*['"][^'"]*['"]/g;
+  for (let m = esm.exec(content); m; m = esm.exec(content)) {
+    const spec = /([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)/g;
+    for (let s = spec.exec(m[1]); s; s = spec.exec(m[1])) {
+      if (ALIASABLE.includes(s[1]))
+        add(s[1], s[2]);
+    }
+  }
+  const cjs = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*['"][^'"]*['"]\s*\)/g;
+  for (let m = cjs.exec(content); m; m = cjs.exec(content)) {
+    const spec = /([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)/g;
+    for (let s = spec.exec(m[1]); s; s = spec.exec(m[1])) {
+      if (ALIASABLE.includes(s[1]))
+        add(s[1], s[2]);
+    }
+  }
+  return out;
+}
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+var RE_GENERATE_KEYPAIR, KEYGEN_INFO, ALIASABLE, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
 var init_source = __esm({
   "../core/dist/detectors/source.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
     RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
+    KEYGEN_INFO = {
+      rsa: { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" },
+      // RSA-PSS is signature-only, so classify it as a (forgeable) signature
+      // rather than a KEM — no HNDL confidentiality exposure.
+      "rsa-pss": {
+        algo: "RSA",
+        cat: "signature",
+        sev: "high",
+        hndl: false,
+        label: "RSA-PSS",
+        message: "Generates a classical RSA-PSS signing key, which is forgeable by a quantum attacker.",
+        remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
+      },
+      // EC keys feed BOTH ECDSA (sign) and ECDH (key agreement). ECDH is
+      // HNDL-exposed, so classify conservatively as key-exchange-capable and
+      // surface both concerns rather than asserting signature-only (P0-4).
+      ec: {
+        algo: "ECDH",
+        cat: "key-exchange",
+        sev: "high",
+        hndl: true,
+        label: "EC (ECDSA/ECDH)",
+        message: "Generates a classical EC key pair. EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
+        remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+      },
+      dsa: { algo: "DSA", cat: "signature", sev: "high", hndl: false, label: "DSA" },
+      dh: { algo: "DH", cat: "key-exchange", sev: "high", hndl: true, label: "Diffie-Hellman" },
+      x25519: { algo: "X25519", cat: "key-exchange", sev: "medium", hndl: true, label: "X25519" },
+      x448: { algo: "X448", cat: "key-exchange", sev: "medium", hndl: true, label: "X448" },
+      ed25519: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed25519" },
+      ed448: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed448" }
+    };
+    ALIASABLE = [
+      "generateKeyPairSync",
+      "generateKeyPair",
+      "createECDH",
+      "createDiffieHellman",
+      "createDiffieHellmanGroup"
+    ];
     RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
     RE_ONESHOT_SIGN_VERIFY = /(?<![.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
     RE_CREATE_DH = /createDiffieHellman(?:Group)?\s*\(/g;
@@ -1924,50 +2008,32 @@ var init_source = __esm({
       detect({ file, content }) {
         const findings = [];
         eachMatch(RE_GENERATE_KEYPAIR, content, (m) => {
-          const type = m[1].toLowerCase();
-          const map = {
-            rsa: { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" },
-            // RSA-PSS is signature-only, so classify it as a (forgeable) signature
-            // rather than a KEM — no HNDL confidentiality exposure.
-            "rsa-pss": {
-              algo: "RSA",
-              cat: "signature",
-              sev: "high",
-              hndl: false,
-              label: "RSA-PSS",
-              message: "Generates a classical RSA-PSS signing key, which is forgeable by a quantum attacker.",
-              remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)"
-            },
-            // EC keys feed BOTH ECDSA (sign) and ECDH (key agreement). ECDH is
-            // HNDL-exposed, so classify conservatively as key-exchange-capable and
-            // surface both concerns rather than asserting signature-only (P0-4).
-            ec: {
-              algo: "ECDH",
-              cat: "key-exchange",
-              sev: "high",
-              hndl: true,
-              label: "EC (ECDSA/ECDH)",
-              message: "Generates a classical EC key pair. EC keys feed BOTH ECDSA signatures and ECDH key agreement; the ECDH path is harvest-now-decrypt-later exposed.",
-              remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
-            },
-            dsa: { algo: "DSA", cat: "signature", sev: "high", hndl: false, label: "DSA" },
-            dh: { algo: "DH", cat: "key-exchange", sev: "high", hndl: true, label: "Diffie-Hellman" },
-            x25519: { algo: "X25519", cat: "key-exchange", sev: "medium", hndl: true, label: "X25519" },
-            x448: { algo: "X448", cat: "key-exchange", sev: "medium", hndl: true, label: "X448" },
-            ed25519: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed25519" },
-            ed448: { algo: "EdDSA", cat: "signature", sev: "low", hndl: false, label: "Ed448" }
-          };
-          const info2 = map[type];
-          findings.push(findingFromRule(RULE_NODE_KEYGEN, { file, content, index: m.index, matchLength: m[0].length }, {
-            title: `${info2.label} key generation`,
-            category: info2.cat,
-            severity: info2.sev,
-            algorithm: info2.algo,
-            hndl: info2.hndl,
-            message: info2.message ?? `Generates a classical ${info2.label} key pair, which is not quantum-safe.`,
-            ...info2.remediation ? { remediation: info2.remediation } : {}
-          }));
+          pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length);
         });
+        const aliases = collectCryptoAliases(content);
+        for (const [canonical, names] of aliases) {
+          for (const alias of names) {
+            const a = escapeRe(alias);
+            if (canonical === "generateKeyPairSync" || canonical === "generateKeyPair") {
+              const re = new RegExp(`\\b${a}\\s*\\(\\s*['"\`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"\`]`, "g");
+              eachMatch(re, content, (m) => pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length));
+            } else if (canonical === "createECDH") {
+              eachMatch(new RegExp(`\\b${a}\\s*\\(`, "g"), content, (m) => findings.push(findingFromRule(RULE_NODE_ECDH, {
+                file,
+                content,
+                index: m.index,
+                matchLength: m[0].length
+              })));
+            } else {
+              eachMatch(new RegExp(`\\b${a}\\s*\\(`, "g"), content, (m) => findings.push(findingFromRule(RULE_NODE_DH, {
+                file,
+                content,
+                index: m.index,
+                matchLength: m[0].length
+              })));
+            }
+          }
+        }
         eachMatch(RE_CREATE_SIGN_VERIFY, content, (m) => {
           findings.push(findingFromRule(RULE_NODE_SIGN, {
             file,

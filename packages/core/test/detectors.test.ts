@@ -56,6 +56,41 @@ test("Node crypto RSA key generation", () => {
   assert.equal(f.location.line, 2);
 });
 
+test("import-alias: ESM `generateKeyPairSync as gk` is resolved and classified", () => {
+  const src = [
+    "import { generateKeyPairSync as gk } from 'node:crypto';",
+    "const kp = gk('rsa', { modulusLength: 2048 });",
+  ].join("\n");
+  const f = byRule(run("a.ts", src), "node-crypto-keygen");
+  assert.ok(f, "aliased keygen detected");
+  assert.equal(f.algorithm, "RSA");
+  assert.equal(f.hndl, true);
+  assert.equal(f.location.line, 2, "location points at the aliased call, not the import");
+});
+
+test("import-alias: CommonJS destructure-rename of createECDH/createDiffieHellman", () => {
+  const ecdh = byRule(
+    run("a.js", "const { createECDH: mk } = require('crypto');\nconst e = mk('prime256v1');"),
+    "node-crypto-ecdh",
+  );
+  assert.equal(ecdh?.algorithm, "ECDH");
+  assert.equal(ecdh?.hndl, true);
+  const dh = byRule(
+    run(
+      "a.js",
+      "const { createDiffieHellman: cdh } = require('node:crypto');\nconst d = cdh(2048);",
+    ),
+    "node-crypto-dh",
+  );
+  assert.equal(dh?.algorithm, "DH");
+});
+
+test("import-alias: an alias bound to a NON-crypto symbol does not fire", () => {
+  // `gk` here aliases a lodash function, not a crypto call — must stay silent.
+  const src = "import { groupBy as gk } from 'lodash';\nconst x = gk('rsa');\n";
+  assert.equal(byRule(run("a.ts", src), "node-crypto-keygen"), undefined);
+});
+
 test("Node crypto ECDH key exchange is HNDL-exposed", () => {
   const findings = run("a.js", "const ecdh = crypto.createECDH('secp256k1');");
   const f = byRule(findings, "node-crypto-ecdh");
