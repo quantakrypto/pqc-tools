@@ -265,7 +265,7 @@ function eachMatch(re, content, onMatch) {
       g.lastIndex++;
   }
 }
-var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, PHP_EXTENSIONS, C_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
+var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, ELIXIR_EXTENSIONS, PHP_EXTENSIONS, C_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
 var init_detect_utils = __esm({
   "../core/dist/detect-utils.js"() {
     "use strict";
@@ -288,6 +288,7 @@ var init_detect_utils = __esm({
     CSHARP_EXTENSIONS = [".cs"];
     RUST_EXTENSIONS = [".rs"];
     RUBY_EXTENSIONS = [".rb"];
+    ELIXIR_EXTENSIONS = [".ex", ".exs"];
     PHP_EXTENSIONS = [".php", ".phtml", ".php3", ".php4", ".php5"];
     C_EXTENSIONS = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
     DOC_EXTENSIONS = [
@@ -318,9 +319,10 @@ var init_detect_utils = __esm({
       ...RUST_EXTENSIONS,
       ...RUBY_EXTENSIONS,
       ...PHP_EXTENSIONS,
+      ...ELIXIR_EXTENSIONS,
       ...C_EXTENSIONS
     ];
-    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, C/C++";
+    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++";
   }
 });
 
@@ -4304,6 +4306,195 @@ var init_php = __esm({
   }
 });
 
+// ../core/dist/detectors/elixir.js
+function classifyGen(type, window) {
+  switch (type) {
+    case "rsa":
+      return RSA_CLS;
+    case "dh":
+      return DH_CLS;
+    case "eddsa":
+    case "ed25519":
+      return EDDSA_CLS;
+    case "ecdh":
+      if (/:x25519\b/i.test(window))
+        return X25519_CLS;
+      if (/:x448\b/i.test(window))
+        return X448_CLS;
+      return ECDH_CLS;
+    default:
+      return null;
+  }
+}
+function classifySign(type) {
+  if (type === "rsa")
+    return "RSA";
+  if (type === "ecdsa")
+    return "ECDSA";
+  if (type === "eddsa" || type === "ed25519")
+    return "EdDSA";
+  return null;
+}
+var RE_EX_GEN, RE_EX_SIGN, RE_EX_X509_RSA, RE_EX_X509_EC, RE_EX_JOSE, SIG_REM, KEX_REM, RULE_EX_KEYGEN, RULE_EX_SIGN, RULE_EX_X509, RULE_EX_JOSE, RSA_CLS, DH_CLS, ECDH_CLS, X25519_CLS, X448_CLS, EDDSA_CLS, EC_CLS, elixirDetector;
+var init_elixir = __esm({
+  "../core/dist/detectors/elixir.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_EX_GEN = /:crypto\.generate_key\s*\(\s*:(\w+)/g;
+    RE_EX_SIGN = /:crypto\.(?:sign|verify)\s*\(\s*:(\w+)/g;
+    RE_EX_X509_RSA = /\bX509\.PrivateKey\.new_rsa\s*\(/g;
+    RE_EX_X509_EC = /\bX509\.PrivateKey\.new_ec\s*\(/g;
+    RE_EX_JOSE = /\bJOSE\.JWK\.generate_key\s*\(\s*\{\s*:(\w+)/g;
+    SIG_REM = "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)";
+    KEX_REM = "hybrid X25519MLKEM768 (ML-KEM-768)";
+    RULE_EX_KEYGEN = {
+      id: "elixir-crypto-keygen",
+      title: "Elixir :crypto key generation",
+      description: ":crypto.generate_key (rsa/ecdh/dh/eddsa)",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates a classical key pair via Erlang :crypto (Elixir) \u2014 not quantum-safe."
+    };
+    RULE_EX_SIGN = {
+      id: "elixir-crypto-sign",
+      title: "Elixir :crypto signature",
+      description: ":crypto.sign / :crypto.verify (rsa/ecdsa/eddsa)",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical signature via Erlang :crypto (Elixir) is forgeable by a quantum attacker.",
+      remediation: SIG_REM
+    };
+    RULE_EX_X509 = {
+      id: "elixir-x509-keygen",
+      title: "Elixir X509 key generation",
+      description: "X509.PrivateKey.new_rsa / new_ec",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates a classical key pair via the X509 library (Elixir) \u2014 not quantum-safe."
+    };
+    RULE_EX_JOSE = {
+      id: "elixir-jose-jwk",
+      title: "Elixir JOSE JWK generation",
+      description: "JOSE.JWK.generate_key ({:rsa|:ec|:okp})",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Generates a classical JWK via JOSE (Elixir) \u2014 not quantum-safe."
+    };
+    RSA_CLS = { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" };
+    DH_CLS = { algo: "DH", cat: "key-exchange", sev: "high", hndl: true, label: "DH" };
+    ECDH_CLS = {
+      algo: "ECDH",
+      cat: "key-exchange",
+      sev: "high",
+      hndl: true,
+      label: "ECDH",
+      remediation: KEX_REM
+    };
+    X25519_CLS = {
+      algo: "X25519",
+      cat: "key-exchange",
+      sev: "medium",
+      hndl: true,
+      label: "X25519",
+      remediation: KEX_REM
+    };
+    X448_CLS = { ...X25519_CLS, algo: "X448", label: "X448" };
+    EDDSA_CLS = {
+      algo: "EdDSA",
+      cat: "signature",
+      sev: "low",
+      hndl: false,
+      label: "EdDSA",
+      remediation: SIG_REM
+    };
+    EC_CLS = {
+      algo: "ECDH",
+      cat: "key-exchange",
+      sev: "high",
+      hndl: true,
+      label: "EC (ECDSA/ECDH)",
+      remediation: KEX_REM
+    };
+    elixirDetector = {
+      id: "elixir-crypto",
+      description: "Classical asymmetric crypto in Elixir (:crypto, X509, JOSE)",
+      scope: "source",
+      language: "elixir",
+      rules: [RULE_EX_KEYGEN, RULE_EX_SIGN, RULE_EX_X509, RULE_EX_JOSE],
+      appliesTo: (f) => hasExtension(f, ELIXIR_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const at = (m) => ({ file, content, index: m.index, matchLength: m[0].length });
+        eachMatch(RE_EX_GEN, content, (m) => {
+          const cls = classifyGen(m[1], content.slice(m.index, m.index + 80));
+          if (!cls)
+            return;
+          findings.push(findingFromRule(RULE_EX_KEYGEN, at(m), {
+            title: `Elixir :crypto ${cls.label} key generation`,
+            category: cls.cat,
+            severity: cls.sev,
+            algorithm: cls.algo,
+            hndl: cls.hndl,
+            message: `Generates a classical ${cls.label} key pair via Erlang :crypto (Elixir) \u2014 not quantum-safe.`,
+            ...cls.remediation ? { remediation: cls.remediation } : {}
+          }));
+        });
+        eachMatch(RE_EX_SIGN, content, (m) => {
+          const algo = classifySign(m[1]);
+          if (!algo)
+            return;
+          findings.push(findingFromRule(RULE_EX_SIGN, at(m), {
+            algorithm: algo,
+            message: `Classical ${algo} signature via Erlang :crypto (Elixir) is forgeable by a quantum attacker.`
+          }));
+        });
+        eachMatch(RE_EX_X509_RSA, content, (m) => findings.push(findingFromRule(RULE_EX_X509, at(m), { algorithm: "RSA" })));
+        eachMatch(RE_EX_X509_EC, content, (m) => findings.push(findingFromRule(RULE_EX_X509, at(m), {
+          title: "Elixir X509 EC key generation",
+          category: EC_CLS.cat,
+          algorithm: EC_CLS.algo,
+          hndl: EC_CLS.hndl,
+          message: "Generates a classical EC key pair via the X509 library (Elixir); EC keys feed BOTH ECDSA and ECDH.",
+          remediation: KEX_REM
+        })));
+        eachMatch(RE_EX_JOSE, content, (m) => {
+          const kind = m[1];
+          const cls = kind === "rsa" ? RSA_CLS : kind === "ec" ? EC_CLS : kind === "okp" ? EDDSA_CLS : null;
+          if (!cls)
+            return;
+          findings.push(findingFromRule(RULE_EX_JOSE, at(m), {
+            title: `Elixir JOSE ${cls.label} JWK`,
+            category: cls.cat,
+            severity: cls.sev,
+            algorithm: cls.algo,
+            hndl: cls.hndl,
+            message: `Generates a classical ${cls.label} JWK via JOSE (Elixir) \u2014 not quantum-safe.`,
+            ...cls.remediation ? { remediation: cls.remediation } : {}
+          }));
+        });
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/c.js
 var RE_C_RSA, RE_C_EC, RE_C_ECDSA, RE_C_ECDH, RE_C_DSA, RE_C_DH, RE_C_EVP_KEYGEN, RE_C_EVP_DERIVE, RE_C_EVP_CRYPT, RE_C_EVP_SIGN, RE_C_SODIUM_BOX, RE_C_SODIUM_SIGN, RE_C_ECDSA_VERIFY, RE_C_RSA_VERIFY, RE_C_RSA_CRYPT, RE_C_TLS_VERSION, RE_C_TLS_VERIFY_NONE, RE_C_MBEDTLS_RSA, RE_C_MBEDTLS_EC, RE_C_MBEDTLS_ECDSA, RE_C_MBEDTLS_ECDH, RE_C_MBEDTLS_DH, RE_C_WOLF_RSA, RE_C_WOLF_ECC, RE_C_WOLF_ECDSA, RE_C_WOLF_ECDH, RE_C_WOLF_DH, RE_C_WOLF_CURVE25519, RE_C_WOLF_ED25519, RULE_C_RSA, RULE_C_EC, RULE_C_ECDSA, RULE_C_ECDH, RULE_C_DSA, RULE_C_DH, RULE_C_EVP_KEYGEN, RULE_C_EVP_DERIVE, RULE_C_EVP_CRYPT, RULE_C_EVP_SIGN, RULE_C_SODIUM_BOX, RULE_C_SODIUM_SIGN, RULE_C_ECDSA_VERIFY, RULE_C_RSA_VERIFY, RULE_C_RSA_CRYPT, RULE_C_TLS_VERSION, RULE_C_TLS_VERIFY_NONE, RULE_C_MBEDTLS_RSA, RULE_C_MBEDTLS_EC, RULE_C_MBEDTLS_ECDSA, RULE_C_MBEDTLS_ECDH, RULE_C_MBEDTLS_DH, RULE_C_WOLF_RSA, RULE_C_WOLF_ECC, RULE_C_WOLF_ECDSA, RULE_C_WOLF_ECDH, RULE_C_WOLF_DH, RULE_C_WOLF_CURVE25519, RULE_C_WOLF_ED25519, cDetector;
 var init_c = __esm({
@@ -5924,6 +6115,7 @@ var init_registry = __esm({
     init_rust();
     init_ruby();
     init_php();
+    init_elixir();
     init_c();
     init_pem();
     init_jwk();
@@ -6010,6 +6202,7 @@ var init_registry = __esm({
       rustDetector,
       rubyDetector,
       phpDetector,
+      elixirDetector,
       cDetector,
       pemDetector,
       jwkDetector,

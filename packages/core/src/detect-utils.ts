@@ -237,6 +237,9 @@ export const RUST_EXTENSIONS: readonly string[] = [".rs"];
 /** Ruby source extensions handled by the Ruby detector. */
 export const RUBY_EXTENSIONS: readonly string[] = [".rb"];
 
+/** Elixir source extensions handled by the Elixir detector. */
+export const ELIXIR_EXTENSIONS: readonly string[] = [".ex", ".exs"];
+
 /** PHP source extensions handled by the PHP detector. */
 export const PHP_EXTENSIONS: readonly string[] = [".php", ".phtml", ".php3", ".php4", ".php5"];
 
@@ -298,6 +301,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...RUST_EXTENSIONS,
   ...RUBY_EXTENSIONS,
   ...PHP_EXTENSIONS,
+  ...ELIXIR_EXTENSIONS,
   ...C_EXTENSIONS,
 ];
 
@@ -307,7 +311,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
  * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
  */
 export const ANALYZABLE_LANGUAGES_LABEL =
-  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, C/C++";
+  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {

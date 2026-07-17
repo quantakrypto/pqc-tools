@@ -19,6 +19,7 @@ import { csharpDetector } from "./detectors/csharp.js";
 import { rustDetector } from "./detectors/rust.js";
 import { rubyDetector } from "./detectors/ruby.js";
 import { phpDetector } from "./detectors/php.js";
+import { elixirDetector } from "./detectors/elixir.js";
 import { cDetector } from "./detectors/c.js";
 import { pemDetector } from "./detectors/pem.js";
 import { jwkDetector } from "./detectors/jwk.js";
@@ -138,6 +139,7 @@ export const builtinDetectors: Detector[] = [
   rustDetector,
   rubyDetector,
   phpDetector,
+  elixirDetector,
   cDetector,
   pemDetector,
   jwkDetector,

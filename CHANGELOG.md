@@ -45,6 +45,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Elixir language pack** — a 10th source language (the BEAM / Phoenix
+  ecosystem). Detects Erlang `:crypto.generate_key` (`:rsa` / `:dh` / `:ecdh`,
+  with the curve atom disambiguating X25519/X448 from a NIST-curve ECDH) and
+  `:crypto.sign`/`:crypto.verify` (`:rsa` / `:ecdsa` / `:eddsa`), the `X509` hex
+  package (`X509.PrivateKey.new_rsa` / `new_ec`), and erlang-jose
+  (`JOSE.JWK.generate_key({:rsa|:ec|:okp, …})`). Symmetric/MAC `:crypto` calls and
+  non-asymmetric type atoms (e.g. `:srp`) stay silent; precision/recall hold at
+  1.000/0.847.
 - **Scala coverage on the JVM pack.** Scala (`.scala`) and Scala scripts (`.sc`)
   compile against the same JCA (`KeyPairGenerator` / `Signature` / `KeyAgreement`)
   and BouncyCastle APIs the Java/Kotlin rules already match, so the JVM detector now
