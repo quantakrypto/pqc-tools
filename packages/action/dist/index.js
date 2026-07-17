@@ -6325,6 +6325,107 @@ var init_dnssec = __esm({
   }
 });
 
+// ../core/dist/detectors/vpn.js
+function offersPqKex(kexLine) {
+  return /sntrup761x25519|mlkem768/.test(kexLine);
+}
+var RE_WG_KEY, RE_IPSEC_MODP, RE_IPSEC_ECP, RE_SSHD_KEX, RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC, RULE_SSHD_KEX, vpnDetector;
+var init_vpn = __esm({
+  "../core/dist/detectors/vpn.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_WG_KEY = /\b(?:PrivateKey|PublicKey)\s*=\s*[A-Za-z0-9+/]{42,}=/g;
+    RE_IPSEC_MODP = /\bmodp\d+\b/gi;
+    RE_IPSEC_ECP = /\becp\d+(?:bp)?\b/gi;
+    RE_SSHD_KEX = /^[ \t]*KexAlgorithms[ \t]+([^\n]*)/gm;
+    RULE_WG = {
+      id: "net-wireguard-x25519",
+      title: "WireGuard Curve25519 key",
+      description: "WireGuard [Interface]/[Peer] key \u2014 Curve25519 Noise handshake (no PQC option)",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      sensitive: true,
+      message: "WireGuard tunnel keyed by classical Curve25519 (Noise); WireGuard has no standard post-quantum KEM, so the tunnel is harvest-now-decrypt-later exposed until wrapped by a PQC layer.",
+      remediation: "Wrap the tunnel in a PQC-hybrid transport (e.g. a TLS 1.3 X25519MLKEM768 layer) or track WireGuard PQC proposals; rotate keys when available."
+    };
+    RULE_IPSEC_DH = {
+      id: "net-ipsec-modp-dh",
+      title: "IPsec classical DH group (modp)",
+      description: "IPsec/strongSwan IKE/ESP proposal names a finite-field DH group (modp*)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "IPsec proposal uses a classical finite-field Diffie-Hellman group (modp*); the tunnel key exchange is harvest-now-decrypt-later exposed.",
+      remediation: "Add a PQC/hybrid IKE proposal (ML-KEM) as your IPsec stack supports it."
+    };
+    RULE_IPSEC_EC = {
+      id: "net-ipsec-ecp-ecdh",
+      title: "IPsec classical ECDH group (ecp)",
+      description: "IPsec/strongSwan IKE/ESP proposal names an elliptic-curve DH group (ecp*)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "IPsec proposal uses a classical elliptic-curve Diffie-Hellman group (ecp*); the tunnel key exchange is harvest-now-decrypt-later exposed.",
+      remediation: "Add a PQC/hybrid IKE proposal (X25519MLKEM768 / ML-KEM) as your IPsec stack supports it."
+    };
+    RULE_SSHD_KEX = {
+      id: "net-sshd-classical-kex",
+      title: "SSH server offers no PQC key exchange",
+      description: "sshd_config KexAlgorithms lists only classical key exchange (no sntrup761/mlkem768)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "SSH server's KexAlgorithms offers only classical key exchange (no sntrup761x25519 / mlkem768x25519); sessions are harvest-now-decrypt-later exposed.",
+      remediation: "Add a PQC hybrid KEX: sntrup761x25519-sha512@openssh.com or mlkem768x25519-sha256."
+    };
+    vpnDetector = {
+      id: "network-transport-crypto",
+      description: "Classical key exchange in network transport / VPN config (WireGuard, IPsec, sshd)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC, RULE_SSHD_KEX],
+      appliesTo: (f) => {
+        const lower = f.toLowerCase();
+        const base = lower.split("/").pop() ?? lower;
+        return lower.endsWith(".conf") || base === "sshd_config" || base === "ssh_config";
+      },
+      detect({ file, content }) {
+        const findings = [];
+        const push = (rule, index, length) => findings.push(findingFromRule(rule, { file, content, index, matchLength: length }));
+        if (content.includes("[Interface]") || content.includes("[Peer]")) {
+          eachMatch(RE_WG_KEY, content, (m) => push(RULE_WG, m.index, m[0].length));
+        }
+        if (/\b(?:ike|esp|proposals?|keyexchange)\s*=/i.test(content)) {
+          eachMatch(RE_IPSEC_MODP, content, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
+          eachMatch(RE_IPSEC_ECP, content, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
+        }
+        const base = file.toLowerCase().split("/").pop() ?? "";
+        if (base === "sshd_config" || base === "ssh_config") {
+          eachMatch(RE_SSHD_KEX, content, (m) => {
+            if (!offersPqKex(m[1]))
+              push(RULE_SSHD_KEX, m.index, m[0].length);
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/stateful-hbs.js
 var STATEFUL_HBS_REMEDIATION, HBS_RULES, statefulHbsDetector;
 var init_stateful_hbs = __esm({
@@ -6497,6 +6598,7 @@ var init_registry = __esm({
     init_cloudformation();
     init_mesh();
     init_dnssec();
+    init_vpn();
     init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
@@ -6587,6 +6689,7 @@ var init_registry = __esm({
       cloudformationDetector,
       meshDetector,
       dnssecDetector,
+      vpnDetector,
       statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
