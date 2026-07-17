@@ -18,6 +18,7 @@ import {
   type HybridSupport,
 } from "./tls.js";
 import { probeSsh, type SshProbeResult } from "./ssh.js";
+import { probeSmtpStartTls } from "./smtp.js";
 import { classifyTls, classifySsh } from "./classify.js";
 
 export type { Target } from "./target.js";
@@ -37,10 +38,12 @@ export type { TlsNegotiated, HybridSupport } from "./tls.js";
 export type { SshProbeResult, KexInit } from "./ssh.js";
 export { PQ_SSH_KEX } from "./ssh.js";
 export * from "./clienthello.js"; // pure byte codec — no network
+export { certSignatureAlgorithm, decodeOid, oidToSignatureFamily } from "./x509.js"; // pure DER parse
+export { smtpAdvertisesStartTls, smtpReplyComplete } from "./smtp.js"; // pure SMTP reply framing
 export { classifyTls, classifySsh } from "./classify.js";
 export { toScanResult, toSarifReport, toCbomReport, toJsonReport } from "./report.js";
 
-export type ProbeMode = "tls" | "ssh";
+export type ProbeMode = "tls" | "ssh" | "smtp";
 
 export interface EndpointReport {
   target: Target;
@@ -53,10 +56,12 @@ export interface EndpointReport {
   findings: Finding[];
 }
 
-/** Choose a probe mode when the caller passed "auto": SSH on 22, TLS otherwise. */
+/** Choose a probe mode for "auto": SSH on 22, SMTP STARTTLS on 25/587, TLS otherwise. */
 export function resolveMode(target: Target, mode: ProbeMode | "auto"): ProbeMode {
   if (mode !== "auto") return mode;
-  return target.port === 22 ? "ssh" : "tls";
+  if (target.port === 22) return "ssh";
+  if (target.port === 25 || target.port === 587) return "smtp";
+  return "tls";
 }
 
 /**
@@ -74,6 +79,14 @@ async function probeEndpoint(
     const ssh = await probeSsh(target.host, target.port, opts.timeoutMs);
     if (ssh.pqKexOffered) positives.push("PQC SSH key exchange offered");
     return { target, mode, ssh, positives, findings: classifySsh(target, ssh) };
+  }
+  if (mode === "smtp") {
+    // STARTTLS upgrade, then the same negotiated inspection (no hybrid probe over
+    // STARTTLS): classify with an "inconclusive" hybrid result so we don't claim to
+    // have tested for a hybrid group we never advertised.
+    const tls = await probeSmtpStartTls(target.host, target.port, opts);
+    const hybrid: HybridSupport = { hybridSelected: false, error: "not probed (SMTP)" };
+    return { target, mode, tls, hybrid, positives, findings: classifyTls(target, tls, hybrid) };
   }
   const [tls, hybrid] = await Promise.all([
     probeTlsNegotiated(target.host, target.port, opts),

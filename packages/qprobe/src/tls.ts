@@ -10,7 +10,7 @@
  * `engine disposes`: we read the negotiated reality and disconnect; we never
  * modify the endpoint.
  */
-import { connect as tlsConnect } from "node:tls";
+import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { connect as netConnect } from "node:net";
 import {
   buildClientHello,
@@ -18,6 +18,7 @@ import {
   GROUP_X25519MLKEM768,
   type ServerHelloInfo,
 } from "./clienthello.js";
+import { certSignatureAlgorithm } from "./x509.js";
 
 export interface TlsNegotiated {
   protocol?: string;
@@ -29,7 +30,32 @@ export interface TlsNegotiated {
   certKeyType?: string;
   certKeyBits?: number;
   certSubject?: string;
+  /** How the leaf certificate is SIGNED (the CA's algorithm) — e.g. "RSA", "ECDSA". */
+  certSigFamily?: string;
+  certSigOid?: string;
   error?: string;
+}
+
+/** Read the negotiated parameters + leaf-cert posture from a connected TLS socket. */
+export function extractNegotiated(socket: TLSSocket): TlsNegotiated {
+  const cipher = socket.getCipher();
+  const kex = socket.getEphemeralKeyInfo();
+  const cert = socket.getPeerCertificate(false);
+  const cn = cert?.subject?.CN;
+  // node:tls exposes the public-key type but not how the leaf was SIGNED; read the
+  // signature algorithm (the forgeable-at-Q-day part) from the raw DER.
+  const sig = cert?.raw ? certSignatureAlgorithm(cert.raw) : undefined;
+  return {
+    protocol: socket.getProtocol() ?? undefined,
+    cipher: cipher?.standardName ?? cipher?.name,
+    kexGroup: kex && "name" in kex ? kex.name : undefined,
+    kexType: kex && "type" in kex ? kex.type : undefined,
+    certKeyType: cert?.asn1Curve ? `EC(${cert.asn1Curve})` : cert?.pubkey ? "RSA" : undefined,
+    certKeyBits: typeof cert?.bits === "number" ? cert.bits : undefined,
+    certSubject: Array.isArray(cn) ? cn[0] : cn,
+    certSigFamily: sig?.family,
+    certSigOid: sig?.oid,
+  };
 }
 
 /** Perform a normal TLS handshake and read the negotiated parameters. */
@@ -61,19 +87,7 @@ export function probeTlsNegotiated(
     socket.on("timeout", () => finish({ error: "timeout" }));
     socket.on("error", (e) => finish({ error: e.message }));
     socket.on("secureConnect", () => {
-      const cipher = socket.getCipher();
-      const kex = socket.getEphemeralKeyInfo();
-      const cert = socket.getPeerCertificate(false);
-      const cn = cert?.subject?.CN;
-      finish({
-        protocol: socket.getProtocol() ?? undefined,
-        cipher: cipher?.standardName ?? cipher?.name,
-        kexGroup: kex && "name" in kex ? kex.name : undefined,
-        kexType: kex && "type" in kex ? kex.type : undefined,
-        certKeyType: cert?.asn1Curve ? `EC(${cert.asn1Curve})` : cert?.pubkey ? "RSA" : undefined,
-        certKeyBits: typeof cert?.bits === "number" ? cert.bits : undefined,
-        certSubject: Array.isArray(cn) ? cn[0] : cn,
-      });
+      finish(extractNegotiated(socket));
     });
   });
 }

@@ -87,7 +87,9 @@ export function classifyTls(target: Target, neg: TlsNegotiated, hybrid: HybridSu
       cwe: isRsa ? CWE_BROKEN_CRYPTO : CWE_WEAK_STRENGTH,
       message: `Leaf certificate uses a classical ${neg.certKeyType}${
         neg.certKeyBits ? `-${neg.certKeyBits}` : ""
-      } key; its signature is forgeable once a CRQC exists.`,
+      } key${
+        neg.certSigFamily ? `, signed by the CA with ${neg.certSigFamily}` : ""
+      }; its signature is forgeable once a CRQC exists.`,
       remediation:
         "Plan migration to ML-DSA-65 (FIPS 204) certificate keys as your CA adds support.",
       location: loc,

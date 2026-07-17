@@ -42,6 +42,27 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   live endpoints — into one post-quantum posture: the CBOMs are all CycloneDX 1.6
   `cryptographic-asset` documents that merge via `bom-link`, and every readiness
   score comes from the same `buildInventory` math.
+- **`mergeCboms(boms)` in `@quantakrypto/core`** — merges multiple CycloneDX 1.6
+  CBOMs into one combined bill of materials, unioning components by their
+  deterministic `bom-ref` (same algorithm+primitive collapses to one asset whose
+  occurrence evidence spans every plane) and OR-ing the harvest-now-decrypt-later
+  flag. Turns the "code + infra + live-endpoint" story into a single artifact:
+  `qscan . --cbom` and `qprobe … --cbom`, then `mergeCboms([code, endpoints])`.
+- **Three more infra detectors** in `@quantakrypto/core` (surfaced automatically by
+  qScan / Action / MCP): **`cloudformation`** (AWS CloudFormation / Azure ARM /
+  Bicep-JSON: `AWS::KMS::Key` KeySpec RSA/ECC, ACM `KeyAlgorithm`, CloudFront/ELB
+  legacy TLS policies, ARM Key Vault key type), **`mesh`** (Linkerd ECDSA identity
+  issuer, Consul Connect CA key type, Istio classical `cipherSuites`), and
+  **`dnssec`** (classical DNSSEC signing algorithms — RSASHA*, ECDSAP*, ED25519/448,
+  DSA — in zone files and signer config). Each gated + clean-negative-tested.
+- **qProbe protocol depth**: **X.509 signature-algorithm extraction** (a hand-rolled
+  DER parse reads how the leaf certificate is *signed* — the CA's algorithm, the
+  forgeable-at-Q-day part — which `node:tls` does not expose), and an **SMTP
+  STARTTLS** probe mode (`--smtp`, auto on :25/:587) that upgrades the mail session
+  to TLS and inspects the negotiated posture. (Real ML-KEM keygen for definitive
+  hybrid negotiation is intentionally NOT implemented — it would violate the repo's
+  "implements no crypto itself" principle, and the HelloRetryRequest-based detection
+  already works without it.)
 
 ### Added / Changed (standards currency + guidance wiring)
 

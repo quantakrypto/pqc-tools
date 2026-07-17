@@ -90,7 +90,18 @@ same `buildInventory` math so they read on the same scale:
 ```bash
 qscan .  --cbom  -o code-infra.cbom.json          # code + infra crypto assets
 qprobe --owned-hosts hosts.txt api.example.com --cbom -o endpoints.cbom.json
-# both are CycloneDX 1.6 → combine with any CycloneDX merge tool (bom-link)
+```
+
+Combine them into one CBOM with `mergeCboms` from `@quantakrypto/core` (components
+with the same `bom-ref` collapse to one asset whose evidence spans both planes):
+
+```js
+import { mergeCboms } from "@quantakrypto/core";
+import { readFileSync } from "node:fs";
+const combined = mergeCboms([
+  JSON.parse(readFileSync("code-infra.cbom.json", "utf8")),
+  JSON.parse(readFileSync("endpoints.cbom.json", "utf8")),
+]);
 ```
 
 ## License

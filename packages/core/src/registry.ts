@@ -31,6 +31,9 @@ import { joseDetector } from "./detectors/jose.js";
 import { k8sDetector } from "./detectors/k8s.js";
 import { messagingDetector } from "./detectors/messaging.js";
 import { databaseDetector } from "./detectors/database.js";
+import { cloudformationDetector } from "./detectors/cloudformation.js";
+import { meshDetector } from "./detectors/mesh.js";
+import { dnssecDetector } from "./detectors/dnssec.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -151,6 +154,9 @@ export const builtinDetectors: Detector[] = [
   k8sDetector,
   messagingDetector,
   databaseDetector,
+  cloudformationDetector,
+  meshDetector,
+  dnssecDetector,
   statefulHbsDetector,
 ];
 

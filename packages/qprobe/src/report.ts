@@ -35,7 +35,13 @@ export function toSarifReport(run: RunResult, startedAt: string, finishedAt: str
 }
 
 export function toCbomReport(run: RunResult, startedAt: string, finishedAt: string): CycloneDxBom {
-  return toCbom(toScanResult(run, startedAt, finishedAt));
+  const bom = toCbom(toScanResult(run, startedAt, finishedAt));
+  // core's toCbom labels the producing tool "qScan"; correct it for qProbe so a
+  // merged code+endpoints CBOM attributes each plane to the right tool.
+  const tools = (bom.metadata as { tools?: { components?: { name?: string }[] } }).tools
+    ?.components;
+  if (Array.isArray(tools)) for (const t of tools) if (t.name === "qScan") t.name = "qProbe";
+  return bom;
 }
 
 export function toJsonReport(

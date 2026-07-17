@@ -110,6 +110,8 @@ export type { ReportOptions } from "./report.js";
 // CycloneDX 1.6 cryptographic bill of materials (CBOM) export.
 export { toCbom } from "./cbom.js";
 export type { CycloneDxBom, CbomComponent } from "./cbom.js";
+// Merge multiple CBOMs (code + infra + live endpoints) into one combined BOM.
+export { mergeCboms } from "./cbom-merge.js";
 // ISO/IEC 27001 A.8.24 evidence-chain readiness report.
 export { buildReadinessReport } from "./evidence.js";
 export type { ReadinessReport, EvidenceFinding, ReadinessReportOptions } from "./evidence.js";

@@ -17,13 +17,15 @@ const EXIT = { OK: 0, FINDINGS: 1, ERROR: 2 } as const;
 function endpointLine(r: EndpointReport): string {
   const t = `${r.target.host}:${r.target.port}`;
   const lines: string[] = [`\n${t}  [${r.mode}]`];
-  if (r.mode === "tls" && r.tls) {
-    if (r.tls.error) lines.push(`  tls: ${r.tls.error}`);
+  if ((r.mode === "tls" || r.mode === "smtp") && r.tls) {
+    if (r.tls.error) lines.push(`  ${r.mode}: ${r.tls.error}`);
     else
       lines.push(
         `  ${r.tls.protocol ?? "?"} · ${r.tls.cipher ?? "?"} · KEX ${r.tls.kexGroup ?? "?"} · cert ${
           r.tls.certKeyType ?? "?"
-        }${r.tls.certKeyBits ? `-${r.tls.certKeyBits}` : ""}`,
+        }${r.tls.certKeyBits ? `-${r.tls.certKeyBits}` : ""}${
+          r.tls.certSigFamily ? ` (sig ${r.tls.certSigFamily})` : ""
+        }`,
       );
     if (r.hybrid && !r.hybrid.error)
       lines.push(
@@ -63,7 +65,7 @@ async function main(): Promise<number> {
     return EXIT.ERROR;
   }
 
-  const defaultPort = args.mode === "ssh" ? 22 : 443;
+  const defaultPort = args.mode === "ssh" ? 22 : args.mode === "smtp" ? 587 : 443;
   let targets;
   try {
     targets = args.targets.map((t) => parseTarget(t, defaultPort));

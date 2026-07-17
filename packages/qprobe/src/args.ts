@@ -3,7 +3,7 @@
  * the parser is pure and total — it never throws and never does I/O.
  */
 
-export type ProbeModeArg = "tls" | "ssh" | "auto";
+export type ProbeModeArg = "tls" | "ssh" | "smtp" | "auto";
 export type FormatArg = "human" | "json" | "sarif" | "cbom";
 
 export interface CliArgs {
@@ -41,6 +41,9 @@ export function parseArgs(argv: readonly string[]): CliArgs {
         break;
       case "--ssh":
         args.mode = "ssh";
+        break;
+      case "--smtp":
+        args.mode = "smtp";
         break;
       case "--owned-hosts":
         args.ownedHostsFile = argv[++i];
@@ -86,7 +89,8 @@ AUTHORIZATION (required — one of)
   blocks, IP ranges, wildcards and target lists. See THREAT-MODEL.md.
 
 OPTIONS
-  --tls | --ssh           Force a probe mode (default: auto — SSH on :22, else TLS).
+  --tls | --ssh | --smtp  Force a probe mode (default: auto — SSH on :22, SMTP
+                          STARTTLS on :25/:587, else TLS).
   --servername <name>     TLS SNI server name (default: the host).
   --timeout <ms>          Per-connection timeout (default: 8000).
   --format <human|json|sarif|cbom>
