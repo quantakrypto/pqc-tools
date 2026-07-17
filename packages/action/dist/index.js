@@ -4441,7 +4441,12 @@ var init_elixir = __esm({
       appliesTo: (f) => hasExtension(f, ELIXIR_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const at = (m) => ({ file, content, index: m.index, matchLength: m[0].length });
+        const at = (m) => ({
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length
+        });
         eachMatch(RE_EX_GEN, content, (m) => {
           const cls = classifyGen(m[1], content.slice(m.index, m.index + 80));
           if (!cls)
@@ -5958,6 +5963,368 @@ var init_database = __esm({
   }
 });
 
+// ../core/dist/detectors/cloudformation.js
+var CFN_EXTENSIONS, CFN_MARKERS, RE_CFN_KMS_RSA, RE_CFN_KMS_EC, RE_CFN_ACM_RSA, RE_CFN_ACM_EC, RE_CFN_CLOUDFRONT_TLS, RE_CFN_ELB_TLS, RE_CFN_ARM_KV_RSA, RE_CFN_ARM_KV_EC, RULE_CFN_KMS_RSA, RULE_CFN_KMS_EC, RULE_CFN_ACM_RSA, RULE_CFN_ACM_EC, RULE_CFN_CLOUDFRONT_TLS, RULE_CFN_ELB_TLS, RULE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_EC, cloudformationDetector;
+var init_cloudformation = __esm({
+  "../core/dist/detectors/cloudformation.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    CFN_EXTENSIONS = [".json", ".yaml", ".yml"];
+    CFN_MARKERS = [
+      "AWS::KMS",
+      "AWS::CertificateManager",
+      "AWSTemplateFormatVersion",
+      "MinimumProtocolVersion",
+      "Microsoft.KeyVault",
+      '"SslPolicy"'
+    ];
+    RE_CFN_KMS_RSA = /(?<![\w"-])"?KeySpec"?\s*:\s*"?RSA_\d+"?/g;
+    RE_CFN_KMS_EC = /(?<![\w"-])"?KeySpec"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
+    RE_CFN_ACM_RSA = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?RSA_\d+"?/g;
+    RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
+    RE_CFN_CLOUDFRONT_TLS = /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1)(?=["'\s,}]|$)/gm;
+    RE_CFN_ELB_TLS = /(?<![\w"-])"?SslPolicy"?\s*:\s*"ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})"/g;
+    RE_CFN_ARM_KV_RSA = /(?<![\w"-])"?kty"?\s*:\s*"?RSA"?(?!\w)/g;
+    RE_CFN_ARM_KV_EC = /(?<![\w"-])"?kty"?\s*:\s*"?EC"?(?!\w)/g;
+    RULE_CFN_KMS_RSA = {
+      id: "cfn-kms-rsa",
+      title: "CloudFormation KMS RSA key",
+      description: 'AWS::KMS::Key KeySpec = "RSA_*"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CloudFormation provisions a classical RSA KMS key (harvest-now-decrypt-later exposed for encryption CMKs).",
+      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
+    };
+    RULE_CFN_KMS_EC = {
+      id: "cfn-kms-ec",
+      title: "CloudFormation KMS EC key",
+      description: 'AWS::KMS::Key KeySpec = "ECC_*"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CloudFormation provisions a classical EC KMS key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_CFN_ACM_RSA = {
+      id: "cfn-acm-rsa",
+      title: "CloudFormation ACM RSA certificate",
+      description: 'AWS::CertificateManager::Certificate KeyAlgorithm = "RSA_*"',
+      category: "certificate",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CloudFormation provisions an ACM certificate with a classical RSA key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_CFN_ACM_EC = {
+      id: "cfn-acm-ec",
+      title: "CloudFormation ACM EC certificate",
+      description: 'AWS::CertificateManager::Certificate KeyAlgorithm = "EC_*"',
+      category: "certificate",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CloudFormation provisions an ACM certificate with a classical EC key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_CFN_CLOUDFRONT_TLS = {
+      id: "cfn-cloudfront-legacy-tls",
+      title: "CloudFormation CloudFront legacy TLS",
+      description: 'CloudFront Distribution MinimumProtocolVersion = "TLSv1" / "TLSv1.1"',
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "CloudFront distribution permits TLS 1.0/1.1, which are deprecated and insecure.",
+      remediation: "Set MinimumProtocolVersion to TLSv1.2_2021 (or later) and prefer PQC-hybrid key exchange."
+    };
+    RULE_CFN_ELB_TLS = {
+      id: "cfn-elb-legacy-tls",
+      title: "CloudFormation ELB/ALB legacy TLS policy",
+      description: "Elastic Load Balancer SslPolicy naming a pre-2017 legacy policy",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "Load balancer listener uses a legacy SSL negotiation policy permitting TLS 1.0/1.1.",
+      remediation: "Use ELBSecurityPolicy-TLS13-1-2-2021-06 (or the latest FS+TLS1.2/1.3 policy)."
+    };
+    RULE_CFN_ARM_KV_RSA = {
+      id: "cfn-arm-keyvault-rsa",
+      title: "ARM template Key Vault RSA key",
+      description: 'Microsoft.KeyVault key resource kty = "RSA"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "ARM template provisions a classical RSA Azure Key Vault key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 / ML-DSA-65)."
+    };
+    RULE_CFN_ARM_KV_EC = {
+      id: "cfn-arm-keyvault-ec",
+      title: "ARM template Key Vault EC key",
+      description: 'Microsoft.KeyVault key resource kty = "EC"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "ARM template provisions a classical EC Azure Key Vault key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    cloudformationDetector = {
+      id: "cloudformation-crypto",
+      description: "Classical asymmetric crypto and legacy TLS config declared in CloudFormation / ARM templates (IaC)",
+      scope: "config",
+      language: "any",
+      rules: [
+        RULE_CFN_KMS_RSA,
+        RULE_CFN_KMS_EC,
+        RULE_CFN_ACM_RSA,
+        RULE_CFN_ACM_EC,
+        RULE_CFN_CLOUDFRONT_TLS,
+        RULE_CFN_ELB_TLS,
+        RULE_CFN_ARM_KV_RSA,
+        RULE_CFN_ARM_KV_EC
+      ],
+      appliesTo: (f) => hasExtension(f, CFN_EXTENSIONS),
+      detect({ file, content }) {
+        if (!CFN_MARKERS.some((marker) => content.includes(marker)))
+          return [];
+        const findings = [];
+        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_CFN_KMS_RSA, RULE_CFN_KMS_RSA);
+        add(RE_CFN_KMS_EC, RULE_CFN_KMS_EC);
+        add(RE_CFN_ACM_RSA, RULE_CFN_ACM_RSA);
+        add(RE_CFN_ACM_EC, RULE_CFN_ACM_EC);
+        add(RE_CFN_CLOUDFRONT_TLS, RULE_CFN_CLOUDFRONT_TLS);
+        add(RE_CFN_ELB_TLS, RULE_CFN_ELB_TLS);
+        add(RE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_RSA);
+        add(RE_CFN_ARM_KV_EC, RULE_CFN_ARM_KV_EC);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/mesh.js
+var MESH_EXTENSIONS, RE_MESH_LINKERD_ECDSA, RE_MESH_CONSUL_RSA, RE_MESH_CONSUL_EC, RE_MESH_ISTIO_CLASSICAL_CIPHER, RULE_MESH_LINKERD_ECDSA, RULE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_EC, RULE_MESH_ISTIO_CLASSICAL_CIPHER, meshDetector;
+var init_mesh = __esm({
+  "../core/dist/detectors/mesh.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    MESH_EXTENSIONS = [".yaml", ".yml", ".hcl"];
+    RE_MESH_LINKERD_ECDSA = /identityTrustAnchorsPEM\b|(?:identity\.issuer\.scheme|scheme)\s*[:=]\s*["']?linkerd\.io\/tls\b/g;
+    RE_MESH_CONSUL_RSA = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"rsa"/gi;
+    RE_MESH_CONSUL_EC = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"ec"/gi;
+    RE_MESH_ISTIO_CLASSICAL_CIPHER = /\bECDHE-(?:RSA|ECDSA)-[A-Z0-9_-]+\b/g;
+    RULE_MESH_LINKERD_ECDSA = {
+      id: "mesh-linkerd-identity-ecdsa",
+      title: "Linkerd ECDSA identity issuer",
+      description: "Linkerd control-plane identity issuer (default ECDSA P-256 mesh CA)",
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Linkerd's control-plane identity issuer mints workload certificates from a classical ECDSA P-256 trust anchor by default, forgeable by a quantum attacker.",
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) once Linkerd's identity issuer supports PQC signing."
+    };
+    RULE_MESH_CONSUL_RSA = {
+      id: "mesh-consul-connect-rsa",
+      title: "Consul Connect RSA mesh CA",
+      description: 'Consul Connect ca_config private_key_type = "rsa"',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Consul Connect's mesh CA issues leaf certificates from a classical RSA private key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC certificate keys (ML-DSA-65) as the Connect CA provider adds support."
+    };
+    RULE_MESH_CONSUL_EC = {
+      id: "mesh-consul-connect-ec",
+      title: "Consul Connect EC mesh CA",
+      description: 'Consul Connect ca_config private_key_type = "ec"',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Consul Connect's mesh CA issues leaf certificates from a classical EC private key, forgeable by a quantum attacker.",
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) as the Connect CA provider adds support."
+    };
+    RULE_MESH_ISTIO_CLASSICAL_CIPHER = {
+      id: "mesh-istio-classical-cipher",
+      title: "Istio classical ECDHE cipher suite",
+      description: "Istio DestinationRule/Gateway tls.cipherSuites lists a classical ECDHE-RSA/ECDHE-ECDSA suite",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_RISKY_PRIMITIVE,
+      message: "Istio mesh TLS cipher suite allows classical ECDHE key exchange, which is harvest-now-decrypt-later exposed.",
+      remediation: "Prefer TLS 1.3 AEAD suites and track PQC-hybrid mesh key exchange (X25519MLKEM768) as Envoy/BoringSSL adds support."
+    };
+    meshDetector = {
+      id: "service-mesh-crypto",
+      description: "Classical crypto in service-mesh config (Linkerd identity, Consul Connect CA, Istio cipher suites)",
+      scope: "config",
+      language: "any",
+      rules: [
+        RULE_MESH_LINKERD_ECDSA,
+        RULE_MESH_CONSUL_RSA,
+        RULE_MESH_CONSUL_EC,
+        RULE_MESH_ISTIO_CLASSICAL_CIPHER
+      ],
+      appliesTo: (f) => hasExtension(f, MESH_EXTENSIONS),
+      detect({ file, content }) {
+        const isLinkerd = content.includes("linkerd") || content.includes("identityTrustAnchors");
+        const isConsulConnect = content.includes("consul") && content.includes("connect");
+        const isIstioCipher = content.includes("DestinationRule") || content.includes("cipherSuites");
+        if (!isLinkerd && !isConsulConnect && !isIstioCipher)
+          return [];
+        const findings = [];
+        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        if (isLinkerd)
+          add(RE_MESH_LINKERD_ECDSA, RULE_MESH_LINKERD_ECDSA);
+        if (isConsulConnect) {
+          add(RE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_RSA);
+          add(RE_MESH_CONSUL_EC, RULE_MESH_CONSUL_EC);
+        }
+        if (isIstioCipher)
+          add(RE_MESH_ISTIO_CLASSICAL_CIPHER, RULE_MESH_ISTIO_CLASSICAL_CIPHER);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/dnssec.js
+function hasDnssecMarker(content) {
+  return content.includes("DNSKEY") || content.includes("RRSIG") || /dnssec/i.test(content) || /ldns-signzone|dnssec-signzone/.test(content);
+}
+var DNSSEC_EXTENSIONS, NUM_RSA, NUM_ECDSA, NUM_EDDSA, NUM_DSA, RE_NAMED_RSA, RE_NAMED_ECDSA, RE_NAMED_EDDSA, RE_NAMED_DSA, RE_DNSKEY_RSA, RE_DNSKEY_ECDSA, RE_DNSKEY_EDDSA, RE_DNSKEY_DSA, RULE_DNSSEC_RSA, RULE_DNSSEC_ECDSA, RULE_DNSSEC_EDDSA, RULE_DNSSEC_DSA, DNSSEC_RULES, dnssecDetector;
+var init_dnssec = __esm({
+  "../core/dist/detectors/dnssec.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    DNSSEC_EXTENSIONS = [".zone", ".db", ".conf"];
+    NUM_RSA = "5|7|8|10";
+    NUM_ECDSA = "13|14";
+    NUM_EDDSA = "15|16";
+    NUM_DSA = "3|6";
+    RE_NAMED_RSA = /\bRSASHA(?:256|512|1(?:-NSEC3-SHA1)?)\b/g;
+    RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/g;
+    RE_NAMED_EDDSA = /\bED(?:25519|448)\b/g;
+    RE_NAMED_DSA = /\balgorithm\s*[:=]?\s*"?DSA(?:-NSEC3-SHA1)?"?\b/gi;
+    RE_DNSKEY_RSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
+    RE_DNSKEY_ECDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
+    RE_DNSKEY_EDDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
+    RE_DNSKEY_DSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
+    RULE_DNSSEC_RSA = {
+      id: "dnssec-rsa-sig",
+      title: "DNSSEC RSA signing algorithm",
+      description: "DNSSEC zone signed with a classical RSA algorithm (RSASHA1/256/512)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DNSSEC zone is signed with a classical RSA algorithm (RSASHA1/RSASHA1-NSEC3-SHA1/RSASHA256/RSASHA512); DNSKEY/RRSIG signatures become forgeable once a CRQC exists.",
+      remediation: "Track IETF dnsop post-quantum DNSSEC signing work (ML-DSA); plan re-signing with a PQC algorithm once assigned an IANA DNSSEC algorithm number."
+    };
+    RULE_DNSSEC_ECDSA = {
+      id: "dnssec-ecdsa-sig",
+      title: "DNSSEC ECDSA signing algorithm",
+      description: "DNSSEC zone signed with a classical ECDSA algorithm (ECDSAP256SHA256/384SHA384)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DNSSEC zone is signed with a classical ECDSA algorithm (ECDSAP256SHA256/ECDSAP384SHA384); DNSKEY/RRSIG signatures become forgeable once a CRQC exists.",
+      remediation: "Track IETF dnsop post-quantum DNSSEC signing work (ML-DSA); plan re-signing with a PQC algorithm once assigned an IANA DNSSEC algorithm number."
+    };
+    RULE_DNSSEC_EDDSA = {
+      id: "dnssec-eddsa-sig",
+      title: "DNSSEC EdDSA signing algorithm",
+      description: "DNSSEC zone signed with a classical EdDSA algorithm (ED25519/ED448)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DNSSEC zone is signed with a classical EdDSA algorithm (ED25519/ED448); modern but still classical \u2014 DNSKEY/RRSIG signatures become forgeable once a CRQC exists.",
+      remediation: "Track IETF dnsop post-quantum DNSSEC signing work (ML-DSA); plan re-signing with a PQC algorithm once assigned an IANA DNSSEC algorithm number."
+    };
+    RULE_DNSSEC_DSA = {
+      id: "dnssec-dsa-sig",
+      title: "DNSSEC DSA signing algorithm (deprecated)",
+      description: "DNSSEC zone signed with the deprecated classical DSA algorithm (DSA/DSA-NSEC3-SHA1)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DNSSEC zone is signed with DSA/DSA-NSEC3-SHA1 \u2014 deprecated by RFC 8624 (MUST NOT sign) and, independent of that, forgeable once a CRQC exists.",
+      remediation: "Re-sign with a non-deprecated algorithm today (RFC 8624); track IETF dnsop post-quantum DNSSEC signing work (ML-DSA) for the eventual PQC migration."
+    };
+    DNSSEC_RULES = [
+      { meta: RULE_DNSSEC_RSA, res: [RE_NAMED_RSA, RE_DNSKEY_RSA] },
+      { meta: RULE_DNSSEC_ECDSA, res: [RE_NAMED_ECDSA, RE_DNSKEY_ECDSA] },
+      { meta: RULE_DNSSEC_EDDSA, res: [RE_NAMED_EDDSA, RE_DNSKEY_EDDSA] },
+      { meta: RULE_DNSSEC_DSA, res: [RE_NAMED_DSA, RE_DNSKEY_DSA] }
+    ];
+    dnssecDetector = {
+      id: "dnssec-crypto",
+      description: "Classical DNSSEC signing algorithms in zone files / signer config",
+      scope: "config",
+      language: "any",
+      rules: DNSSEC_RULES.map((r) => r.meta),
+      appliesTo: (f) => hasExtension(f, DNSSEC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!hasDnssecMarker(content))
+          return [];
+        const findings = [];
+        for (const { meta, res } of DNSSEC_RULES) {
+          for (const re of res) {
+            eachMatch(re, content, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+          }
+        }
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/stateful-hbs.js
 var STATEFUL_HBS_REMEDIATION, HBS_RULES, statefulHbsDetector;
 var init_stateful_hbs = __esm({
@@ -6127,6 +6494,9 @@ var init_registry = __esm({
     init_k8s();
     init_messaging();
     init_database();
+    init_cloudformation();
+    init_mesh();
+    init_dnssec();
     init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
@@ -6214,6 +6584,9 @@ var init_registry = __esm({
       k8sDetector,
       messagingDetector,
       databaseDetector,
+      cloudformationDetector,
+      meshDetector,
+      dnssecDetector,
       statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
@@ -7531,6 +7904,13 @@ var init_cbom = __esm({
   }
 });
 
+// ../core/dist/cbom-merge.js
+var init_cbom_merge = __esm({
+  "../core/dist/cbom-merge.js"() {
+    "use strict";
+  }
+});
+
 // ../core/dist/evidence.js
 import { createHash as createHash4 } from "node:crypto";
 function canonicalize(value) {
@@ -7611,6 +7991,7 @@ var init_dist = __esm({
     init_severity();
     init_report();
     init_cbom();
+    init_cbom_merge();
     init_evidence();
     init_remediation();
     init_cwe();
