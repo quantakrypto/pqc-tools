@@ -34,6 +34,7 @@ import { databaseDetector } from "./detectors/database.js";
 import { cloudformationDetector } from "./detectors/cloudformation.js";
 import { meshDetector } from "./detectors/mesh.js";
 import { dnssecDetector } from "./detectors/dnssec.js";
+import { vpnDetector } from "./detectors/vpn.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -157,6 +158,7 @@ export const builtinDetectors: Detector[] = [
   cloudformationDetector,
   meshDetector,
   dnssecDetector,
+  vpnDetector,
   statefulHbsDetector,
 ];
 

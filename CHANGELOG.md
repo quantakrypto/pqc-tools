@@ -63,6 +63,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   hybrid negotiation is intentionally NOT implemented — it would violate the repo's
   "implements no crypto itself" principle, and the HelloRetryRequest-based detection
   already works without it.)
+- **Network transport / VPN detector (`vpn`)** in `@quantakrypto/core` — classical
+  key exchange in the tunnels carrying communication between things: **WireGuard**
+  (`[Interface]`/`[Peer]` Curve25519 keys — a sharp finding, since WireGuard has no
+  standard PQC KEM; the private key is treated as sensitive material), **IPsec /
+  strongSwan** IKE/ESP proposals naming classical DH groups (`modp*` = finite-field
+  DH, `ecp*` = ECDH), and **sshd_config / ssh_config** `KexAlgorithms` lines that
+  offer no PQC hybrid KEX — a server that already lists `sntrup761x25519` /
+  `mlkem768x25519` stays silent. Each rule is gated to its own config shape.
 
 ### Added / Changed (standards currency + guidance wiring)
 
