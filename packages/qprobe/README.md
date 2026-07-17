@@ -53,7 +53,7 @@ npx @quantakrypto/qprobe --owned-hosts hosts.txt api.example.com:8443 --json
 | `--tls` / `--ssh` | Force a probe mode (default: auto — SSH on `:22`, TLS otherwise). |
 | `--servername <name>` | TLS SNI server name (default: the host; omitted for bare IPs). |
 | `--timeout <ms>` | Per-connection timeout (default: 8000). |
-| `--format <human\|json>` | Output format (default: human). `--json` is an alias. |
+| `--format <human\|json\|sarif\|cbom>` | Output format (default: human). `--json` / `--sarif` / `--cbom` are aliases. SARIF 2.1.0 and CycloneDX 1.6 CBOM are the **same formats qScan emits**. |
 
 Exit codes mirror qScan: `0` clean, `1` findings, `2` error / not authorized.
 
@@ -70,6 +70,27 @@ example.com:443  [tls]
   [low]    Classical certificate key — forgeable once a CRQC exists …
 
 2 findings · 1 HNDL-exposed · readiness 90/100
+```
+
+## One post-quantum posture: code + infra + live endpoints
+
+qProbe findings are `@quantakrypto/core` Findings and emit the **same** SARIF 2.1.0
+and CycloneDX 1.6 CBOM as qScan. That means the three planes compose into a single
+readiness picture:
+
+- **Code + infrastructure-as-code / config** — `qscan .` (the language packs *and*
+  the Terraform / Kubernetes / CI-CD / secrets / messaging / database / JOSE
+  detectors all run in one scan).
+- **Live endpoints** — `qprobe --i-own-this …`.
+
+Because both CBOMs are CycloneDX 1.6 `cryptographic-asset` documents, they merge
+into one org-wide crypto bill of materials, and each readiness score comes from the
+same `buildInventory` math so they read on the same scale:
+
+```bash
+qscan .  --cbom  -o code-infra.cbom.json          # code + infra crypto assets
+qprobe --owned-hosts hosts.txt api.example.com --cbom -o endpoints.cbom.json
+# both are CycloneDX 1.6 → combine with any CycloneDX merge tool (bom-link)
 ```
 
 ## License

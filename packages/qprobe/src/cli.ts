@@ -9,29 +9,10 @@ import { parseArgs, HELP } from "./args.js";
 import { parseTarget, TargetError } from "./target.js";
 import { parseOwnedHosts, AttestationError } from "./attest.js";
 import { runProbe, type RunResult, type EndpointReport } from "./index.js";
+import { toJsonReport, toSarifReport, toCbomReport } from "./report.js";
 import { VERSION } from "./version.js";
 
 const EXIT = { OK: 0, FINDINGS: 1, ERROR: 2 } as const;
-
-function toJsonOutput(result: RunResult): Record<string, unknown> {
-  return {
-    tool: "qprobe",
-    version: VERSION,
-    endpoints: result.reports.map((r) => ({
-      target: `${r.target.host}:${r.target.port}`,
-      mode: r.mode,
-      positives: r.positives,
-      tls: r.tls,
-      hybrid: r.hybrid,
-      ssh: r.ssh
-        ? { banner: r.ssh.banner, pqKexOffered: r.ssh.pqKexOffered, error: r.ssh.error }
-        : undefined,
-      findings: r.findings,
-    })),
-    findings: result.findings,
-    inventory: result.inventory,
-  };
-}
 
 function endpointLine(r: EndpointReport): string {
   const t = `${r.target.host}:${r.target.port}`;
@@ -104,6 +85,7 @@ async function main(): Promise<number> {
     }
   }
 
+  const startedAt = new Date().toISOString();
   let result: RunResult;
   try {
     result = await runProbe({
@@ -120,9 +102,21 @@ async function main(): Promise<number> {
     }
     throw e;
   }
+  const finishedAt = new Date().toISOString();
 
-  if (args.format === "json") console.log(JSON.stringify(toJsonOutput(result), null, 2));
-  else process.stdout.write(formatHuman(result));
+  switch (args.format) {
+    case "json":
+      console.log(JSON.stringify(toJsonReport(result, startedAt, finishedAt), null, 2));
+      break;
+    case "sarif":
+      console.log(JSON.stringify(toSarifReport(result, startedAt, finishedAt), null, 2));
+      break;
+    case "cbom":
+      console.log(JSON.stringify(toCbomReport(result, startedAt, finishedAt), null, 2));
+      break;
+    default:
+      process.stdout.write(formatHuman(result));
+  }
 
   return result.findings.length > 0 ? EXIT.FINDINGS : EXIT.OK;
 }

@@ -38,6 +38,7 @@ export type { SshProbeResult, KexInit } from "./ssh.js";
 export { PQ_SSH_KEX } from "./ssh.js";
 export * from "./clienthello.js"; // pure byte codec — no network
 export { classifyTls, classifySsh } from "./classify.js";
+export { toScanResult, toSarifReport, toCbomReport, toJsonReport } from "./report.js";
 
 export type ProbeMode = "tls" | "ssh";
 

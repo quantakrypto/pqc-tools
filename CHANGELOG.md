@@ -35,6 +35,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   (X25519MLKEM768) via a hand-rolled raw ClientHello, reads SSH `KEXINIT`
   algorithms, and reports the negotiated reality without ever modifying an endpoint
   ("engine disposes"). Ships a `THREAT-MODEL.md`. Zero runtime dependencies.
+- **qProbe SARIF + CBOM output** (`--sarif` / `--cbom` / `--format`). Live-endpoint
+  findings now emit the same SARIF 2.1.0 and CycloneDX 1.6 CBOM as qScan (the core
+  reporters are findings-based, so no registry entry is needed for the `qprobe-*`
+  rules). This unifies the three planes — code, infrastructure-as-code/config, and
+  live endpoints — into one post-quantum posture: the CBOMs are all CycloneDX 1.6
+  `cryptographic-asset` documents that merge via `bom-link`, and every readiness
+  score comes from the same `buildInventory` math.
 
 ### Added / Changed (standards currency + guidance wiring)
 

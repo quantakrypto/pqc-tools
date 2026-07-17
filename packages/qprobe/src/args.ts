@@ -4,7 +4,7 @@
  */
 
 export type ProbeModeArg = "tls" | "ssh" | "auto";
-export type FormatArg = "human" | "json";
+export type FormatArg = "human" | "json" | "sarif" | "cbom";
 
 export interface CliArgs {
   targets: string[];
@@ -51,11 +51,19 @@ export function parseArgs(argv: readonly string[]): CliArgs {
       case "--timeout":
         args.timeoutMs = Number(argv[++i]) || args.timeoutMs;
         break;
-      case "--format":
-        args.format = argv[++i] === "json" ? "json" : "human";
+      case "--format": {
+        const v = argv[++i];
+        if (v === "json" || v === "sarif" || v === "cbom" || v === "human") args.format = v;
         break;
+      }
       case "--json":
         args.format = "json";
+        break;
+      case "--sarif":
+        args.format = "sarif";
+        break;
+      case "--cbom":
+        args.format = "cbom";
         break;
       default:
         if (a && !a.startsWith("-")) args.targets.push(a);
@@ -81,7 +89,10 @@ OPTIONS
   --tls | --ssh           Force a probe mode (default: auto — SSH on :22, else TLS).
   --servername <name>     TLS SNI server name (default: the host).
   --timeout <ms>          Per-connection timeout (default: 8000).
-  --format <human|json>   Output format (default: human).  --json is an alias.
+  --format <human|json|sarif|cbom>
+                          Output format (default: human). --json / --sarif / --cbom
+                          are aliases. SARIF 2.1.0 and CycloneDX 1.6 CBOM compose
+                          with qScan output (same formats).
   -h, --help              Show this help.
 
 EXAMPLES
