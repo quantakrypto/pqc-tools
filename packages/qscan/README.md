@@ -21,7 +21,7 @@ step.
 ## Language coverage
 
 Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
-**Go**, **Java/Kotlin** (JCA + BouncyCastle), **C#/.NET**, **Rust**, **Ruby**,
+**Go**, **Java/Kotlin/Scala** (JCA + BouncyCastle), **C#/.NET**, **Rust**, **Ruby**,
 **PHP** (openssl / phpseclib3 / libsodium), and **C/C++** (OpenSSL, Mbed TLS,
 wolfSSL) source. PEM key material, SSH keys, TLS/certificate
 config, and dependency manifests for **six ecosystems** — npm (plus

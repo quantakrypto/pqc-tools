@@ -328,7 +328,8 @@ const BC_CURVE_CLASS_RULES: Record<string, RuleMeta> = {
 /** Detects classical asymmetric crypto in Java / Kotlin (JCA + BouncyCastle). */
 export const javaDetector: Detector = {
   id: "java-crypto",
-  description: "Classical asymmetric crypto in Java/Kotlin (JCA getInstance + BouncyCastle)",
+  description:
+    "Classical asymmetric crypto on the JVM — Java/Kotlin/Scala (JCA getInstance + BouncyCastle)",
   scope: "source",
   language: "java",
   rules: [

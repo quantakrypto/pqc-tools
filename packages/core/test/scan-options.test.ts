@@ -117,14 +117,14 @@ test("analyzedFiles counts only supported source languages (coverage honesty)", 
 test("analyzedFiles is 0 when the codebase is entirely unsupported languages", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-cov0-"));
   try {
-    // A polyglot repo with crypto in Scala + Swift — the false-100/100 case for
-    // languages the scanner cannot read yet.
-    await writeFile(path.join(dir, "Keys.scala"), 'val kp = KeyPairGenerator.getInstance("RSA")\n');
+    // A polyglot repo with crypto in Objective-C + Swift — the false-100/100 case
+    // for languages the scanner cannot read yet.
+    await writeFile(path.join(dir, "Keys.m"), "SecKeyRef k = SecKeyCreateRandomKey(attrs, nil);\n");
     await writeFile(path.join(dir, "Keys.swift"), "let key = SecKeyCreateRandomKey(attrs, nil)\n");
     const r = await scan({ root: dir });
     assert.equal(r.filesScanned, 2);
     assert.equal(r.analyzedFiles, 0, "no analyzable source → score is not meaningful");
-    assert.equal(r.findings.length, 0, "we cannot see the Scala/Swift crypto yet");
+    assert.equal(r.findings.length, 0, "we cannot see the Obj-C/Swift crypto yet");
     assert.equal(
       r.inventory.readinessScore,
       100,

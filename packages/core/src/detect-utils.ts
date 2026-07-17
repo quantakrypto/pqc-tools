@@ -223,7 +223,10 @@ export const PYTHON_EXTENSIONS: readonly string[] = [".py", ".pyi", ".pyw"];
 export const GO_EXTENSIONS: readonly string[] = [".go"];
 
 /** Java / Kotlin source extensions handled by the JCA detector. */
-export const JAVA_EXTENSIONS: readonly string[] = [".java", ".kt", ".kts"];
+// The JVM detector also covers Kotlin (`.kt`/`.kts`) and Scala (`.scala`/`.sc`):
+// all three compile against the same JCA (`KeyPairGenerator`, `Signature`,
+// `KeyAgreement`) and BouncyCastle APIs the Java rules match.
+export const JAVA_EXTENSIONS: readonly string[] = [".java", ".kt", ".kts", ".scala", ".sc"];
 
 /** C# source extensions handled by the .NET detector. */
 export const CSHARP_EXTENSIONS: readonly string[] = [".cs"];
@@ -303,7 +306,8 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
  * crypto, shown in coverage output. Kept next to {@link
  * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
  */
-export const ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java, C#, Rust, Ruby, PHP, C/C++";
+export const ANALYZABLE_LANGUAGES_LABEL =
+  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, C/C++";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {

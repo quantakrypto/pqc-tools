@@ -22,6 +22,21 @@ function byRule(findings: Finding[], ruleId: string): Finding | undefined {
   return findings.find((f) => f.ruleId === ruleId);
 }
 
+test("the JVM pack also covers Scala (.scala) and Scala scripts (.sc)", () => {
+  // Scala compiles against the same JCA, so the Java rules apply to .scala/.sc.
+  const rsa = byRule(
+    run("Keys.scala", 'val kpg = KeyPairGenerator.getInstance("RSA")'),
+    "java-rsa",
+  );
+  assert.equal(rsa?.algorithm, "RSA");
+  assert.equal(rsa?.hndl, true);
+  const ec = byRule(
+    run("build.sc", 'val ec = KeyPairGenerator.getInstance("EC")'),
+    "java-ec-keygen",
+  );
+  assert.equal(ec?.algorithm, "ECDH");
+});
+
 test("KeyPairGenerator RSA/EC/DSA/DH classify correctly", () => {
   const rsa = byRule(run("A.java", 'KeyPairGenerator.getInstance("RSA")'), "java-rsa");
   assert.equal(rsa?.algorithm, "RSA");

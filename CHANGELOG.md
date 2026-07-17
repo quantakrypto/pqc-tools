@@ -45,6 +45,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **Scala coverage on the JVM pack.** Scala (`.scala`) and Scala scripts (`.sc`)
+  compile against the same JCA (`KeyPairGenerator` / `Signature` / `KeyAgreement`)
+  and BouncyCastle APIs the Java/Kotlin rules already match, so the JVM detector now
+  reads them too — a major JVM language covered with no new rules. Added to the
+  analyzable-language set (label now reads "Java/Kotlin/Scala").
 - **PHP language pack** — a 9th source language (one of the most-deployed
   backends, previously uncovered). Detects `ext/openssl` (`openssl_pkey_new`
   classified by its `OPENSSL_KEYTYPE_*`, defaulting to RSA; `openssl_public_encrypt`

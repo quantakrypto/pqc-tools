@@ -284,7 +284,7 @@ var init_detect_utils = __esm({
     ];
     PYTHON_EXTENSIONS = [".py", ".pyi", ".pyw"];
     GO_EXTENSIONS = [".go"];
-    JAVA_EXTENSIONS = [".java", ".kt", ".kts"];
+    JAVA_EXTENSIONS = [".java", ".kt", ".kts", ".scala", ".sc"];
     CSHARP_EXTENSIONS = [".cs"];
     RUST_EXTENSIONS = [".rs"];
     RUBY_EXTENSIONS = [".rb"];
@@ -320,7 +320,7 @@ var init_detect_utils = __esm({
       ...PHP_EXTENSIONS,
       ...C_EXTENSIONS
     ];
-    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java, C#, Rust, Ruby, PHP, C/C++";
+    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, C/C++";
   }
 });
 
@@ -3376,7 +3376,7 @@ var init_java = __esm({
     };
     javaDetector = {
       id: "java-crypto",
-      description: "Classical asymmetric crypto in Java/Kotlin (JCA getInstance + BouncyCastle)",
+      description: "Classical asymmetric crypto on the JVM \u2014 Java/Kotlin/Scala (JCA getInstance + BouncyCastle)",
       scope: "source",
       language: "java",
       rules: [
