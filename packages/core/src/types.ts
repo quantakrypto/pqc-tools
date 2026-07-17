@@ -134,6 +134,7 @@ export type DetectorLanguage =
   | "csharp"
   | "rust"
   | "ruby"
+  | "php"
   | "c"
   | "any";
 

@@ -22,7 +22,8 @@ step.
 
 Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
 **Go**, **Java/Kotlin** (JCA + BouncyCastle), **C#/.NET**, **Rust**, **Ruby**,
-and **C/C++** (OpenSSL) source. PEM key material, SSH keys, TLS/certificate
+**PHP** (openssl / phpseclib3 / libsodium), and **C/C++** (OpenSSL, Mbed TLS,
+wolfSSL) source. PEM key material, SSH keys, TLS/certificate
 config, and dependency manifests for **six ecosystems** — npm (plus
 `yarn.lock` / `pnpm-lock.yaml`), PyPI, Cargo, Go modules, Maven, and RubyGems —
 are detected in **any** file regardless of language.

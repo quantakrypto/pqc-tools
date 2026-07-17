@@ -45,6 +45,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added / Changed (standards currency + guidance wiring)
 
+- **PHP language pack** — a 9th source language (one of the most-deployed
+  backends, previously uncovered). Detects `ext/openssl` (`openssl_pkey_new`
+  classified by its `OPENSSL_KEYTYPE_*`, defaulting to RSA; `openssl_public_encrypt`
+  / `_private_decrypt`; `openssl_sign` / `_verify`), phpseclib3
+  `RSA`/`EC`/`DSA`/`DH` `::createKey`, and libsodium `sodium_crypto_box`/`kx`
+  (X25519) + `sodium_crypto_sign` (Ed25519). The key-type window is bounded to the
+  current statement so one `openssl_pkey_new` can't inherit the next call's key
+  type; symmetric AEAD stays silent. Adds PHP to the analyzable-language set;
+  precision/recall hold at 1.000/0.847.
 - **Import-alias resolution (JS/TS + Python + Rust).** Detectors now follow
   renamed imports so an aliased call still detects, precision-safe (the alias is
   only ever bound to a known crypto symbol, and the alias regexes run on the

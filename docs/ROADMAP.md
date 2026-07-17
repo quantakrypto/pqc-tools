@@ -14,8 +14,9 @@ Audit sources: [security](audits/security.md) · [cryptography](audits/cryptogra
 > All five packages are live on npm at **0.4.2** with build provenance:
 > `@quantakrypto/`**core · qscan · mcp · sieve · agent**.
 >
-> - **Detectors:** **8 source languages** — JS/TS, Python, Go, Java/Kotlin, C#,
->   Rust, Ruby, C/C++ — plus PEM key material.
+> - **Detectors:** **9 source languages** — JS/TS, Python, Go, Java/Kotlin, C#,
+>   Rust, Ruby, PHP, C/C++ — plus PEM key material and the config-scope infra
+>   detectors (Terraform, cloud KMS, JWK, k8s, CI/CD, secrets, messaging, …).
 > - **Quality:** **593 tests** across the workspaces (core 259 · qscan 116 ·
 >   mcp 94 · sieve 55 · action 50 · agent 19); precision/recall benchmark
 >   **= 1.000**; build + ESLint + Prettier clean; **zero runtime dependencies**.

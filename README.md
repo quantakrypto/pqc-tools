@@ -24,7 +24,7 @@ with **zero runtime dependencies** (Node built-ins only).
 
 | Tool | What it does | Get it |
 |---|---|---|
-| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **8 languages** (JS/TS, Python, Go, Java/Kotlin, C#, Rust, Ruby, C/OpenSSL) and prints a readiness score. SARIF / JSON / CBOM output, baselines, incremental & parallel scans. Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
+| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **9 languages** (JS/TS, Python, Go, Java/Kotlin, C#, Rust, Ruby, PHP, C/OpenSSL) and prints a readiness score. SARIF / JSON / CBOM output, baselines, incremental & parallel scans. Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
 | **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
 | **[Sieve](packages/sieve)** (`@quantakrypto/sieve`) | Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA (FIPS 205) implementations, driven over a JSON stdin/stdout protocol. | `npx @quantakrypto/sieve --help` |
 | **[Action](packages/action)** (`@quantakrypto/action`) | GitHub Action that runs qScan in CI, uploads SARIF, annotates the diff, and fails the build only on **new** quantum-vulnerable crypto. | `uses: quantakrypto/pqc-tools/packages/action@v1` |
