@@ -1,0 +1,91 @@
+# Infrastructure post-quantum readiness — CI gate + scheduled endpoint probe.
+#
+# Drop this at .github/workflows/infra-readiness.yml. It has two jobs:
+#
+#   1. `scan` (on every PR / push) — runs qScan over the repository. Because the
+#      infrastructure detectors (Terraform, Kubernetes/cert-manager, CI/CD signing,
+#      SOPS/age, Kafka/MQTT, database, Vault, WireGuard/IPsec, JOSE/JWE, …) live in
+#      the same engine, this flags quantum-vulnerable crypto in your infrastructure-
+#      as-code alongside your application code. It uploads SARIF to code scanning and
+#      publishes the code+config CBOM as a build artifact.
+#
+#   2. `probe` (scheduled, weekly) — runs qProbe against the live TLS/SSH endpoints
+#      you OWN, listed in a committed ownership manifest, then MERGES the endpoint
+#      CBOM with a fresh scan CBOM into one combined "code + infrastructure + wire"
+#      CycloneDX bill of materials (`qscan --cbom --merge`) and uploads it.
+#
+# qProbe only ever performs a benign, unauthenticated handshake and never modifies
+# an endpoint; it refuses to run without the ownership manifest. Commit the manifest
+# at `.quantakrypto/owned-hosts.txt` (one host per line, `#` comments allowed) — it
+# is your auditable attestation that you are authorized to test those endpoints.
+
+name: Infrastructure Quantum Readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC — weekly endpoint posture
+
+permissions:
+  contents: read
+  security-events: write # upload SARIF to the Security tab
+
+jobs:
+  # 1) Scan code + infrastructure-as-code on every change.
+  scan:
+    name: quantakrypto — code + IaC scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for quantum-vulnerable crypto (code + infrastructure)
+        uses: quantakrypto/pqc-tools/packages/action@v1
+        with:
+          path: "."
+          severity-threshold: "high"
+          fail-on-findings: "true"
+          format: "sarif"
+          output: "quantakrypto.sarif.json"
+          github-token: ${{ github.token }}
+
+      - name: Generate code + config CBOM
+        if: always()
+        run: npx --yes @quantakrypto/qscan ./ --cbom -o code-cbom.json
+
+      - name: Upload CBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantakrypto-code-cbom
+          path: code-cbom.json
+
+  # 2) Probe owned live endpoints weekly and publish a combined CBOM.
+  probe:
+    name: quantakrypto — endpoint probe + combined CBOM
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe owned TLS/SSH endpoints (ownership manifest required)
+        # `--owned-hosts` is your attestation; qProbe refuses to run without it and
+        # never probes ranges/CIDRs. It reports posture and never modifies a target.
+        run: |
+          npx --yes @quantakrypto/qprobe \
+            --owned-hosts .quantakrypto/owned-hosts.txt \
+            --format cbom \
+            $(grep -vE '^\s*#|^\s*$' .quantakrypto/owned-hosts.txt | tr '\n' ' ') \
+            > endpoint-cbom.json
+
+      - name: Merge into a combined code + infrastructure + wire CBOM
+        run: |
+          npx --yes @quantakrypto/qscan ./ --cbom --merge endpoint-cbom.json \
+            -o combined-cbom.json
+
+      - name: Upload combined CBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantakrypto-combined-cbom
+          path: combined-cbom.json

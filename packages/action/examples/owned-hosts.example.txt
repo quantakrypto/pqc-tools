@@ -1,0 +1,9 @@
+# qProbe ownership manifest — the endpoints you are authorized to probe.
+# Commit this at .quantakrypto/owned-hosts.txt. One host per line; `#` starts a
+# comment. host or host:port is accepted. qProbe refuses to run without it and
+# never probes CIDR ranges, wildcards, or lists — one host at a time.
+#
+# Example (replace with endpoints you actually operate):
+api.example.com
+git.example.com:22
+mail.example.com:25
