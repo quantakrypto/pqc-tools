@@ -35,6 +35,7 @@ test("resolveHttpConfig defaults to a safe loopback bind with no auth", () => {
   assert.equal(cfg.port, 3000);
   assert.equal(cfg.token, "");
   assert.equal(cfg.allowFs, false);
+  assert.equal(cfg.allowNetwork, false);
   assert.equal(cfg.loopback, true);
   assert.ok(cfg.timeoutMs > 0);
   assert.ok(cfg.maxResponseBytes > 0);
@@ -52,6 +53,13 @@ test("resolveHttpConfig reads env: host, token, allow-fs, port", () => {
   assert.equal(cfg.allowFs, true);
   assert.equal(cfg.port, 8080);
   assert.equal(cfg.loopback, false);
+});
+
+test("resolveHttpConfig reads QUANTAKRYPTO_MCP_ALLOW_NETWORK and options.allowNetwork", () => {
+  assert.equal(resolveHttpConfig({ QUANTAKRYPTO_MCP_ALLOW_NETWORK: "1" }).allowNetwork, true);
+  assert.equal(resolveHttpConfig({ QUANTAKRYPTO_MCP_ALLOW_NETWORK: "true" }).allowNetwork, true);
+  assert.equal(resolveHttpConfig({}, { allowNetwork: true }).allowNetwork, true); // override wins
+  assert.equal(resolveHttpConfig({}).allowNetwork, false);
 });
 
 test("explicit options win over env", () => {
@@ -180,13 +188,24 @@ test("gateHttpTools exposes the FS tools when allowFs is true", () => {
   }
 });
 
-test("gateHttpTools ALWAYS hides the networked probe_endpoint tool (even with allowFs)", () => {
-  // A hosted MCP must never be an arbitrary-host probing oracle.
+test("gateHttpTools hides the networked probe_endpoint tool by default (even with allowFs)", () => {
+  // Off by default regardless of allowFs; a hosted MCP should not probe arbitrary hosts.
   for (const allowFs of [false, true]) {
     const gated = gateHttpTools(quantakryptoTools, allowFs).map((t: ToolDefinition) => t.name);
     for (const n of NETWORK_TOOL_NAMES) {
-      assert.equal(gated.includes(n), false, `${n} must be gated off (allowFs=${allowFs})`);
+      assert.equal(
+        gated.includes(n),
+        false,
+        `${n} must be gated off by default (allowFs=${allowFs})`,
+      );
     }
+  }
+});
+
+test("gateHttpTools exposes the networked tool only when allowNetwork is true", () => {
+  const gated = gateHttpTools(quantakryptoTools, false, true).map((t: ToolDefinition) => t.name);
+  for (const n of NETWORK_TOOL_NAMES) {
+    assert.ok(gated.includes(n), `${n} must be exposed when allowNetwork is true`);
   }
 });
 

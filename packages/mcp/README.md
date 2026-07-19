@@ -209,6 +209,12 @@ is reachable by untrusted peers:
   `list_rules`, `get_fix_examples`, `verify_fix`, `check_dependency`,
   `score_delta`, `triage_findings`, `apply_triage`, `remediate_findings`) are
   always available. `tools/list` and `tools/call` both reflect the gating.
+- **The networked probe tool is disabled by default.** `probe_endpoint` (active
+  TLS/SSH probing) is the only tool that opens a socket. Over HTTP it is exposed
+  only when `QUANTAKRYPTO_MCP_ALLOW_NETWORK=1` — a hosted server should not probe
+  arbitrary hosts. On the local stdio transport it is always available. It still
+  requires the per-call ownership attestation (`i_own_this=true`) and refuses
+  ranges/CIDRs regardless of transport.
 - **Filesystem tools are root-confined.** Even with `QUANTAKRYPTO_MCP_ALLOW_FS=1`,
   every scanned path must resolve inside the `QUANTAKRYPTO_MCP_ROOT` allow-list
   (`:`-separated; the process CWD by default). `..` traversal and out-of-root
@@ -231,6 +237,7 @@ is reachable by untrusted peers:
 | `PORT` | `3000` | Listen port. |
 | `QUANTAKRYPTO_MCP_TOKEN` | _(unset)_ | When set, requires `Authorization: Bearer <token>`. |
 | `QUANTAKRYPTO_MCP_ALLOW_FS` | _(off)_ | `1`/`true` exposes the filesystem tools over HTTP. |
+| `QUANTAKRYPTO_MCP_ALLOW_NETWORK` | _(off)_ | `1`/`true` exposes the networked `probe_endpoint` tool over HTTP. |
 | `QUANTAKRYPTO_MCP_ROOT` | _(cwd)_ | `:`-separated allow-list of directories the FS tools may scan. |
 | `QUANTAKRYPTO_MCP_ALLOW_ORIGIN` | _(loopback)_ | Comma-separated extra `Origin` hosts allowed on `/mcp`. |
 | `QUANTAKRYPTO_MCP_TIMEOUT_MS` | `30000` | Per-request deadline; aborts the in-flight scan on timeout. |

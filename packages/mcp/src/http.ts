@@ -26,7 +26,9 @@
  *     host WITHOUT a token is refused at startup (it would be an open relay).
  *   - The filesystem tools (scan_path, inventory_crypto, generate_cbom) read
  *     arbitrary server paths and are DISABLED over HTTP unless QUANTAKRYPTO_MCP_ALLOW_FS=1
- *     (security audit Q-01). The knowledge tools (explain_finding, suggest_hybrid,
+ *     (security audit Q-01). The networked probe_endpoint tool is likewise DISABLED
+ *     over HTTP unless QUANTAKRYPTO_MCP_ALLOW_NETWORK=1 (a hosted server should not
+ *     probe arbitrary hosts). The knowledge tools (explain_finding, suggest_hybrid,
  *     list_rules) are always available. Gating is enforced by registering only the
  *     permitted tools, so tools/list and tools/call both reflect it.
  *   - Per-request timeout (QUANTAKRYPTO_MCP_TIMEOUT_MS) and a response-size cap
@@ -72,6 +74,12 @@ export interface HttpServerOptions {
   token?: string;
   /** Expose the filesystem tools over HTTP. Defaults to QUANTAKRYPTO_MCP_ALLOW_FS=1. */
   allowFs?: boolean;
+  /**
+   * Expose the networked probe_endpoint tool over HTTP. Off by default (a hosted
+   * server should not probe arbitrary hosts); enable only on a trusted deployment.
+   * Defaults to QUANTAKRYPTO_MCP_ALLOW_NETWORK=1.
+   */
+  allowNetwork?: boolean;
   /** Per-request tool-execution timeout (ms). Defaults to QUANTAKRYPTO_MCP_TIMEOUT_MS. */
   timeoutMs?: number;
   /** Response-body size cap (bytes). Defaults to QUANTAKRYPTO_MCP_MAX_RESPONSE_BYTES. */
@@ -93,6 +101,8 @@ export interface HttpConfig {
   token: string;
   /** Whether the filesystem tools are exposed over HTTP. */
   allowFs: boolean;
+  /** Whether the networked probe_endpoint tool is exposed over HTTP (default off). */
+  allowNetwork: boolean;
   timeoutMs: number;
   maxResponseBytes: number;
   /** True when the host is a loopback interface (safe without auth). */
@@ -115,6 +125,9 @@ export function resolveHttpConfig(env: HttpEnv, options: HttpServerOptions = {})
   const allowFs =
     options.allowFs ??
     (env.QUANTAKRYPTO_MCP_ALLOW_FS === "1" || env.QUANTAKRYPTO_MCP_ALLOW_FS === "true");
+  const allowNetwork =
+    options.allowNetwork ??
+    (env.QUANTAKRYPTO_MCP_ALLOW_NETWORK === "1" || env.QUANTAKRYPTO_MCP_ALLOW_NETWORK === "true");
   const timeoutMs = options.timeoutMs ?? toInt(env.QUANTAKRYPTO_MCP_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
   const maxResponseBytes =
     options.maxResponseBytes ??
@@ -125,6 +138,7 @@ export function resolveHttpConfig(env: HttpEnv, options: HttpServerOptions = {})
     port,
     token,
     allowFs,
+    allowNetwork,
     timeoutMs,
     maxResponseBytes,
     loopback: isLoopbackHost(host),
@@ -274,18 +288,23 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
 
 /**
  * Select the tools to expose over HTTP for a given policy. The knowledge tools
- * are always returned; the filesystem tools are included only when
- * `allowFs` is true. Pure function of its inputs — the single source of truth
- * for HTTP tool gating, so tools/list and tools/call stay consistent.
+ * are always returned; the filesystem tools are included only when `allowFs` is
+ * true, and the networked probe tool only when `allowNetwork` is true (both off by
+ * default). Pure function of its inputs — the single source of truth for HTTP tool
+ * gating, so tools/list and tools/call stay consistent.
  */
 export function gateHttpTools(
   tools: readonly ToolDefinition[],
   allowFs: boolean,
+  allowNetwork = false,
 ): ToolDefinition[] {
   const fsNames = new Set(FS_TOOL_NAMES);
   const networkNames = new Set(NETWORK_TOOL_NAMES);
-  // Network tools are refused unconditionally on HTTP; FS tools only when !allowFs.
-  return tools.filter((t) => !networkNames.has(t.name) && (allowFs || !fsNames.has(t.name)));
+  return tools.filter(
+    (t) =>
+      (allowNetwork || !networkNames.has(t.name)) && // networked tools: opt-in on HTTP
+      (allowFs || !fsNames.has(t.name)), // fs tools: opt-in on HTTP
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -592,7 +611,9 @@ async function handleMcpPost(
  * with the filesystem tools gated per policy. Exposed for tests.
  */
 export function createHttpMcpServer(config: HttpConfig): McpServer {
-  return createQuantakryptoServer({ tools: gateHttpTools(quantakryptoTools, config.allowFs) });
+  return createQuantakryptoServer({
+    tools: gateHttpTools(quantakryptoTools, config.allowFs, config.allowNetwork),
+  });
 }
 
 /** Start the HTTP server, resolving once it is listening. */
@@ -616,9 +637,10 @@ export function startHttpServer(options: HttpServerOptions = {}): Promise<Server
     httpServer.listen(config.port, config.host, () => {
       const auth = config.token ? "bearer-auth" : "no-auth";
       const fs = config.allowFs ? "fs-tools:on" : "fs-tools:off";
+      const probe = config.allowNetwork ? "probe:on" : "probe:off";
       process.stderr.write(
         `quantakrypto MCP server (http) listening on http://${config.host}:${config.port} ` +
-          `[${auth}, ${fs}]\n`,
+          `[${auth}, ${fs}, ${probe}]\n`,
       );
       process.stderr.write(
         `  POST http://${config.host}:${config.port}/mcp   ` +

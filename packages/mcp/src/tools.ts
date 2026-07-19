@@ -1314,9 +1314,10 @@ const applyVerifiedPatchTool: ToolDefinition = {
  * post-quantum readiness. This is the ONLY MCP tool that opens a network socket;
  * the qprobe plane is loaded via dynamic import so the server stays offline until
  * the tool is actually invoked, and the ownership attestation gate is enforced in
- * qProbe's `runProbe` before any connection. It is refused entirely on the HTTP
- * transport (see {@link NETWORK_TOOL_NAMES}) — a hosted endpoint must not be an
- * arbitrary-host probing oracle.
+ * qProbe's `runProbe` before any connection. On the HTTP transport it is OFF by
+ * default (see {@link NETWORK_TOOL_NAMES}) — a hosted endpoint should not probe
+ * arbitrary hosts — but a trusted operator can opt in with
+ * QUANTAKRYPTO_MCP_ALLOW_NETWORK=1.
  */
 const probeEndpointTool: ToolDefinition = {
   name: "probe_endpoint",
@@ -1327,7 +1328,8 @@ const probeEndpointTool: ToolDefinition = {
     "the target. Refuses CIDR ranges / wildcards / lists — one host at a time. Performs " +
     "only a benign, unauthenticated handshake and never modifies the endpoint. NOTE: this " +
     "is the ONLY quantakrypto MCP tool that opens a network connection; the server is " +
-    "otherwise offline. Unavailable on the hosted HTTP transport.",
+    "otherwise offline. Over HTTP it is disabled unless the operator sets " +
+    "QUANTAKRYPTO_MCP_ALLOW_NETWORK=1.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1421,10 +1423,10 @@ export const FS_TOOL_NAMES: readonly string[] = [
 ];
 
 /**
- * Tools that open network connections. Refused UNCONDITIONALLY on the HTTP
- * transport (unlike FS tools, which an operator may re-enable): a hosted MCP must
- * never be an arbitrary-host probing oracle. Available only on the local stdio
- * transport, which trusts the local user.
+ * Tools that open network connections. On the HTTP transport they are OFF by
+ * default — a hosted MCP should not probe arbitrary hosts — but a trusted operator
+ * can opt in with QUANTAKRYPTO_MCP_ALLOW_NETWORK=1 (mirroring the FS-tools opt-in).
+ * Always available on the local stdio transport, which trusts the local user.
  */
 export const NETWORK_TOOL_NAMES: readonly string[] = ["probe_endpoint"];
 
