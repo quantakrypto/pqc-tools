@@ -116,6 +116,10 @@ export { mergeCboms } from "./cbom-merge.js";
 export { buildReadinessReport } from "./evidence.js";
 export type { ReadinessReport, EvidenceFinding, ReadinessReportOptions } from "./evidence.js";
 
+// Cryptography policy → per-finding verdicts (A.8.24 evidence §4).
+export { buildPolicyMapping, parseCryptoPolicy, verdictForAlgorithm } from "./policy.js";
+export type { CryptoPolicy, PolicyVerdict, PolicyMapping, PolicyFindingVerdict } from "./policy.js";
+
 // Remediation lookup (family + tier-aware) and stateful-HBS guidance.
 export {
   remediationFor,

@@ -6,6 +6,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — A.8.24 evidence policy mapping (roadmap 🟡)
+
+- **`qscan --format evidence --policy <file>`** completes §4 of the ISO/IEC 27001
+  A.8.24 evidence report: an org supplies a machine-readable cryptography policy (a
+  permit-list of algorithm families — `prohibited` / `inTransition` / `permitted`,
+  plus a `transitionDeadline` and `defaultVerdict`), and every finding is flagged
+  **conformant / violation / transition-pending** against it, with a per-verdict
+  summary. The verdicts are folded into the attested (hashed) body, so *this policy
+  judgment over this scan* is reproducible and tamper-evident. A malformed policy
+  fails loudly (`parseCryptoPolicy` throws on an unknown family) rather than
+  silently dropping the verdicts. New `@quantakrypto/core` API: `buildPolicyMapping`,
+  `parseCryptoPolicy`, `verdictForAlgorithm`, `CryptoPolicy`. See
+  [`docs/compliance/example-crypto-policy.json`](docs/compliance/example-crypto-policy.json).
+
 ### Added — standards-currency cadence (roadmap 🟠)
 
 - **A single, dated, cited source of truth for the PQC standards the tool tracks**

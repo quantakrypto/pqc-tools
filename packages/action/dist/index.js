@@ -8035,6 +8035,113 @@ var init_cbom_merge = __esm({
   }
 });
 
+// ../core/dist/policy.js
+function verdictForAlgorithm(algorithm, policy) {
+  const algo = algorithm ?? "unknown";
+  if (policy.prohibited?.includes(algo)) {
+    return { verdict: "violation", reason: `${algo} is prohibited by the policy.` };
+  }
+  if (policy.inTransition?.includes(algo)) {
+    return {
+      verdict: "transition-pending",
+      reason: `${algo} is being migrated (in the policy's transition set).`
+    };
+  }
+  if (policy.permitted?.includes(algo)) {
+    return { verdict: "conformant", reason: `${algo} is permitted by the policy.` };
+  }
+  const fallback = policy.defaultVerdict ?? "violation";
+  return {
+    verdict: fallback,
+    reason: `${algo} is not named in the policy (default verdict: ${fallback}).`
+  };
+}
+function buildPolicyMapping(findings, policy) {
+  const summary = {
+    conformant: 0,
+    violation: 0,
+    "transition-pending": 0
+  };
+  const mapped = findings.map((f) => {
+    const { verdict, reason } = verdictForAlgorithm(f.algorithm, policy);
+    summary[verdict]++;
+    return {
+      ruleId: f.ruleId,
+      algorithm: f.algorithm ?? "unknown",
+      file: f.location.file,
+      line: f.location.line,
+      verdict,
+      reason
+    };
+  });
+  return {
+    policyName: policy.name ?? null,
+    transitionDeadline: policy.transitionDeadline ?? null,
+    summary,
+    findings: mapped
+  };
+}
+function parseCryptoPolicy(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("crypto policy must be a JSON object");
+  }
+  const obj = raw;
+  const validFamilies = new Set(ALGORITHM_FAMILIES);
+  const list = (key) => {
+    const v = obj[key];
+    if (v === void 0)
+      return void 0;
+    if (!Array.isArray(v))
+      throw new TypeError(`policy "${key}" must be an array of algorithm families`);
+    for (const item of v) {
+      if (typeof item !== "string" || !validFamilies.has(item)) {
+        throw new TypeError(`policy "${key}" has an unknown algorithm family ${JSON.stringify(item)}; expected one of ${ALGORITHM_FAMILIES.join(", ")}`);
+      }
+    }
+    return v;
+  };
+  const verdicts = /* @__PURE__ */ new Set(["conformant", "violation", "transition-pending"]);
+  let defaultVerdict;
+  if (obj.defaultVerdict !== void 0) {
+    if (typeof obj.defaultVerdict !== "string" || !verdicts.has(obj.defaultVerdict)) {
+      throw new TypeError(`policy "defaultVerdict" must be one of ${[...verdicts].join(", ")}`);
+    }
+    defaultVerdict = obj.defaultVerdict;
+  }
+  if (obj.name !== void 0 && typeof obj.name !== "string") {
+    throw new TypeError('policy "name" must be a string');
+  }
+  if (obj.transitionDeadline !== void 0 && typeof obj.transitionDeadline !== "string") {
+    throw new TypeError('policy "transitionDeadline" must be a string');
+  }
+  return {
+    ...obj.name !== void 0 ? { name: obj.name } : {},
+    ...list("permitted") ? { permitted: list("permitted") } : {},
+    ...list("prohibited") ? { prohibited: list("prohibited") } : {},
+    ...list("inTransition") ? { inTransition: list("inTransition") } : {},
+    ...obj.transitionDeadline !== void 0 ? { transitionDeadline: obj.transitionDeadline } : {},
+    ...defaultVerdict !== void 0 ? { defaultVerdict } : {}
+  };
+}
+var ALGORITHM_FAMILIES;
+var init_policy = __esm({
+  "../core/dist/policy.js"() {
+    "use strict";
+    ALGORITHM_FAMILIES = [
+      "RSA",
+      "ECDH",
+      "ECDSA",
+      "EdDSA",
+      "DH",
+      "DSA",
+      "X25519",
+      "X448",
+      "ECIES",
+      "unknown"
+    ];
+  }
+});
+
 // ../core/dist/evidence.js
 import { createHash as createHash4 } from "node:crypto";
 function canonicalize(value) {
@@ -8058,6 +8165,7 @@ function buildReadinessReport(result, opts = {}) {
     file: f.location.file,
     line: f.location.line
   }));
+  const policyMapping = opts.policy ? buildPolicyMapping(result.findings, opts.policy) : void 0;
   const hashableBody = {
     reportType: "quantakrypto-readiness",
     specVersion: 1,
@@ -8068,7 +8176,8 @@ function buildReadinessReport(result, opts = {}) {
     },
     tool: { name: "qScan", version: VERSION },
     inventory: result.inventory,
-    findings
+    findings,
+    ...policyMapping ? { policyMapping } : {}
   };
   const contentHash = "sha256:" + createHash4("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
   return {
@@ -8083,6 +8192,7 @@ var init_evidence = __esm({
     "use strict";
     init_cbom();
     init_version();
+    init_policy();
   }
 });
 
@@ -8124,6 +8234,7 @@ var init_dist = __esm({
     init_cbom();
     init_cbom_merge();
     init_evidence();
+    init_policy();
     init_remediation();
     init_standards();
     init_cwe();
@@ -8598,11 +8709,11 @@ async function runTriage(result, opts) {
   const targets = result.findings.filter((f) => SEVERITY_RANK2[f.severity] <= floorRank);
   const stderr = opts.stderr ?? ((s) => void process3.stderr.write(s));
   const root = opts.root ?? result.root ?? ".";
-  const readFile6 = opts.readFile ?? ((rel) => fsReadFile(path6.resolve(root, rel), "utf8"));
+  const readFile7 = opts.readFile ?? ((rel) => fsReadFile(path6.resolve(root, rel), "utf8"));
   if (opts.dryRun) {
     const contexts = [];
     for (const f of targets) {
-      const content = level === "metadata" ? "" : await readFile6(f.location.file).catch(() => "");
+      const content = level === "metadata" ? "" : await readFile7(f.location.file).catch(() => "");
       contexts.push(buildContext(f, level, content));
     }
     return {
@@ -8622,7 +8733,7 @@ async function runTriage(result, opts) {
     return agent.triageFindings(findings, {
       client,
       level,
-      readFile: readFile6,
+      readFile: readFile7,
       fingerprint: fingerprintFinding,
       floor: opts.floor,
       cacheFile: opts.cacheFile,
@@ -8679,12 +8790,13 @@ var init_triage_run = __esm({
 
 // src/main.ts
 init_dist();
-import { access, mkdir as mkdir3, readFile as readFile5, writeFile as writeFile4 } from "node:fs/promises";
+import { access, mkdir as mkdir3, readFile as readFile6, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, isAbsolute, resolve, sep as sep2 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // ../qscan/dist/index.js
 init_dist();
+import { readFile as readFile5 } from "node:fs/promises";
 import process4 from "node:process";
 
 // ../qscan/dist/baseline.js
@@ -8695,10 +8807,10 @@ function applyBaseline2(findings, baseline) {
   return { kept: newFindings, suppressed };
 }
 async function readBaseline(path7) {
-  const { readFile: readFile6 } = await import("node:fs/promises");
+  const { readFile: readFile7 } = await import("node:fs/promises");
   let raw;
   try {
-    raw = await readFile6(path7, "utf8");
+    raw = await readFile7(path7, "utf8");
   } catch (cause) {
     throw new Error(`could not read baseline file "${path7}": ${errMessage(cause)}`);
   }
@@ -8984,6 +9096,10 @@ async function runQscan(opts, hooks = {}) {
     result.findings = split.kept;
     suppressed = split.suppressed;
   }
+  let policy;
+  if (options.policy) {
+    policy = parseCryptoPolicy(JSON.parse(await readFile5(options.policy, "utf8")));
+  }
   const exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold)) ? EXIT.FINDINGS : EXIT.OK;
   if (options.triage) {
     const { runTriage: runTriage2 } = await Promise.resolve().then(() => (init_triage_run(), triage_run_exports));
@@ -9012,13 +9128,14 @@ async function runQscan(opts, hooks = {}) {
       color: hooks.color ?? false,
       redactSnippets: options.noSnippets,
       topN: options.topN,
-      tier: options.tier
+      tier: options.tier,
+      ...policy ? { policy } : {}
     }),
     exitCode
   };
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0, tier = void 0 } = typeof opts === "boolean" ? { color: opts } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, policy = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
@@ -9029,7 +9146,8 @@ function renderReport(result, format, opts = {}) {
     case "evidence":
       return JSON.stringify(buildReadinessReport(result, {
         repository: process4.env.GITHUB_REPOSITORY,
-        commit: process4.env.GITHUB_SHA
+        commit: process4.env.GITHUB_SHA,
+        ...policy ? { policy } : {}
       }), null, 2);
     case "human":
     default:
@@ -9284,7 +9402,7 @@ async function readPullRequestContext(env = process.env) {
     if (!repository || !eventPath) return void 0;
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) return void 0;
-    const payload = JSON.parse(await readFile5(eventPath, "utf8"));
+    const payload = JSON.parse(await readFile6(eventPath, "utf8"));
     const prNumber = payload.pull_request?.number ?? payload.number;
     if (typeof prNumber !== "number") return void 0;
     const apiUrl = env["GITHUB_API_URL"] || "https://api.github.com";

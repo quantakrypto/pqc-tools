@@ -10,11 +10,19 @@
  * downstream tools can reuse them without reaching into internal paths.
  */
 
+import { readFile } from "node:fs/promises";
 import process from "node:process";
 
-import { buildReadinessReport, changedFiles, scan, scanParallel } from "@quantakrypto/core";
+import {
+  buildReadinessReport,
+  changedFiles,
+  parseCryptoPolicy,
+  scan,
+  scanParallel,
+} from "@quantakrypto/core";
 import type {
   Baseline,
+  CryptoPolicy,
   Finding,
   ParallelScanOptions,
   ScanResult,
@@ -217,6 +225,14 @@ export async function runQscan(
     suppressed = split.suppressed;
   }
 
+  // --policy: the org cryptography policy for the evidence report's §4 verdicts.
+  // Parsed strictly — a malformed policy fails loudly rather than silently
+  // dropping the verdicts from the attested evidence.
+  let policy: CryptoPolicy | undefined;
+  if (options.policy) {
+    policy = parseCryptoPolicy(JSON.parse(await readFile(options.policy, "utf8")));
+  }
+
   // Exit code is computed from RAW severities, BEFORE triage runs, so the
   // (optional) LLM triage pass can never make a failing scan pass CI.
   const exitCode = result.findings.some((f) =>
@@ -256,6 +272,7 @@ export async function runQscan(
       redactSnippets: options.noSnippets,
       topN: options.topN,
       tier: options.tier,
+      ...(policy ? { policy } : {}),
     }),
     exitCode,
   };
@@ -271,6 +288,8 @@ export interface RenderReportOptions {
   topN?: number;
   /** CNSA security tier for the migration-targets footer (`--tier`). */
   tier?: SecurityTier;
+  /** Org cryptography policy for the evidence report's §4 verdicts (`--policy`). */
+  policy?: CryptoPolicy;
 }
 
 /** Render a scan result in the requested format. */
@@ -285,7 +304,8 @@ export function renderReport(
     redactSnippets = false,
     topN = undefined,
     tier = undefined,
-  } = typeof opts === "boolean" ? { color: opts } : opts;
+    policy = undefined,
+  } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
@@ -295,10 +315,12 @@ export function renderReport(
       return renderCbom(result);
     case "evidence":
       // ISO A.8.24 readiness report; repo/commit come from CI env when present.
+      // A `--policy` file adds the §4 conformant/violation/transition verdicts.
       return JSON.stringify(
         buildReadinessReport(result, {
           repository: process.env.GITHUB_REPOSITORY,
           commit: process.env.GITHUB_SHA,
+          ...(policy ? { policy } : {}),
         }),
         null,
         2,

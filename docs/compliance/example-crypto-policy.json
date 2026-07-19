@@ -1,0 +1,8 @@
+{
+  "name": "example-pqc-policy-v1",
+  "prohibited": ["RSA", "DH", "DSA"],
+  "inTransition": ["ECDH", "ECDSA", "X25519", "X448"],
+  "permitted": ["EdDSA"],
+  "transitionDeadline": "2030-01-01",
+  "defaultVerdict": "violation"
+}

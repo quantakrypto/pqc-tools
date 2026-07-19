@@ -21,6 +21,8 @@ import { createHash } from "node:crypto";
 import type { ScanResult } from "./types.js";
 import { toCbom } from "./cbom.js";
 import { VERSION } from "./version.js";
+import { buildPolicyMapping } from "./policy.js";
+import type { CryptoPolicy, PolicyMapping } from "./policy.js";
 
 /** Stable per-finding record for the evidence body (deterministic per commit). */
 export interface EvidenceFinding {
@@ -44,6 +46,8 @@ export interface ReadinessReport {
   tool: { name: "qScan"; version: string };
   inventory: ScanResult["inventory"];
   findings: EvidenceFinding[];
+  /** §4 policy verdicts, present only when a crypto policy was supplied. */
+  policyMapping?: PolicyMapping;
   cbom: unknown;
   attestation: {
     /** sha256 over the canonicalized deterministic body (excludes scanTimeUtc). */
@@ -73,6 +77,8 @@ export interface ReadinessReportOptions {
   repository?: string;
   /** Full commit SHA (e.g. from `GITHUB_SHA`); omitted → null. */
   commit?: string;
+  /** Optional org cryptography policy — adds the §4 `policyMapping` verdicts. */
+  policy?: CryptoPolicy;
 }
 
 /**
@@ -97,6 +103,10 @@ export function buildReadinessReport(
   // its CycloneDX envelope carries a volatile timestamp/serial — so it is
   // EXCLUDED from the hashed body (its integrity follows from its hashed inputs)
   // to keep the content hash reproducible across scan runs on the same commit.
+  // §4: if the org supplied a crypto policy, attest the per-finding verdicts too.
+  // Deterministic (same findings + policy → same mapping), so it is hashed.
+  const policyMapping = opts.policy ? buildPolicyMapping(result.findings, opts.policy) : undefined;
+
   const hashableBody = {
     reportType: "quantakrypto-readiness",
     specVersion: 1,
@@ -108,6 +118,7 @@ export function buildReadinessReport(
     tool: { name: "qScan", version: VERSION },
     inventory: result.inventory,
     findings,
+    ...(policyMapping ? { policyMapping } : {}),
   };
   const contentHash =
     "sha256:" +

@@ -105,9 +105,14 @@ running against this list; findings will be folded in.
 
 ### 🟡 Medium
 
-- **ISO/IEC 27001 A.8.24 evidence-chain export + ACVP provenance** — designs
-  exist ([docs/compliance/](compliance/)); implement the signed, timestamped
-  readiness report and the vector-provenance pipeline.
+- ~~**ISO/IEC 27001 A.8.24 evidence-chain export + ACVP provenance.**~~ ✅
+  **Done (2026-07-19).** `qscan --format evidence` emits the readiness report
+  (findings + inventory + CBOM + a deterministic content hash); Sieve records
+  ACVP vector **provenance** (`provenanceDeclared`); and `--policy <file>` now adds
+  the §4 **conformant / violation / transition-pending** verdicts against an org
+  crypto policy, folded into the attested hash. Only signing + RFC-3161 timestamping
+  remain, and those are **deliberately external** (ADR-0004 — the tool orchestrates
+  a signer, it does not implement one).
 - **Reproducible-build verification** for the published artifacts.
 - **Report i18n / accessibility** of human-facing output.
 - **Published supply-chain gate on a cadence** — Scorecard + dependency/Action

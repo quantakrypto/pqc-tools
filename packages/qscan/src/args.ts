@@ -97,6 +97,8 @@ export interface QscanOptions {
   maxFindings?: number;
   /** CNSA security tier for the migration-targets footer (`--tier`). Default: none. */
   tier?: SecurityTier;
+  /** Org cryptography policy file (`--policy`) for the evidence report's §4 verdicts. */
+  policy?: string;
   /** How much source context leaves the machine (`--context`). Default: snippet. */
   contextLevel?: ContextLevel;
   /** Print the exact triage payload and exit without calling the provider (`--dry-run`). */
@@ -373,6 +375,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--baseline":
         options.baseline = takeValue();
         explicit.add("baseline");
+        break;
+      case "--policy":
+        options.policy = takeValue();
         break;
       case "--write-baseline":
         options.writeBaseline = takeValue();
