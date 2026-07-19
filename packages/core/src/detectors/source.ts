@@ -981,6 +981,41 @@ const RE_CERT_SIG_ALG =
 const RE_SSH_KEX =
   /\b(diffie-hellman-group(?:1|14|15|16|17|18)(?:-sha1|-sha256|-sha512)?|diffie-hellman-group-exchange-sha(?:1|256)|ecdh-sha2-nistp(?:256|384|521)|curve25519-sha256)\b/g;
 
+// A bare key-type token (`ssh-rsa`, `ssh-ed25519`, …) is real SSH crypto only
+// when it is EITHER (a) followed by base64 key material — an actual
+// authorized_keys / known_hosts entry — OR (b) one of ≥2 DISTINCT ssh key/host-key
+// algorithm tokens on the same line — an algorithm-preference list
+// (`HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp256,ssh-rsa`, `%w[…]`, …). A
+// lone token, e.g. a UI label / i18n value like `"ssh-rsa": "ssh-rsa"`, is
+// neither, so it must NOT be flagged. `RE_SSH_ALGO_TOKEN` is a separate (cloned-
+// on-use) copy so counting per line never disturbs the outer `eachMatch` state.
+const RE_SSH_ALGO_TOKEN = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521))\b/g;
+/** How far around a token we look for a sibling algorithm on the same line. A
+ * real `HostKeyAlgorithms` list is short; bounding the window keeps the per-token
+ * work O(1) so a pathological single huge line can't make detection quadratic. */
+const SSH_LINE_WINDOW = 512;
+function isRealSshKeyOrAlgoList(content: string, index: number, matchLen: number): boolean {
+  // (a) base64 key material immediately after the token → a real SSH public key.
+  if (/^\s+[A-Za-z0-9+/]{20,}/.test(content.slice(index + matchLen, index + matchLen + 80))) {
+    return true;
+  }
+  // (b) ≥2 distinct ssh key/host-key algorithm tokens on the same line → a list.
+  // Bound both the back-scan for the line start and the window itself so the work
+  // is constant per token and never crosses a line boundary (i18n entries live on
+  // separate lines, so a lone repeated token stays a single distinct token).
+  const from = Math.max(0, index - SSH_LINE_WINDOW);
+  const pre = content.slice(from, index);
+  const preNl = pre.lastIndexOf("\n");
+  const lineStart = preNl === -1 ? from : from + preNl + 1;
+  const to = Math.min(content.length, index + matchLen + SSH_LINE_WINDOW);
+  const post = content.slice(index, to);
+  const postNl = post.indexOf("\n");
+  const lineEnd = postNl === -1 ? to : index + postNl;
+  const distinct = new Set<string>();
+  for (const t of content.slice(lineStart, lineEnd).matchAll(RE_SSH_ALGO_TOKEN)) distinct.add(t[1]);
+  return distinct.size >= 2;
+}
+
 const RULE_SSH_PUBKEY: RuleMeta = {
   id: "ssh-public-key",
   title: "Classical SSH public key",
@@ -1046,6 +1081,9 @@ const sshCertDetector: Detector = {
 
     // SSH public keys: ssh-rsa AAAA…, ecdsa-sha2-nistp256 …, ssh-ed25519 …
     eachMatch(RE_SSH_PUBKEY, content, (m) => {
+      // Skip a bare token that is neither a real key nor an algorithm list (e.g.
+      // a `"ssh-rsa": "ssh-rsa"` i18n label) — see `isRealSshKeyOrAlgoList`.
+      if (!isRealSshKeyOrAlgoList(content, m.index, m[0].length)) return;
       const tok = m[1];
       const algorithm: Finding["algorithm"] = tok.startsWith("ssh-rsa")
         ? "RSA"

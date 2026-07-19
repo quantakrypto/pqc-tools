@@ -1828,7 +1828,24 @@ function collectCryptoAliases(content) {
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-var RE_GENERATE_KEYPAIR, KEYGEN_INFO, ALIASABLE, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
+function isRealSshKeyOrAlgoList(content, index, matchLen) {
+  if (/^\s+[A-Za-z0-9+/]{20,}/.test(content.slice(index + matchLen, index + matchLen + 80))) {
+    return true;
+  }
+  const from = Math.max(0, index - SSH_LINE_WINDOW);
+  const pre = content.slice(from, index);
+  const preNl = pre.lastIndexOf("\n");
+  const lineStart = preNl === -1 ? from : from + preNl + 1;
+  const to = Math.min(content.length, index + matchLen + SSH_LINE_WINDOW);
+  const post = content.slice(index, to);
+  const postNl = post.indexOf("\n");
+  const lineEnd = postNl === -1 ? to : index + postNl;
+  const distinct = /* @__PURE__ */ new Set();
+  for (const t of content.slice(lineStart, lineEnd).matchAll(RE_SSH_ALGO_TOKEN))
+    distinct.add(t[1]);
+  return distinct.size >= 2;
+}
+var RE_GENERATE_KEYPAIR, KEYGEN_INFO, ALIASABLE, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RE_SSH_ALGO_TOKEN, SSH_LINE_WINDOW, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
 var init_source = __esm({
   "../core/dist/detectors/source.js"() {
     "use strict";
@@ -2440,6 +2457,8 @@ var init_source = __esm({
     RE_SSH_PUBKEY = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521))\b/g;
     RE_CERT_SIG_ALG = /\b(sha(?:1|256|384|512)WithRSAEncryption|ecdsa-with-SHA(?:1|256|384|512)|rsassaPss|dsaWithSHA(?:1|256))\b/g;
     RE_SSH_KEX = /\b(diffie-hellman-group(?:1|14|15|16|17|18)(?:-sha1|-sha256|-sha512)?|diffie-hellman-group-exchange-sha(?:1|256)|ecdh-sha2-nistp(?:256|384|521)|curve25519-sha256)\b/g;
+    RE_SSH_ALGO_TOKEN = /\b(ssh-rsa|ssh-ed25519|ssh-dss|ecdsa-sha2-nistp(?:256|384|521))\b/g;
+    SSH_LINE_WINDOW = 512;
     RULE_SSH_PUBKEY = {
       id: "ssh-public-key",
       title: "Classical SSH public key",
@@ -2492,6 +2511,8 @@ var init_source = __esm({
       detect({ file, content }) {
         const findings = [];
         eachMatch(RE_SSH_PUBKEY, content, (m) => {
+          if (!isRealSshKeyOrAlgoList(content, m.index, m[0].length))
+            return;
           const tok = m[1];
           const algorithm = tok.startsWith("ssh-rsa") ? "RSA" : tok === "ssh-ed25519" ? "EdDSA" : tok === "ssh-dss" ? "DSA" : "ECDSA";
           findings.push(findingFromRule(RULE_SSH_PUBKEY, { file, content, index: m.index, matchLength: m[0].length }, {

@@ -6,6 +6,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed (from a real-repo precision audit)
+
+- **`ssh-public-key` false positives on i18n / label strings.** The rule matched
+  the bare key-type token (`ssh-rsa`, `ssh-ed25519`, …), so it fired on UI labels
+  and translation values like `"ssh-rsa": "ssh-rsa"` — **124 false positives** on a
+  single real repo (activepieces, 22.8k files). A bare token now counts only when
+  it is either followed by base64 key material (a real `authorized_keys` /
+  `known_hosts` entry) or is one of ≥2 distinct ssh key/host-key algorithm tokens
+  on the line (a `HostKeyAlgorithms …` preference list) — the two genuine SSH
+  surfaces. The line window is bounded so detection stays linear-time. Both
+  benchmarks unchanged (tuned P/R/F1 **1.000**, recall **0.847**); the real repo
+  drops from 161 → 37 findings with the SSH FPs gone.
+
 ## [0.4.4] — 2026-07-19
 
 ### Added — infrastructure post-quantum readiness

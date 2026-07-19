@@ -241,9 +241,23 @@ test("secp256k1 direct usage is flagged", () => {
 });
 
 test("SSH public key and cert signature algorithm are config-scope findings", () => {
-  const ssh = byRule(run("authorized_keys", "ssh-ed25519 AAAAC3Nz... user@host"), "ssh-public-key");
+  // A real authorized_keys line: type token followed by base64 key material.
+  const ssh = byRule(
+    run(
+      "authorized_keys",
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEKEYFAKEKEYFAKEKEYFAKEKEY00 user@host",
+    ),
+    "ssh-public-key",
+  );
   assert.ok(ssh, "ssh-ed25519 public key detected");
   assert.equal(ssh.algorithm, "EdDSA");
+
+  // An SSH algorithm-preference list (≥2 distinct tokens) is also flagged.
+  const algoList = byRule(
+    run("sshd_config", "HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp256,ssh-rsa"),
+    "ssh-public-key",
+  );
+  assert.ok(algoList, "host-key algorithm list detected");
 
   const cert = byRule(
     run("cert.cnf", "signatureAlgorithm: sha256WithRSAEncryption"),
@@ -251,6 +265,17 @@ test("SSH public key and cert signature algorithm are config-scope findings", ()
   );
   assert.ok(cert, "cert signature algorithm detected");
   assert.equal(cert.algorithm, "RSA");
+});
+
+test("a bare `ssh-rsa` label (e.g. an i18n value) is NOT a false SSH key finding", () => {
+  // Real i18n files are one entry per line, so each line carries a single
+  // repeated token — no base64, no sibling algorithm token — a UI label, not
+  // crypto config. Must stay silent (this is the shape that produced 124 false
+  // positives on a real repo).
+  const i18n = ["{", '  "ssh-rsa": "ssh-rsa",', '  "ssh-ed25519": "ssh-ed25519"', "}"].join("\n");
+  assert.equal(byRule(run("de.json", i18n), "ssh-public-key"), undefined);
+  // A lone mention in a config string is also not a key.
+  assert.equal(byRule(run("app.yaml", "keyType: ssh-rsa"), "ssh-public-key"), undefined);
 });
 
 test("DSA and PGP PEM blocks are detected (C7)", () => {
