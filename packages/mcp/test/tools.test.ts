@@ -208,6 +208,20 @@ test("generate_cbom requires a path argument", async () => {
   assert.match(result.content[0].text, /path/i);
 });
 
+/* --------------------- probe_endpoint (networked tool) -------------------- */
+
+test("probe_endpoint refuses when i_own_this is not true (no network)", async () => {
+  const result = await callTool("probe_endpoint", { target: "example.com", i_own_this: false });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /i_own_this|attest|authorized/i);
+});
+
+test("probe_endpoint refuses a CIDR range even with attestation (no network)", async () => {
+  const result = await callTool("probe_endpoint", { target: "10.0.0.0/24", i_own_this: true });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /CIDR|range|one host at a time/i);
+});
+
 /* ------------------------- FS confinement (P0) ---------------------------- */
 
 test("scan_path rejects an out-of-root absolute path (no arbitrary read)", async () => {

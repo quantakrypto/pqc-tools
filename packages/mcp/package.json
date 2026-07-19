@@ -38,7 +38,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@quantakrypto/core": "0.4.4"
+    "@quantakrypto/core": "0.4.4",
+    "@quantakrypto/qprobe": "0.4.4"
   },
   "scripts": {
     "build": "tsc -b",

@@ -79,6 +79,7 @@ test("tools/list returns every tool with a valid object inputSchema", async () =
     "inventory_crypto",
     "list_rules",
     "plan_migration",
+    "probe_endpoint",
     "remediate_findings",
     "scan_path",
     "score_delta",

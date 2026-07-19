@@ -45,7 +45,7 @@ import process from "node:process";
 import { createQuantakryptoServer } from "./index.js";
 import { ErrorCode, makeFailure } from "./protocol.js";
 import type { JsonRpcResponse, ToolDefinition } from "./protocol.js";
-import { quantakryptoTools, FS_TOOL_NAMES } from "./tools.js";
+import { quantakryptoTools, FS_TOOL_NAMES, NETWORK_TOOL_NAMES } from "./tools.js";
 import type { McpServer } from "./server.js";
 
 /** Header carrying the MCP session id (per the Streamable HTTP transport). */
@@ -283,7 +283,9 @@ export function gateHttpTools(
   allowFs: boolean,
 ): ToolDefinition[] {
   const fsNames = new Set(FS_TOOL_NAMES);
-  return tools.filter((t) => allowFs || !fsNames.has(t.name));
+  const networkNames = new Set(NETWORK_TOOL_NAMES);
+  // Network tools are refused unconditionally on HTTP; FS tools only when !allowFs.
+  return tools.filter((t) => !networkNames.has(t.name) && (allowFs || !fsNames.has(t.name)));
 }
 
 /* -------------------------------------------------------------------------- */

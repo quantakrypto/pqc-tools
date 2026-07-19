@@ -23,7 +23,7 @@ import {
   originDecision,
   allowedOriginHosts,
 } from "../src/http.js";
-import { quantakryptoTools, FS_TOOL_NAMES } from "../src/tools.js";
+import { quantakryptoTools, FS_TOOL_NAMES, NETWORK_TOOL_NAMES } from "../src/tools.js";
 import type { ToolDefinition, ToolContext } from "../src/protocol.js";
 import { McpServer } from "../src/server.js";
 
@@ -177,6 +177,16 @@ test("gateHttpTools exposes the FS tools when allowFs is true", () => {
   const gated = gateHttpTools(quantakryptoTools, true).map((t: ToolDefinition) => t.name);
   for (const fs of FS_TOOL_NAMES) {
     assert.equal(gated.includes(fs), true, `${fs} must be exposed`);
+  }
+});
+
+test("gateHttpTools ALWAYS hides the networked probe_endpoint tool (even with allowFs)", () => {
+  // A hosted MCP must never be an arbitrary-host probing oracle.
+  for (const allowFs of [false, true]) {
+    const gated = gateHttpTools(quantakryptoTools, allowFs).map((t: ToolDefinition) => t.name);
+    for (const n of NETWORK_TOOL_NAMES) {
+      assert.equal(gated.includes(n), false, `${n} must be gated off (allowFs=${allowFs})`);
+    }
   }
 });
 

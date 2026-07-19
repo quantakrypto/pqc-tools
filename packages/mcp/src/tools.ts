@@ -1310,6 +1310,104 @@ const applyVerifiedPatchTool: ToolDefinition = {
 };
 
 /**
+ * `probe_endpoint` — actively probe ONE live TLS/SSH endpoint the caller OWNS for
+ * post-quantum readiness. This is the ONLY MCP tool that opens a network socket;
+ * the qprobe plane is loaded via dynamic import so the server stays offline until
+ * the tool is actually invoked, and the ownership attestation gate is enforced in
+ * qProbe's `runProbe` before any connection. It is refused entirely on the HTTP
+ * transport (see {@link NETWORK_TOOL_NAMES}) — a hosted endpoint must not be an
+ * arbitrary-host probing oracle.
+ */
+const probeEndpointTool: ToolDefinition = {
+  name: "probe_endpoint",
+  description:
+    "Actively probe ONE live TLS/SSH endpoint YOU OWN for post-quantum readiness " +
+    "(PQC-hybrid key exchange X25519MLKEM768, classical certificate posture). REQUIRES " +
+    "an ownership attestation: set i_own_this=true to confirm you are authorized to test " +
+    "the target. Refuses CIDR ranges / wildcards / lists — one host at a time. Performs " +
+    "only a benign, unauthenticated handshake and never modifies the endpoint. NOTE: this " +
+    "is the ONLY quantakrypto MCP tool that opens a network connection; the server is " +
+    "otherwise offline. Unavailable on the hosted HTTP transport.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      target: {
+        type: "string",
+        description: "A single host or host:port you own (no ranges/CIDRs/wildcards).",
+      },
+      mode: {
+        type: "string",
+        enum: ["tls", "ssh", "auto"],
+        description: "Probe mode (default: auto — SSH on :22, TLS otherwise).",
+      },
+      i_own_this: {
+        type: "boolean",
+        description:
+          "Attestation that you are authorized to probe this endpoint. Must be true; the probe is refused otherwise.",
+      },
+      timeout_ms: { type: "number", description: "Per-connection timeout in ms (default 8000)." },
+    },
+    required: ["target", "i_own_this"],
+    additionalProperties: false,
+  },
+  async handler(args): Promise<ToolResult> {
+    const target = args.target;
+    if (typeof target !== "string" || target.length === 0) {
+      return errorResult("probe_endpoint requires a non-empty 'target' string.");
+    }
+    if (args.i_own_this !== true) {
+      return errorResult(
+        "probe_endpoint refused: set i_own_this=true to attest you are authorized to probe this endpoint. Active probing of endpoints you do not own may be unlawful.",
+      );
+    }
+    const mode = args.mode === "tls" || args.mode === "ssh" ? args.mode : "auto";
+    const timeoutMs = typeof args.timeout_ms === "number" ? args.timeout_ms : undefined;
+    // Dynamic import keeps the networked qprobe plane out of the server process
+    // until this tool is actually used; runProbe enforces the attestation gate.
+    const qprobe = await import("@quantakrypto/qprobe");
+    // Parse the target explicitly so a CIDR/range/list refusal returns a helpful
+    // message rather than a scrubbed internal error.
+    let parsed;
+    try {
+      parsed = qprobe.parseTarget(target, mode === "ssh" ? 22 : 443);
+    } catch (e) {
+      return errorResult(`probe_endpoint: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const probed = await safe("probe_endpoint", () =>
+      qprobe.runProbe({ targets: [parsed], mode, attest: { iOwnThis: true }, timeoutMs }),
+    );
+    if (!probed.ok) return probed.result;
+    const { reports, findings, inventory } = probed.value;
+    const lines: string[] = [];
+    let unreachable = 0;
+    for (const r of reports) {
+      lines.push(`${r.target.host}:${r.target.port} [${r.mode}]`);
+      const err = r.ssh?.error ?? r.tls?.error ?? r.hybrid?.error;
+      if (err && r.findings.length === 0) {
+        unreachable++;
+        // Do NOT let an unreachable/errored endpoint read as a clean 100/100.
+        lines.push(`  ⚠ probe error: ${err} — endpoint NOT assessed (not a clean result)`);
+      }
+      for (const p of r.positives) lines.push(`  ✓ ${p}`);
+      for (const f of r.findings) lines.push(`  [${f.severity}] ${f.title} — ${f.message}`);
+    }
+    const note =
+      unreachable > 0
+        ? " — NOTE: an endpoint could not be reached/handshaken, so this is NOT a clean bill of health"
+        : "";
+    lines.push(
+      `\n${findings.length} finding${findings.length === 1 ? "" : "s"} · ${inventory.hndlCount} HNDL-exposed · readiness ${inventory.readinessScore}/100${note}`,
+    );
+    return {
+      content: [
+        { type: "text", text: lines.join("\n") },
+        { type: "text", text: JSON.stringify({ findings, inventory }, null, 2) },
+      ],
+    };
+  },
+};
+
+/**
  * Tools that read arbitrary filesystem paths. Disabled by default on the HTTP
  * transport (see {@link ./http.ts}) because a hosted endpoint must not be an
  * arbitrary-file-read oracle (security audit Q-01). The stdio transport, which
@@ -1321,6 +1419,14 @@ export const FS_TOOL_NAMES: readonly string[] = [
   "generate_cbom",
   "plan_migration",
 ];
+
+/**
+ * Tools that open network connections. Refused UNCONDITIONALLY on the HTTP
+ * transport (unlike FS tools, which an operator may re-enable): a hosted MCP must
+ * never be an arbitrary-host probing oracle. Available only on the local stdio
+ * transport, which trusts the local user.
+ */
+export const NETWORK_TOOL_NAMES: readonly string[] = ["probe_endpoint"];
 
 /** All quantakrypto MCP tools, in a stable order. */
 export const quantakryptoTools: ToolDefinition[] = [
@@ -1341,6 +1447,8 @@ export const quantakryptoTools: ToolDefinition[] = [
   applyTriageTool,
   remediateFindingsTool,
   applyVerifiedPatchTool,
+  // The only networked tool — offline until invoked; refused on the HTTP transport.
+  probeEndpointTool,
 ];
 
 /** The core version these tools are built against (re-exported for diagnostics). */
