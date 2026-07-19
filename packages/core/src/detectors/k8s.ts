@@ -12,7 +12,7 @@
  *    traffic, whose (EC)DHE key exchange is classical and harvestable.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_RISKY_PRIMITIVE } from "../cwe.js";
 
 const K8S_EXTENSIONS: readonly string[] = [".yaml", ".yml", ".json"];
@@ -94,9 +94,12 @@ export const k8sDetector: Detector = {
     const isIstio = content.includes("minProtocolVersion");
     if (!isCertManager && !isIstio) return [];
 
+    // A `# algorithm: RSA` YAML comment is not an active setting; match over
+    // comment-masked content (offsets preserved).
+    const scan = maskCommentLines(content, ["#"]);
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
-      eachMatch(re, content, (m) =>
+      eachMatch(re, scan, (m) =>
         findings.push(
           findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),

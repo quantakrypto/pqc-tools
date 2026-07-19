@@ -27,7 +27,9 @@ test("Kafka classical ECDHE_RSA cipher suite is flagged as HNDL key exchange", (
     run("server.properties", "ssl.cipher.suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\n"),
     "mq-classical-cipher",
   );
-  assert.equal(f?.algorithm, "ECDH");
+  // The suite list can mix ECDHE / DHE / static-RSA, so the family is "unknown"
+  // rather than mislabelling TLS_RSA as ECDH.
+  assert.equal(f?.algorithm, "unknown");
   assert.equal(f?.hndl, true);
 });
 

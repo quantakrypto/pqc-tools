@@ -70,7 +70,7 @@ const CI_RULES: CiRule[] = [
     // into another command's flag), and `(?![\w-])` stops `--sign` matching the
     // `--sign` prefix of an unrelated flag like `--sign-artifacts`. The short forms
     // `-s` (sign) / `-b` (detach-sign) are safe inside the bounded gpg span.
-    re: /\bgpg\b[^\n&|;]*?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
+    re: /\bgpg\b[^\n&|;]{0,120}?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
     meta: {
       id: "ci-gpg-sign",
       title: "GPG signing (RSA)",
@@ -108,7 +108,7 @@ const CI_RULES: CiRule[] = [
     // Allow intervening flags (the common `codesign --force --options runtime --sign`
     // form), bounded to the codesign invocation so it can't latch onto a later
     // command's `--sign` across `&&`/`|`/`;`.
-    re: /\bcodesign\b[^\n&|;]*?\s(?:-s\b|--sign\b)/g,
+    re: /\bcodesign\b[^\n&|;]{0,120}?\s(?:-s\b|--sign\b)/g,
     meta: {
       id: "ci-codesign",
       title: "Apple codesign (RSA)",

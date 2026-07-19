@@ -40,6 +40,12 @@ test("detectFile stays linear-time on adversarial inputs (no catastrophic backtr
     ["q.ts", "//".repeat(N)],
     ["q.ts", "`".repeat(N)],
     ["q.py", "#".repeat(N)],
+    // Config detectors: trigger prefixes with no terminating match (the bounded
+    // scans must not backtrack over the whole line for each occurrence).
+    ["server.properties", "ssl.protocol=".repeat(N)],
+    ["server.properties", "ssl.cipher.suites=".repeat(N)],
+    [".github/workflows/x.yml", "gpg ".repeat(N)],
+    [".github/workflows/x.yml", "codesign ".repeat(N)],
   ];
   for (const [file, content] of inputs) {
     const ms = elapsed(file, content);

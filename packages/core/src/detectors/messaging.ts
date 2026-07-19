@@ -25,7 +25,7 @@ const MQ_RULES: MqRule[] = [
   {
     // Match TLSv1 (=1.0) and TLSv1.1 but never TLSv1.2 / TLSv1.3: the negative
     // lookahead stops "TLSv1" from matching the "TLSv1" inside "TLSv1.3".
-    re: /\bssl\.(?:enabled\.)?protocols?\s*=\s*[^\n]*\bTLSv1(?:\.1)?(?![.\d])/gi,
+    re: /\bssl\.(?:enabled\.)?protocols?\s*=\s*[^\n]{0,80}?\bTLSv1(?:\.1)?(?![.\d])/gi,
     meta: {
       id: "mq-kafka-legacy-tls",
       title: "Kafka legacy TLS protocol",
@@ -36,7 +36,7 @@ const MQ_RULES: MqRule[] = [
       hndl: false,
       cwe: CWE_RISKY_PRIMITIVE,
       message:
-        "Kafka broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
+        "Kafka broker permits legacy TLS 1.0/1.1, an obsolete protocol; require TLS 1.3 (the harvestable classical key exchange is reported separately by the cipher-suite rule).",
       remediation: "Require TLS 1.3 and track PQC-hybrid KEX (X25519MLKEM768).",
     },
   },
@@ -52,20 +52,23 @@ const MQ_RULES: MqRule[] = [
       hndl: false,
       cwe: CWE_RISKY_PRIMITIVE,
       message:
-        "MQTT broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
+        "MQTT broker permits legacy TLS 1.0/1.1, an obsolete protocol; require TLS 1.3 (the harvestable classical key exchange is reported separately).",
       remediation: "Require TLS 1.3 and track PQC-hybrid KEX for device fleets.",
     },
   },
   {
-    re: /\bssl\.cipher\.suites\s*=\s*[^\n]*(?:ECDHE_RSA|ECDHE_ECDSA|TLS_RSA|_DHE_RSA)/g,
+    re: /\bssl\.cipher\.suites\s*=\s*[^\n]{0,200}?(?:ECDHE_RSA|ECDHE_ECDSA|TLS_RSA|_DHE_RSA)/g,
     meta: {
       id: "mq-classical-cipher",
-      title: "Broker classical (EC)DHE cipher suite",
-      description: "Kafka ssl.cipher.suites names a classical ECDHE/DHE/RSA suite",
+      title: "Broker classical (EC)DHE / RSA cipher suite",
+      description:
+        "Kafka ssl.cipher.suites names a classical ECDHE/DHE key exchange or RSA key transport",
       category: "tls",
+      // The suite list can mix ECDHE, DHE, and static-RSA key transport, so the
+      // family is left unspecified rather than mislabelling TLS_RSA as ECDH.
+      algorithm: "unknown",
       severity: "medium",
       confidence: "high",
-      algorithm: "ECDH",
       hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message:

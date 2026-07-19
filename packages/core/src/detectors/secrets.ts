@@ -16,7 +16,13 @@
  * broken, so it is out of scope for a *classical-asymmetric* readiness signal.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import {
+  DOC_EXTENSIONS,
+  eachMatch,
+  findingFromRule,
+  hasExtension,
+  maskCommentLines,
+} from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface SecretRule {
@@ -101,9 +107,11 @@ export const secretsDetector: Detector = {
     ) {
       return [];
     }
+    // A commented `# kind: SealedSecret` / `# age1…` is not an active setting.
+    const scan = maskCommentLines(content, ["#"]);
     const findings: Finding[] = [];
     for (const rule of SECRET_RULES) {
-      eachMatch(rule.re, content, (m) => {
+      eachMatch(rule.re, scan, (m) => {
         findings.push(
           findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }),
         );

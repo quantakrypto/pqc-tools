@@ -14,7 +14,13 @@
  *    concern, out of scope for a PQC-readiness scanner).
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import {
+  DOC_EXTENSIONS,
+  eachMatch,
+  findingFromRule,
+  hasExtension,
+  maskCommentLines,
+} from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION } from "../cwe.js";
 
 const RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
@@ -61,8 +67,11 @@ export const databaseDetector: Detector = {
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
+    // Mask SQL (`--`) and shell/ini (`#`) line comments: a commented
+    // `-- pgp_pub_encrypt` or `# …sslmode=require` is not an active setting.
+    const scan = maskCommentLines(content, ["#", "--"]);
     if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {
-      eachMatch(RE_PGCRYPTO, content, (m) =>
+      eachMatch(RE_PGCRYPTO, scan, (m) =>
         findings.push(
           findingFromRule(RULE_PGCRYPTO, {
             file,
@@ -74,7 +83,7 @@ export const databaseDetector: Detector = {
       );
     }
     if (content.includes("sslmode")) {
-      eachMatch(RE_WEAK_SSLMODE, content, (m) =>
+      eachMatch(RE_WEAK_SSLMODE, scan, (m) =>
         findings.push(
           findingFromRule(RULE_WEAK_SSLMODE, {
             file,

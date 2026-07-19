@@ -56,3 +56,15 @@ test("generic YAML with algorithm: RSA but no cert-manager/Istio marker does NOT
     [],
   );
 });
+
+test("a commented-out `# algorithm: RSA` in a cert-manager Certificate is NOT flagged", () => {
+  const y =
+    "kind: Certificate\nspec:\n  privateKey:\n    # algorithm: RSA (old)\n    algorithm: Ed25519\n";
+  const fs = run("cert.yaml", y);
+  assert.equal(
+    fs.find((f) => f.ruleId === "k8s-certmanager-rsa"),
+    undefined,
+  );
+  // the active Ed25519 line still fires
+  assert.ok(fs.find((f) => f.ruleId === "k8s-certmanager-ed25519"));
+});

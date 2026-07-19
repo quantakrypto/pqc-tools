@@ -72,3 +72,18 @@ test("sslmode=disable is NOT flagged (no TLS session, so no harvestable key exch
     [],
   );
 });
+
+test("commented-out `# …sslmode=require` and `-- pgp_pub_encrypt` are NOT flagged", () => {
+  assert.deepEqual(
+    run(".env", "# DATABASE_URL=postgres://db/app?sslmode=require\n").filter((f) =>
+      f.ruleId.startsWith("db-"),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    run("schema.sql", "-- SELECT pgp_pub_encrypt('x', k) -- example\n").filter((f) =>
+      f.ruleId.startsWith("db-"),
+    ),
+    [],
+  );
+});

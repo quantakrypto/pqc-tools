@@ -72,3 +72,12 @@ test("an example age recipient in markdown docs is NOT flagged", () => {
     [],
   );
 });
+
+test("a commented-out `# kind: SealedSecret` is NOT flagged", () => {
+  assert.deepEqual(
+    run("s.yaml", "# kind: SealedSecret (disabled)\napiVersion: v1\nkind: Secret\n").filter((f) =>
+      f.ruleId.startsWith("secrets-"),
+    ),
+    [],
+  );
+});
