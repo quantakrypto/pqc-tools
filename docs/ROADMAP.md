@@ -113,7 +113,14 @@ running against this list; findings will be folded in.
   crypto policy, folded into the attested hash. Only signing + RFC-3161 timestamping
   remain, and those are **deliberately external** (ADR-0004 — the tool orchestrates
   a signer, it does not implement one).
-- **Reproducible-build verification** for the published artifacts.
+- ~~**Reproducible-build verification** for the published artifacts.~~ ✅
+  **Done (2026-07-19).** The npm tarball for every published `@quantakrypto/*`
+  version is now re-creatable **byte for byte** from source: `npm run repro:check`
+  (network-free determinism gate, wired as the `reproducible` CI job) and
+  `npm run repro:npm` (diffs the from-source pack integrity against the registry).
+  Closing it surfaced and fixed a real nondeterminism source — `tsc -b` preserving
+  a stale `bin` exec bit — via a `postbuild` mode-normalizer. **All six packages
+  reproduce at v0.4.4.** See [validation/reproducible-build.md](validation/reproducible-build.md).
 - **Report i18n / accessibility** of human-facing output.
 - **Published supply-chain gate on a cadence** — Scorecard + dependency/Action
   review, now that the packages are live on npm.
