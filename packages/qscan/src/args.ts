@@ -10,6 +10,7 @@
 
 import { meetsThreshold, SEVERITY_ORDER, severityRank } from "@quantakrypto/core";
 import type { ContextLevel, ReportFormat, SecurityTier, Severity } from "@quantakrypto/core";
+import type { ColorChoice } from "./color.js";
 
 /** Valid context levels for `--context` (how much source triage/remediate sends). */
 const CONTEXT_LEVELS: readonly ContextLevel[] = ["metadata", "snippet", "function", "file"];
@@ -83,6 +84,12 @@ export interface QscanOptions {
   writeBaseline?: string;
   /** Suppress the human summary banner (still writes reports/output files). */
   quiet: boolean;
+  /**
+   * ANSI color policy for the human report (`--color` / `--no-color`). `"auto"`
+   * (default) colors only a live terminal and honors `NO_COLOR` / `FORCE_COLOR`;
+   * see {@link resolveColor}. Color is decoration only — never the sole signal.
+   */
+  colorChoice: ColorChoice;
   /** How many findings the human report lists (`--top N`). Default: 5. */
   topN?: number;
   /** Rule ids to suppress (from `quantakrypto.config.json` `disabledRules`). */
@@ -176,6 +183,7 @@ export function defaultOptions(): QscanOptions {
     changed: false,
     parallel: false,
     quiet: false,
+    colorChoice: "auto",
     noSnippets: false,
     noConfigFile: false,
     triage: false,
@@ -385,6 +393,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--quiet":
         rejectInlineValue();
         options.quiet = true;
+        break;
+      case "--color":
+        rejectInlineValue();
+        options.colorChoice = "always";
+        break;
+      case "--no-color":
+        rejectInlineValue();
+        options.colorChoice = "never";
         break;
       case "--no-snippets":
         rejectInlineValue();

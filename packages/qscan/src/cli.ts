@@ -18,6 +18,7 @@ import { ConfigError } from "@quantakrypto/core";
 
 import { ArgError, parseArgs } from "./args.js";
 import type { ParsedArgs, QscanOptions } from "./args.js";
+import { resolveColor } from "./color.js";
 import { resolveConfig } from "./config.js";
 import { HELP_TEXT, versionLine } from "./help.js";
 import { EXIT, runQscan } from "./index.js";
@@ -69,12 +70,16 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT.ERROR;
   }
 
-  // Color only when writing the human report to an interactive stdout.
-  const color =
-    options.format === "human" &&
-    !options.output &&
-    Boolean(process.stdout.isTTY) &&
-    process.env.NO_COLOR === undefined;
+  // Color policy: --color/--no-color > NO_COLOR/FORCE_COLOR > interactive stdout.
+  // Color is decoration only (every signal is also text), so this is purely an
+  // accessibility / pipe-safety control. See resolveColor for the precedence.
+  const color = resolveColor({
+    choice: options.colorChoice,
+    format: options.format,
+    toFile: Boolean(options.output),
+    isTTY: Boolean(process.stdout.isTTY),
+    env: { NO_COLOR: process.env.NO_COLOR, FORCE_COLOR: process.env.FORCE_COLOR },
+  });
 
   let run: QscanRun;
   try {

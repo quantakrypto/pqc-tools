@@ -121,7 +121,18 @@ running against this list; findings will be folded in.
   Closing it surfaced and fixed a real nondeterminism source — `tsc -b` preserving
   a stale `bin` exec bit — via a `postbuild` mode-normalizer. **All six packages
   reproduce at v0.4.4.** See [validation/reproducible-build.md](validation/reproducible-build.md).
-- **Report i18n / accessibility** of human-facing output.
+- ~~**Report i18n / accessibility** of human-facing output.~~ ✅
+  **Done (2026-07-19).** *Accessibility:* the human report never carries meaning
+  in color alone — every severity, count, HNDL figure, and readiness band is also
+  printed as text — so disabling color loses nothing. Color is now governed by a
+  single, tested precedence contract ([`color.ts`](../packages/qscan/src/color.ts),
+  `resolveColor`): `--color` / `--no-color` flags win, then `NO_COLOR`
+  (https://no-color.org) and `FORCE_COLOR` (pipe-safe forcing), then interactive-
+  stdout autodetect; non-`human` formats are never colored so JSON/SARIF/CBOM stay
+  byte-clean. *i18n:* deliberately **not** localised — the audience reads FIPS /
+  CNSA / IR-8547 terminology that is itself English-only, and message catalogs
+  would add drift-prone surface for no reader benefit (YAGNI). Revisit only if a
+  concrete localized-consumer need appears.
 - **Published supply-chain gate on a cadence** — Scorecard + dependency/Action
   review, now that the packages are live on npm.
 

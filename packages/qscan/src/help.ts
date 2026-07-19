@@ -66,6 +66,9 @@ OPTIONS
   --write-baseline <file>       Write current findings as a baseline, then exit 0
   --quiet                       Suppress the human summary banner
   --no-snippets                 Omit code snippets from the json/sarif report
+  --color                       Force ANSI color in the human report
+  --no-color                    Disable ANSI color (also: NO_COLOR env). Color is
+                                decoration only — every signal is printed as text
   -v, --version                 Print version and exit
   -h, --help                    Print this help and exit
 
