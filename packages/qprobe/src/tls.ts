@@ -130,7 +130,19 @@ export function probeHybridSupport(
     socket.on("error", (e) => finish({ hybridSelected: false, error: e.message }));
     socket.on("data", (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
-      const sh: ServerHelloInfo | undefined = readServerHello(buf);
+      let sh: ServerHelloInfo | undefined;
+      try {
+        sh = readServerHello(buf);
+      } catch {
+        // A hostile or broken endpoint can send a length-consistent but internally
+        // truncated ServerHello, which trips the parser's bounds check. readServerHello
+        // only parses a handshake body that is already fully present, so a throw means
+        // the message is malformed, not merely incomplete — finish gracefully instead
+        // of letting the RangeError escape this data handler as an uncaught exception
+        // (which would crash the process). Mirrors the guarded parse in ssh.ts.
+        finish({ hybridSelected: false, error: "malformed ServerHello" });
+        return;
+      }
       if (!sh) {
         if (buf.length > 64 * 1024) finish({ hybridSelected: false, error: "no ServerHello" });
         return;

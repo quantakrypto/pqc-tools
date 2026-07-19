@@ -26,6 +26,24 @@ export interface AttestationInput {
   ownedHosts?: readonly string[];
 }
 
+/**
+ * Extract the host from a manifest line, matching {@link parseTarget}'s host
+ * normalization so a manifest entry and a target reduce to the SAME host string.
+ * Handles `host`, `host:port`, bracketed IPv6 `[::1]` / `[::1]:443`, and bare IPv6
+ * `2001:db8::1`. (Previously IPv6 lines kept their brackets/port or were truncated
+ * at the first colon, so no IPv6 endpoint could ever match the manifest.)
+ */
+function manifestHost(line: string): string {
+  if (line.startsWith("[")) {
+    const end = line.indexOf("]");
+    return end < 0 ? line : line.slice(1, end); // [ipv6] or [ipv6]:port -> ipv6
+  }
+  const idx = line.lastIndexOf(":");
+  // Exactly one ':' -> host:port. Multiple ':' with no brackets -> bare IPv6 (no port).
+  if (idx >= 0 && line.indexOf(":") === idx) return line.slice(0, idx);
+  return line;
+}
+
 /** Parse an ownership manifest file's text into a host allow-list. */
 export function parseOwnedHosts(text: string): string[] {
   return (
@@ -33,8 +51,9 @@ export function parseOwnedHosts(text: string): string[] {
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l !== "" && !l.startsWith("#"))
-      // A manifest line may be `host` or `host:port`; ownership is per host.
-      .map((l) => (l.startsWith("[") ? l : l.split(":")[0]))
+      // A manifest line may be `host` or `host:port` (IPv6 bracketed or bare);
+      // ownership is per host, normalized the same way targets are.
+      .map(manifestHost)
   );
 }
 
