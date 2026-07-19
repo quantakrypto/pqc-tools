@@ -128,6 +128,9 @@ export function probeHybridSupport(
     });
     socket.on("timeout", () => finish({ hybridSelected: false, error: "timeout" }));
     socket.on("error", (e) => finish({ hybridSelected: false, error: e.message }));
+    // Clean close before a ServerHello would otherwise hang the Promise (the timeout
+    // does not fire post-close). Guarded by `done` so a normal finish wins.
+    socket.on("close", () => finish({ hybridSelected: false, error: "connection closed" }));
     socket.on("data", (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
       let sh: ServerHelloInfo | undefined;

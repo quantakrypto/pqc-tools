@@ -102,6 +102,10 @@ export function probeSsh(host: string, port: number, timeoutMs = 8000): Promise<
     socket.on("connect", () => socket.write("SSH-2.0-qprobe_0.1\r\n"));
     socket.on("timeout", () => finish({ pqKexOffered: false, error: "timeout" }));
     socket.on("error", (e) => finish({ pqKexOffered: false, error: e.message }));
+    // A peer that accepts then cleanly closes (FIN) before a complete KEXINIT would
+    // otherwise leave the Promise unsettled (the timeout timer does not fire after a
+    // clean close). The `done` guard makes this a no-op once we've already resolved.
+    socket.on("close", () => finish({ pqKexOffered: false, error: "connection closed" }));
     socket.on("data", (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
       if (buf.length > 512 * 1024) {

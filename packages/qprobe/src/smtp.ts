@@ -54,6 +54,10 @@ export function probeSmtpStartTls(
     socket.setTimeout(timeoutMs);
     socket.on("timeout", () => finish({ error: "timeout" }));
     socket.on("error", (e) => finish({ error: e.message }));
+    // Clean close during the plaintext SMTP phase would otherwise hang the Promise
+    // (the timeout does not fire post-close). Guarded by `done`; once STARTTLS has
+    // upgraded, a successful probe has already resolved so this is a no-op.
+    socket.on("close", () => finish({ error: "connection closed" }));
     socket.on("data", (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk]);
       if (buf.length > 128 * 1024) return finish({ error: "SMTP response too large" });
