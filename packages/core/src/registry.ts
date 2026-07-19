@@ -37,6 +37,8 @@ import { dnssecDetector } from "./detectors/dnssec.js";
 import { vpnDetector } from "./detectors/vpn.js";
 import { ansibleDetector } from "./detectors/ansible.js";
 import { ageDetector } from "./detectors/age.js";
+import { supplyChainDetector } from "./detectors/supply-chain.js";
+import { vaultDetector } from "./detectors/vault.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -163,6 +165,8 @@ export const builtinDetectors: Detector[] = [
   vpnDetector,
   ansibleDetector,
   ageDetector,
+  supplyChainDetector,
+  vaultDetector,
   statefulHbsDetector,
 ];
 

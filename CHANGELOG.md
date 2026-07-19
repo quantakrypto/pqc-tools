@@ -116,6 +116,22 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   DH, `ecp*` = ECDH), and **sshd_config / ssh_config** `KexAlgorithms` lines that
   offer no PQC hybrid KEX — a server that already lists `sntrup761x25519` /
   `mlkem768x25519` stays silent. Each rule is gated to its own config shape.
+- **Four more infra detectors** in `@quantakrypto/core`, closing audited gaps
+  (each comment-masked and gated; clean-negative tested):
+  - **`ansible`** — Ansible `community.crypto` `openssl_privatekey`/`csr` `type:
+    RSA/ECC`.
+  - **`age`** — a committed `AGE-SECRET-KEY-1…` identity (X25519 private key,
+    marked sensitive) — worse than a recipient; closes the secrets-detector gap.
+  - **`supply-chain`** — classical container/artifact signing beyond cosign/GPG:
+    Docker Content Trust (Notary v1), CNCF Notation, in-toto.
+  - **`vault`** — native HashiCorp Vault HCL: `transit` key types (`rsa-*`,
+    `ecdsa-p*`, `ed25519`) and `pki` role `key_type` (Terraform-provisioned Vault
+    stays with the terraform detector; this covers Vault's own `.hcl`).
+- **qprobe: fixed a probe hang on clean connection close** — the raw `net` probes
+  (SSH, TLS-hybrid, SMTP) added no `close`/`end` handler, so a peer that accepted
+  then cleanly closed before a complete response left the run wedged (the socket
+  timeout does not fire post-close). Each now resolves on close. Also synced
+  `version.ts` so JSON/SARIF/CBOM report the correct tool version.
 
 ### Added / Changed (standards currency + guidance wiring)
 
