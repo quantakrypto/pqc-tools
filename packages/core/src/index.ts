@@ -127,6 +127,10 @@ export {
 } from "./remediation.js";
 export type { SecurityTier } from "./remediation.js";
 
+// Post-quantum standards source of truth + review cadence.
+export { PQC_STANDARDS, standardsReviewStatus } from "./standards.js";
+export type { PqcStandards, StandardsCitation, StandardsReviewStatus } from "./standards.js";
+
 // CWE identifier constants.
 export {
   CWE_BROKEN_CRYPTO,

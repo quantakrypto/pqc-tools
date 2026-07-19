@@ -6,6 +6,22 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — standards-currency cadence (roadmap 🟠)
+
+- **A single, dated, cited source of truth for the PQC standards the tool tracks**
+  (`@quantakrypto/core` `PQC_STANDARDS`): FIPS 203/204/205, the CNSA 2.0 tiers,
+  SP 800-208, the NIST IR 8547 2030/2035 timeline, and the emerging (HQC, FN-DSA,
+  X-Wing) / hybrid (X25519MLKEM768, SecP384r1MLKEM1024) targets — each with a
+  `source` and an `asOf` date, plus `lastReviewed` / `nextReview` (quarterly).
+- **A drift test** (`test/standards.test.ts`) that fails the build if the runtime
+  remediation constants (`TIER_PARAMS`, `PQC_TRANSITION_NOTE`, `STATEFUL_HBS_NOTE`)
+  fall out of sync with the manifest — code and the documented standards can no
+  longer silently diverge.
+- **An advisory cadence check** — `npm run standards:check`
+  (`scripts/standards-check.mjs`, wired into CI) prints the sources to re-verify
+  and warns (never fails) when the quarterly review is due; `standardsReviewStatus(now)`
+  is the pure predicate behind it. Runbook: `docs/standards/pqc-standards.md`.
+
 ### Fixed (from a real-repo precision audit)
 
 - **`ssh-public-key` false positives on i18n / label strings.** The rule matched

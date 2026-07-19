@@ -8086,6 +8086,13 @@ var init_evidence = __esm({
   }
 });
 
+// ../core/dist/standards.js
+var init_standards = __esm({
+  "../core/dist/standards.js"() {
+    "use strict";
+  }
+});
+
 // ../core/dist/index.js
 var init_dist = __esm({
   "../core/dist/index.js"() {
@@ -8118,6 +8125,7 @@ var init_dist = __esm({
     init_cbom_merge();
     init_evidence();
     init_remediation();
+    init_standards();
     init_cwe();
   }
 });

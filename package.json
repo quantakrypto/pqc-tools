@@ -29,6 +29,7 @@
     "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-exclude='**/node_modules/**' --test-coverage-exclude='**/dist/**' \"packages/*/test/*.test.ts\"",
     "bench": "node scripts/bench.mjs",
     "validate:sarif": "node scripts/validate-sarif.mjs",
+    "standards:check": "node scripts/standards-check.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -34,6 +34,10 @@ jobs:
         run: npm run build
       - name: Test (node:test across all packages)
         run: npm test
+      # Advisory: warns (never fails) when the quarterly PQC standards review is
+      # due. The hard gate is the drift test in `npm test` above.
+      - name: PQC standards-currency cadence check (advisory)
+        run: npm run standards:check
 
   lint:
     name: lint + format (node 20)

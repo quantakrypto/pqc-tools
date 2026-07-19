@@ -94,9 +94,14 @@ running against this list; findings will be folded in.
   See [audits/2026-07-15-v0.4-review.md](audits/2026-07-15-v0.4-review.md).
   *Residual:* a per-language false-negative *depth* benchmark (measuring recall
   against a larger real-world corpus) is still worthwhile as a standing quality gate.
-- **Standards-currency cadence.** Operationalise the quarterly NIST / CNSA 2.0 /
-  BSI re-check (FIPS 203/204/205 parameters, CNSA tiers, hybrid recommendations
-  like X25519MLKEM768). Currently ad-hoc.
+- ~~**Standards-currency cadence.**~~ ✅ **Done (2026-07-19).** Operationalised:
+  a single dated, cited source of truth ([`packages/core/src/standards.ts`](../packages/core/src/standards.ts),
+  `PQC_STANDARDS`) for FIPS 203/204/205, the CNSA 2.0 tiers, SP 800-208, the
+  IR 8547 timeline, and the emerging/hybrid targets; a **drift test** that fails
+  CI if the runtime remediation constants diverge from it; an advisory
+  `npm run standards:check` (in CI) that warns when the quarterly review is due;
+  and a review runbook ([docs/standards/pqc-standards.md](standards/pqc-standards.md)).
+  "Are we current?" is now a checkable, dated question.
 
 ### 🟡 Medium
 
