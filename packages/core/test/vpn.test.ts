@@ -37,40 +37,15 @@ test("IPsec classical DH groups (modp / ecp) are flagged", () => {
   assert.equal(rule(fs, "net-ipsec-ecp-ecdh")?.algorithm, "ECDH");
 });
 
-test("sshd_config with only classical KexAlgorithms is flagged", () => {
-  assert.ok(
-    rule(
-      run("sshd_config", "KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\n"),
-      "net-sshd-classical-kex",
-    ),
-  );
-});
-
-test("sshd_config that DOES offer a PQC hybrid KEX stays silent", () => {
-  const conf = "KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256\n";
+test("sshd_config KexAlgorithms is NOT handled by vpn (source.ts's ssh-kex-classical owns it)", () => {
+  // The vpn detector intentionally emits no `net-` finding for sshd_config; the
+  // language-agnostic ssh-kex token detector in source.ts covers it (avoids a
+  // double-count).
   assert.deepEqual(
-    run("sshd_config", conf).filter((f) => f.ruleId.startsWith("net-")),
+    run("sshd_config", "KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\n").filter((f) =>
+      f.ruleId.startsWith("net-"),
+    ),
     [],
-  );
-});
-
-test("sshd KexAlgorithms with a -/+/^ modifier is NOT flagged (defaults still offer PQC)", () => {
-  // A leading -/+/^ adjusts the OpenSSH default set (which on >=9.0 includes a PQC
-  // hybrid) rather than replacing it, so this is not a classical-only posture.
-  for (const line of [
-    "KexAlgorithms -diffie-hellman-group1-sha1\n",
-    "KexAlgorithms +curve25519-sha256\n",
-    "KexAlgorithms ^ecdh-sha2-nistp256\n",
-  ]) {
-    assert.deepEqual(
-      run("sshd_config", line).filter((f) => f.ruleId.startsWith("net-")),
-      [],
-      `modifier line should not fire: ${line.trim()}`,
-    );
-  }
-  // A bare replacement list with no PQC hybrid is still flagged.
-  assert.ok(
-    rule(run("sshd_config", "KexAlgorithms ecdh-sha2-nistp256\n"), "net-sshd-classical-kex"),
   );
 });
 

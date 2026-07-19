@@ -84,6 +84,10 @@ export const joseDetector: Detector = {
     const findings: Finding[] = [];
     for (const rule of JOSE_RULES) {
       eachMatch(rule.re, content, (m) => {
+        // If this `alg` belongs to a JWK (a `"kty"` sits in the same object), the
+        // jwk detector already reports the key — defer so it isn't counted twice.
+        const win = content.slice(Math.max(0, m.index - 250), m.index + 250);
+        if (win.includes('"kty"')) return;
         findings.push(
           findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }),
         );

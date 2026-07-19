@@ -72,3 +72,28 @@ test("a symmetric/oct JWK is not flagged (no classical asymmetric exposure)", ()
     [],
   );
 });
+
+test("an RSA SIGNING JWK is a signature (hndl:false); an encryption RSA JWK stays HNDL", () => {
+  const sig = rule(run("jwks.json", '{"kty":"RSA","use":"sig","alg":"RS256"}'), "jwk-rsa");
+  assert.equal(sig?.category, "signature");
+  assert.equal(sig?.hndl, false);
+  const enc = rule(run("k.json", '{"kty":"RSA","use":"enc"}'), "jwk-rsa");
+  assert.equal(enc?.hndl, true);
+});
+
+test("jwk defers to cloudformation inside an ARM/CFN template (no double-count)", () => {
+  const arm =
+    '{"resources":[{"type":"Microsoft.KeyVault/vaults/keys","properties":{"kty":"RSA"}}]}';
+  assert.deepEqual(
+    run("azuredeploy.json", arm).filter((f) => f.ruleId.startsWith("jwk-")),
+    [],
+    "jwk stays silent; cfn-arm-keyvault-rsa owns the ARM key",
+  );
+});
+
+test("jwk is skipped on doc extensions (a README JWK example is not live)", () => {
+  assert.deepEqual(
+    run("README.md", 'Example: {"kty":"RSA"}').filter((f) => f.ruleId.startsWith("jwk-")),
+    [],
+  );
+});

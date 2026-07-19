@@ -76,7 +76,7 @@ test("Consul Connect ca_config private_key_type ec/rsa classify correctly", () =
   assert.equal(foundRsa?.hndl, true);
 });
 
-test("Istio DestinationRule cipherSuites listing ECDHE-RSA/ECDHE-ECDSA is flagged", () => {
+test("Istio DestinationRule cipherSuites (ECDHE-RSA/ECDHE-ECDSA) are flagged by source's tls-classical-kex, not duplicated by mesh", () => {
   const manifest = [
     "apiVersion: networking.istio.io/v1beta1",
     "kind: DestinationRule",
@@ -90,13 +90,14 @@ test("Istio DestinationRule cipherSuites listing ECDHE-RSA/ECDHE-ECDSA is flagge
     "      - ECDHE-RSA-AES256-GCM-SHA384",
     "      - ECDHE-ECDSA-AES128-GCM-SHA256",
   ].join("\n");
-  const findings = run("dr.yaml", manifest).filter(
-    (f) => f.ruleId === "mesh-istio-classical-cipher",
+  // mesh no longer emits a cipher rule (source.ts's tls-classical-kex owns the token).
+  assert.deepEqual(
+    run("dr.yaml", manifest).filter((f) => f.ruleId === "mesh-istio-classical-cipher"),
+    [],
   );
-  assert.equal(findings.length, 2);
-  assert.equal(findings[0]?.algorithm, "ECDH");
-  assert.equal(findings[0]?.hndl, true);
-  assert.equal(findings[0]?.category, "tls");
+  const kex = run("dr.yaml", manifest).filter((f) => f.ruleId === "tls-classical-kex");
+  assert.equal(kex.length, 2, "both ECDHE suites flagged once each");
+  assert.equal(kex[0]?.hndl, true);
 });
 
 test("gating: mesh markers require the mesh detector's fast-reject tokens, not just any keyword", () => {

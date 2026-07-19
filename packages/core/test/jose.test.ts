@@ -56,3 +56,14 @@ test("a JOSE alg shown in markdown prose is NOT flagged (docs are out of scope)"
     [],
   );
 });
+
+test("jose defers to jwk when the alg belongs to a JWK object (no double-count)", () => {
+  // A JWK that declares its `alg` — jwk owns the key; jose must stay silent.
+  const jwk = '{"kty":"RSA","alg":"RSA-OAEP","n":"...","e":"AQAB"}';
+  assert.deepEqual(
+    run("key.json", jwk).filter((f) => f.ruleId.startsWith("jose-")),
+    [],
+  );
+  // A standalone JWE header (no kty) is still flagged.
+  assert.ok(rule(run("hdr.json", '{"alg":"RSA-OAEP","enc":"A256GCM"}'), "jose-jwe-rsa"));
+});

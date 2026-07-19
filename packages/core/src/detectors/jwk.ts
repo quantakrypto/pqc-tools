@@ -10,17 +10,18 @@
  *  - `"crv":"Ed25519"|"Ed448"`              → EdDSA signing key.
  *  - `"crv":"X25519"|"X448"`                → classical Montgomery-curve key agreement.
  *
- * Keying EC/OKP off `crv` (present in every EC/OKP JWK) rather than `kty` avoids
- * double-counting a single key, and `"kty"`/`"crv"` are specific enough to RFC
- * 7517 that the false-positive risk on ordinary JSON is low.
+ * Usage-aware classification: when a key's surrounding `"use"` / `"alg"` marks it
+ * as a SIGNING key (`use:"sig"`, or an `RS`/`PS`/`ES` signature alg), the finding
+ * is a `signature` (`hndl:false`) — a signing key is forgeable at a CRQC but not
+ * harvest-now exposed. An encryption/unspecified key stays `hndl:true`.
  *
- * HNDL: RSA and (EC)DH / X25519 / X448 key agreement are harvest-now-decrypt-later
- * exposed (hndl:true); EdDSA signing keys are hndl:false but forgeable. A JWKS is
- * usually PUBLIC keys, so severity is medium — the exposure is a classical key
- * pair, not necessarily an embedded secret.
+ * Deferrals to avoid double-counting: skipped on doc extensions (a README JWK
+ * example is not live) and inside CloudFormation/ARM templates, where the
+ * cloudformation detector owns the `kty` of a `Microsoft.KeyVault` key resource.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { isCloudTemplate } from "./cloudformation.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface JwkRule {
@@ -99,6 +100,19 @@ const JWK_RULES: JwkRule[] = [
   },
 ];
 
+/** A window around a match likely stays within the one JWK object it belongs to. */
+function windowAround(content: string, index: number): string {
+  return content.slice(Math.max(0, index - 250), index + 250);
+}
+
+/** True when the surrounding JWK marks a signing key via `use`/`alg`. */
+function isSigningUse(win: string, sigAlg: RegExp): boolean {
+  return /"use"\s*:\s*"sig"/.test(win) || sigAlg.test(win);
+}
+
+const RSA_SIG_ALG = /"alg"\s*:\s*"(?:RS|PS)(?:256|384|512)"/;
+const EC_SIG_ALG = /"alg"\s*:\s*"ES(?:256K?|384|512)"/;
+
 /** Detects classical JSON Web Key (JWK/JWKS) material in any JSON/text file. */
 export const jwkDetector: Detector = {
   id: "jwk-material",
@@ -106,21 +120,42 @@ export const jwkDetector: Detector = {
   scope: "config",
   language: "any",
   rules: JWK_RULES.map((r) => r.meta),
-  appliesTo: () => true,
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: a JWK always has one of these two members.
     if (!content.includes('"kty"') && !content.includes('"crv"')) return [];
+    // In a CloudFormation/ARM template the cloudformation detector owns the key
+    // resource `kty`; defer to it so a Key Vault key is not counted twice.
+    if (isCloudTemplate(content)) return [];
+
     const findings: Finding[] = [];
     for (const rule of JWK_RULES) {
       eachMatch(rule.re, content, (m) => {
-        findings.push(
-          findingFromRule(rule.meta, {
-            file,
-            content,
-            index: m.index,
-            matchLength: m[0].length,
-          }),
-        );
+        const at = { file, content, index: m.index, matchLength: m[0].length };
+        let overrides;
+        if (
+          rule.meta.id === "jwk-rsa" &&
+          isSigningUse(windowAround(content, m.index), RSA_SIG_ALG)
+        ) {
+          overrides = {
+            category: "signature" as const,
+            hndl: false,
+            message:
+              "RSA JSON Web Key (JWK) used for signing (RS*/PS*); forgeable by a quantum attacker.",
+          };
+        } else if (
+          rule.meta.id === "jwk-ec" &&
+          isSigningUse(windowAround(content, m.index), EC_SIG_ALG)
+        ) {
+          overrides = {
+            category: "signature" as const,
+            algorithm: "ECDSA" as const,
+            hndl: false,
+            message:
+              "Elliptic-curve JSON Web Key (JWK) used for ECDSA signing; forgeable by a quantum attacker.",
+          };
+        }
+        findings.push(findingFromRule(rule.meta, at, overrides));
       });
     }
     return findings;

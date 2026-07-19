@@ -18,15 +18,14 @@
  *  - HashiCorp Consul Connect: the `connect { ca_config { private_key_type =
  *    "ec" | "rsa" } } }` mesh CA provider setting (also `ca_provider`). Flagged
  *    as a classical mesh CA (certificate; ECDSA for "ec", RSA for "rsa").
- *  - Istio `DestinationRule` / `Gateway` `tls.cipherSuites:` listing a classical
- *    `ECDHE-RSA-*` / `ECDHE-ECDSA-*` suite — the (EC)DHE key exchange in these
- *    suites is classical and harvest-now-decrypt-later exposed (tls, ECDH,
- *    hndl:true). This complements, and does not duplicate, `k8s.ts`'s
- *    `minProtocolVersion` legacy-TLS-floor rule.
+ * Istio `tls.cipherSuites:` `ECDHE-RSA-*` / `ECDHE-ECDSA-*` suites are NOT handled
+ * here — the language-agnostic `tls-classical-kex` token rule in `source.ts`
+ * already flags those cipher strings in any config file, so a rule here would
+ * double-count.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { CWE_BROKEN_CRYPTO, CWE_RISKY_PRIMITIVE } from "../cwe.js";
+import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const MESH_EXTENSIONS: readonly string[] = [".yaml", ".yml", ".hcl"];
 
@@ -44,11 +43,6 @@ const RE_MESH_LINKERD_ECDSA =
 // mirroring the terraform.ts attribute-matching convention.
 const RE_MESH_CONSUL_RSA = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"rsa"/gi;
 const RE_MESH_CONSUL_EC = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"ec"/gi;
-
-// Istio mesh TLS cipher suites: OpenSSL-style suite names naming classical
-// ECDHE key exchange combined with an RSA or ECDSA certificate. These are
-// distinctive tokens (no generic-config collision risk).
-const RE_MESH_ISTIO_CLASSICAL_CIPHER = /\bECDHE-(?:RSA|ECDSA)-[A-Z0-9_-]+\b/g;
 
 const RULE_MESH_LINKERD_ECDSA: RuleMeta = {
   id: "mesh-linkerd-identity-ecdsa",
@@ -94,47 +88,23 @@ const RULE_MESH_CONSUL_EC: RuleMeta = {
     "Consul Connect's mesh CA issues leaf certificates from a classical EC private key, forgeable by a quantum attacker.",
   remediation: "Plan migration to ML-DSA-65 (FIPS 204) as the Connect CA provider adds support.",
 };
-const RULE_MESH_ISTIO_CLASSICAL_CIPHER: RuleMeta = {
-  id: "mesh-istio-classical-cipher",
-  title: "Istio classical ECDHE cipher suite",
-  description:
-    "Istio DestinationRule/Gateway tls.cipherSuites lists a classical ECDHE-RSA/ECDHE-ECDSA suite",
-  category: "tls",
-  severity: "medium",
-  confidence: "high",
-  algorithm: "ECDH",
-  hndl: true,
-  cwe: CWE_RISKY_PRIMITIVE,
-  message:
-    "Istio mesh TLS cipher suite allows classical ECDHE key exchange, which is harvest-now-decrypt-later exposed.",
-  remediation:
-    "Prefer TLS 1.3 AEAD suites and track PQC-hybrid mesh key exchange (X25519MLKEM768) as Envoy/BoringSSL adds support.",
-};
-
 /**
  * Detects classical asymmetric crypto in service-mesh configuration: Linkerd's
- * default ECDSA identity issuer, Consul Connect's mesh CA private key type,
- * and classical ECDHE cipher suites in Istio DestinationRule/Gateway TLS
- * policy.
+ * default ECDSA identity issuer and Consul Connect's mesh CA private key type.
+ * (Istio ECDHE cipher-suite strings are covered by `source.ts`'s
+ * `tls-classical-kex` token rule, so they are not duplicated here.)
  */
 export const meshDetector: Detector = {
   id: "service-mesh-crypto",
-  description:
-    "Classical crypto in service-mesh config (Linkerd identity, Consul Connect CA, Istio cipher suites)",
+  description: "Classical crypto in service-mesh config (Linkerd identity, Consul Connect CA)",
   scope: "config",
   language: "any",
-  rules: [
-    RULE_MESH_LINKERD_ECDSA,
-    RULE_MESH_CONSUL_RSA,
-    RULE_MESH_CONSUL_EC,
-    RULE_MESH_ISTIO_CLASSICAL_CIPHER,
-  ],
+  rules: [RULE_MESH_LINKERD_ECDSA, RULE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_EC],
   appliesTo: (f) => hasExtension(f, MESH_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const isLinkerd = content.includes("linkerd") || content.includes("identityTrustAnchors");
     const isConsulConnect = content.includes("consul") && content.includes("connect");
-    const isIstioCipher = content.includes("DestinationRule") || content.includes("cipherSuites");
-    if (!isLinkerd && !isConsulConnect && !isIstioCipher) return [];
+    if (!isLinkerd && !isConsulConnect) return [];
 
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
@@ -148,7 +118,6 @@ export const meshDetector: Detector = {
       add(RE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_RSA);
       add(RE_MESH_CONSUL_EC, RULE_MESH_CONSUL_EC);
     }
-    if (isIstioCipher) add(RE_MESH_ISTIO_CLASSICAL_CIPHER, RULE_MESH_ISTIO_CLASSICAL_CIPHER);
     return findings;
   },
 };

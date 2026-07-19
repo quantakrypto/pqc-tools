@@ -39,12 +39,26 @@ const CFN_MARKERS: readonly string[] = [
   "SslPolicy", // unquoted so a YAML `SslPolicy:` key also gates the file in, not just JSON
 ];
 
+/**
+ * True when the content looks like a CloudFormation / ARM deployment template (one
+ * of the {@link CFN_MARKERS} is present). The `cloud-kms` and `jwk` detectors use
+ * this to DEFER to this detector inside templates, so a `KeySpec`/`kty` line is not
+ * counted twice.
+ */
+export function isCloudTemplate(content: string): boolean {
+  return CFN_MARKERS.some((marker) => content.includes(marker));
+}
+
 // Each attribute is matched with an optional quote around the key and `:` as
 // the separator (both plain-JSON and YAML-block-scalar forms use `:`). The
 // `(?<![\w"-])` lookbehind stops a longer/prefixed attribute name from
 // matching on its suffix.
-const RE_CFN_KMS_RSA = /(?<![\w"-])"?KeySpec"?\s*:\s*"?RSA_\d+"?/g;
-const RE_CFN_KMS_EC = /(?<![\w"-])"?KeySpec"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
+// Match all three AWS KMS spec-key spellings so this detector fully owns KMS keys
+// inside a template (KeySpec, the KeyPair variant, and the legacy CustomerMasterKeySpec).
+const RE_CFN_KMS_RSA =
+  /(?<![\w"-])"?(?:KeySpec|KeyPairSpec|CustomerMasterKeySpec)"?\s*:\s*"?RSA_\d+"?/g;
+const RE_CFN_KMS_EC =
+  /(?<![\w"-])"?(?:KeySpec|KeyPairSpec|CustomerMasterKeySpec)"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
 const RE_CFN_ACM_RSA = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?RSA_\d+"?/g;
 const RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
 // CloudFront: only the pre-2018 "TLSv1" / "TLSv1_2016" / "TLSv1.1_2016"

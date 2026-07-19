@@ -17,6 +17,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { isCloudTemplate } from "./cloudformation.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 // The AWS KMS key-spec fields (CreateKey / GenerateDataKeyPair / legacy CMK). The
@@ -75,6 +76,9 @@ export const cloudKmsDetector: Detector = {
     ) {
       return [];
     }
+    // Inside a CloudFormation / ARM template, the cloudformation detector owns the
+    // KMS key specs — defer to it so a KeySpec line is not counted twice.
+    if (isCloudTemplate(content)) return [];
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta): void =>
       eachMatch(re, content, (m) =>

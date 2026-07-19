@@ -6,6 +6,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed — detector precision (cross-detector double-counts)
+
+Several config detectors emitted a second finding for a line another detector
+already owned, inflating counts and depressing the readiness score. Ownership is
+now single-source:
+
+- **`source.ts` owns transport tokens.** Removed the redundant `vpn`
+  `net-sshd-classical-kex` (sshd KexAlgorithms) and `mesh`
+  `mesh-istio-classical-cipher` (ECDHE-RSA suites) rules — `source.ts`'s
+  `ssh-kex-classical` / `tls-classical-kex` token detectors already cover them.
+- **`cloudformation.ts` owns crypto inside templates.** `jwk` and `cloud-kms` now
+  defer inside a CloudFormation/ARM template (new `isCloudTemplate` gate), and the
+  CFN KMS rule matches all three spec-key spellings (`KeySpec` / `KeyPairSpec` /
+  `CustomerMasterKeySpec`) so nothing is missed.
+- **`jwk` skips docs** (README examples) and is now **usage-aware**: an RSA/EC
+  *signing* JWK (`use:"sig"`, or `RS`/`PS`/`ES` alg) is classified as a `signature`
+  (`hndl:false`) instead of an HNDL-exposed key; encryption keys stay `hndl:true`.
+- **`jose` defers to `jwk`** when the `alg` belongs to a JWK object (a `kty` is in
+  the same object), so a JWK's declared alg is not counted twice.
+
 ### Added — A.8.24 evidence policy mapping (roadmap 🟡)
 
 - **`qscan --format evidence --policy <file>`** completes §4 of the ISO/IEC 27001
