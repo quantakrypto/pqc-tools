@@ -133,8 +133,16 @@ running against this list; findings will be folded in.
   CNSA / IR-8547 terminology that is itself English-only, and message catalogs
   would add drift-prone surface for no reader benefit (YAGNI). Revisit only if a
   concrete localized-consumer need appears.
-- **Published supply-chain gate on a cadence** — Scorecard + dependency/Action
-  review, now that the packages are live on npm.
+- ~~**Published supply-chain gate on a cadence** — Scorecard + dependency/Action
+  review, now that the packages are live on npm.~~ ✅ **Done (2026-07-19).**
+  Scorecard (weekly) and Dependabot (weekly npm + Actions) were already wired;
+  this closed the gaps: a per-PR **dependency-review** gate (`fail-on-severity: high`
+  + copyleft-license deny), an **enforced SHA-pin gate**
+  ([`check-action-pins.mjs`](../scripts/check-action-pins.mjs)) so a future unpinned
+  `uses:` fails CI instead of silently widening the trust surface, and a **weekly
+  cadence audit** ([`supply-chain-audit.yml`](../.github/workflows/supply-chain-audit.yml))
+  running `npm audit` over the dev surface plus the zero-dep + pin invariants — so
+  the posture is re-checked even in quiet weeks. See [SUPPLY-CHAIN.md §5](SUPPLY-CHAIN.md).
 
 ---
 

@@ -89,9 +89,20 @@ file, we use a **bulk declaration**:
 
 ## 5. Ongoing posture (recurring gates)
 
-Beyond the one-time setup, fold these into CI cadence (ROADMAP §6):
-- **Scorecard weekly** (this workflow) — track drift, act on regressions.
+Beyond the one-time setup, these are enforced continuously:
+- **Scorecard weekly** ([`scorecard.yml`](../.github/workflows/scorecard.yml)) — track drift, act on regressions.
+- **Cadence audit weekly** ([`supply-chain-audit.yml`](../.github/workflows/supply-chain-audit.yml))
+  — `npm audit` over the dev surface (advisory; zero runtime deps means nothing ships)
+  plus the two hard invariants below, re-checked even in weeks with no commits.
+- **Dependency review on every PR** ([`ci.yml`](../.github/workflows/ci.yml) `dependency-review`)
+  — blocks a PR that introduces a known-vulnerable dependency (`fail-on-severity: high`)
+  or a copyleft-incompatible license.
+- **SHA-pinned Actions, enforced** — [`scripts/check-action-pins.mjs`](../scripts/check-action-pins.mjs)
+  fails CI if any `uses:` is on a mutable tag/branch instead of a 40-char commit SHA
+  (Scorecard *Pinned-Dependencies*). Dependabot opens the bump PRs; the gate stops regressions.
+- **Zero runtime dependencies**, enforced — [`scripts/check-zero-deps.mjs`](../scripts/check-zero-deps.mjs)
+  ([ADR-0001](adr/0001-zero-runtime-dependencies.md)); a new runtime dep needs an ADR.
 - **Lockfile integrity** — always `npm ci`; never run arbitrary lifecycle scripts.
 - **`reuse lint`** on every push to keep licensing clean as files land.
-- **Reproducible builds** for published artifacts (verify provenance round-trips).
-- **No new runtime dependency** without an ADR ([ADR-0001](adr/0001-zero-runtime-dependencies.md)).
+- **Reproducible builds** — [`repro:check`](../.github/workflows/ci.yml) gates that the
+  published tarballs re-create byte-for-byte from source ([validation/reproducible-build.md](validation/reproducible-build.md)).

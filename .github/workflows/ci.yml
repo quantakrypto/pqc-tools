@@ -228,7 +228,7 @@ jobs:
         run: npm run repro:check
 
   supply-chain:
-    name: supply-chain invariants (zero-dep + REUSE)
+    name: supply-chain invariants (zero-dep + pins + REUSE)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -239,8 +239,31 @@ jobs:
           node-version: "20"
       - name: Enforce zero runtime dependencies (ADR-0001)
         run: node scripts/check-zero-deps.mjs
+      - name: Enforce SHA-pinned GitHub Actions (Scorecard Pinned-Dependencies)
+        run: node scripts/check-action-pins.mjs
       - name: REUSE lint (SPDX / licensing) — advisory
         continue-on-error: true
         run: |
           pipx install reuse >/dev/null 2>&1 || pip install --user reuse
           reuse lint
+
+  dependency-review:
+    name: dependency review (PR gate)
+    runs-on: ubuntu-latest
+    # Only meaningful on a PR (it diffs the base..head dependency manifests).
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Blocks a PR that introduces a known-vulnerable dependency or an
+      # incompatible license. Zero runtime deps today (ADR-0001), so this guards
+      # the dev-tool surface and keeps that invariant from eroding via a PR.
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          # Apache-2.0 project: deny strong-copyleft licenses that would conflict.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-3.0
