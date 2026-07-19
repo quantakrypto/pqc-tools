@@ -3183,7 +3183,7 @@ var init_java = __esm({
     RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
     RE_JAVA_BC_CURVE = /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
     RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
-    RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
+    RE_JAVA_TLS_NOVERIFY = /\bNoopHostnameVerifier\s*[.(]|\.\s*ALLOW_ALL_HOSTNAME_VERIFIER\b/g;
     RE_JAVA_JWT_ALG = /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
     RULE_JAVA_RSA = {
       id: "java-rsa",
@@ -4184,7 +4184,7 @@ var init_php = __esm({
     init_detect_utils();
     init_cwe();
     RE_PHP_PKEY_NEW = /\bopenssl_pkey_new\s*\(/g;
-    RE_PHP_RSA_CRYPT = /\bopenssl_(?:public_encrypt|private_decrypt)\s*\(/g;
+    RE_PHP_RSA_CRYPT = /\bopenssl_(?:public_encrypt|private_decrypt|seal|open)\s*\(/g;
     RE_PHP_SIGN = /\bopenssl_(?:sign|verify)\s*\(/g;
     RE_PHP_SECLIB = /\b(RSA|EC|DSA|DH)::createKey\s*\(/g;
     RE_PHP_SODIUM_X25519 = /\bsodium_crypto_(?:box|kx)_(?:seed_)?keypair\s*\(|\bsodium_crypto_scalarmult(?:_base)?\s*\(/g;
@@ -4205,7 +4205,7 @@ var init_php = __esm({
     RULE_PHP_RSA_CRYPT = {
       id: "php-openssl-rsa-crypt",
       title: "PHP openssl RSA public-key encryption",
-      description: "openssl_public_encrypt / openssl_private_decrypt",
+      description: "openssl_public_encrypt / openssl_private_decrypt / openssl_seal / openssl_open",
       category: "kem",
       severity: "high",
       confidence: "high",
@@ -4354,6 +4354,8 @@ function classifySign(type) {
     return "ECDSA";
   if (type === "eddsa" || type === "ed25519")
     return "EdDSA";
+  if (type === "dss")
+    return "DSA";
   return null;
 }
 var RE_EX_GEN, RE_EX_SIGN, RE_EX_X509_RSA, RE_EX_X509_EC, RE_EX_JOSE, SIG_REM, KEX_REM, RULE_EX_KEYGEN, RULE_EX_SIGN, RULE_EX_X509, RULE_EX_JOSE, RSA_CLS, DH_CLS, ECDH_CLS, X25519_CLS, X448_CLS, EDDSA_CLS, EC_CLS, elixirDetector;
@@ -5474,7 +5476,9 @@ var init_cloud_kms = __esm({
       scope: "config",
       language: "any",
       rules: [RULE_KMS_RSA, RULE_KMS_EC],
-      appliesTo: () => true,
+      // Skip prose/docs: a README or tutorial showing `KeySpec: "RSA_2048"` to describe
+      // the KMS API is not a live key-minting call.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
       detect({ file, content }) {
         if (!content.includes("KeySpec") && !content.includes("KeyPairSpec") && !content.includes("CustomerMasterKeySpec")) {
           return [];
@@ -5926,7 +5930,7 @@ var init_database = __esm({
     init_detect_utils();
     init_cwe();
     RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
-    RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:disable|allow|prefer|require)\b/gi;
+    RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:allow|prefer|require)\b/gi;
     RULE_PGCRYPTO = {
       id: "db-pgcrypto-pubkey",
       title: "pgcrypto public-key encryption",
@@ -5943,7 +5947,7 @@ var init_database = __esm({
     RULE_WEAK_SSLMODE = {
       id: "db-weak-sslmode",
       title: "Database sslmode without verification",
-      description: "libpq sslmode is disable/allow/prefer/require (no certificate verification)",
+      description: "libpq sslmode is allow/prefer/require (no certificate verification)",
       category: "tls",
       severity: "medium",
       confidence: "high",
@@ -5998,14 +6002,15 @@ var init_cloudformation = __esm({
       "AWSTemplateFormatVersion",
       "MinimumProtocolVersion",
       "Microsoft.KeyVault",
-      '"SslPolicy"'
+      "SslPolicy"
+      // unquoted so a YAML `SslPolicy:` key also gates the file in, not just JSON
     ];
     RE_CFN_KMS_RSA = /(?<![\w"-])"?KeySpec"?\s*:\s*"?RSA_\d+"?/g;
     RE_CFN_KMS_EC = /(?<![\w"-])"?KeySpec"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
     RE_CFN_ACM_RSA = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?RSA_\d+"?/g;
     RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
     RE_CFN_CLOUDFRONT_TLS = /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1)(?=["'\s,}]|$)/gm;
-    RE_CFN_ELB_TLS = /(?<![\w"-])"?SslPolicy"?\s*:\s*"ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})"/g;
+    RE_CFN_ELB_TLS = /(?<![\w"-])"?SslPolicy"?\s*:\s*"?ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})(?=["'\s,}]|$)/g;
     RE_CFN_ARM_KV_RSA = /(?<![\w"-])"?kty"?\s*:\s*"?RSA"?(?!\w)/g;
     RE_CFN_ARM_KV_EC = /(?<![\w"-])"?kty"?\s*:\s*"?EC"?(?!\w)/g;
     RULE_CFN_KMS_RSA = {
