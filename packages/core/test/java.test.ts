@@ -136,3 +136,32 @@ test("clean Java source produces no findings", () => {
 test("Java detector does not run on non-Java files", () => {
   assert.equal(byRule(run("a.py", 'KeyPairGenerator.getInstance("RSA")'), "java-rsa"), undefined);
 });
+
+test("an import of NoopHostnameVerifier is NOT flagged (only real usage is)", () => {
+  // A bare import line is not disabled verification — firing high severity on it is
+  // a false positive.
+  assert.equal(
+    byRule(
+      run("A.java", "import org.apache.http.conn.ssl.NoopHostnameVerifier;\nclass A {}"),
+      "java-tls-hostname-verification-disabled",
+    ),
+    undefined,
+  );
+});
+
+test("real all-trusting hostname-verifier usage IS flagged (construction + member access)", () => {
+  assert.ok(
+    byRule(
+      run("A.java", "var v = new NoopHostnameVerifier();"),
+      "java-tls-hostname-verification-disabled",
+    ),
+    "new NoopHostnameVerifier() must fire",
+  );
+  assert.ok(
+    byRule(
+      run("A.java", "var a = SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER;"),
+      "java-tls-hostname-verification-disabled",
+    ),
+    ".ALLOW_ALL_HOSTNAME_VERIFIER must fire",
+  );
+});

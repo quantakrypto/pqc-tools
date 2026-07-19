@@ -69,3 +69,13 @@ test("a symmetric KMS key (default) and unrelated JSON produce no KMS findings",
     [],
   );
 });
+
+test("a KeySpec RSA_2048 in prose docs (.md) is NOT flagged", () => {
+  // A tutorial describing the KMS API is not a live key-minting call.
+  assert.deepEqual(
+    run("kms-guide.md", 'Set KeySpec: "RSA_2048" to create an asymmetric CMK.').filter((f) =>
+      f.ruleId.startsWith("cloud-kms-"),
+    ),
+    [],
+  );
+});

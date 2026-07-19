@@ -16,7 +16,7 @@
  * later exposed → hndl:true.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 // The AWS KMS key-spec fields (CreateKey / GenerateDataKeyPair / legacy CMK). The
@@ -63,7 +63,9 @@ export const cloudKmsDetector: Detector = {
   scope: "config",
   language: "any",
   rules: [RULE_KMS_RSA, RULE_KMS_EC],
-  appliesTo: () => true,
+  // Skip prose/docs: a README or tutorial showing `KeySpec: "RSA_2048"` to describe
+  // the KMS API is not a live key-minting call.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: only proceed if a KMS key-spec field name is present.
     if (

@@ -63,3 +63,12 @@ test("an sslmode example in markdown prose is NOT flagged", () => {
     [],
   );
 });
+
+test("sslmode=disable is NOT flagged (no TLS session, so no harvestable key exchange)", () => {
+  assert.deepEqual(
+    run(".env", "DATABASE_URL=postgres://u:p@db/app?sslmode=disable\n").filter((f) =>
+      f.ruleId.startsWith("db-"),
+    ),
+    [],
+  );
+});

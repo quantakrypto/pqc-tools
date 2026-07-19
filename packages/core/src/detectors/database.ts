@@ -7,16 +7,18 @@
  * Covered:
  *  - pgcrypto `pgp_pub_encrypt` / `pgp_pub_decrypt` in `.sql` (RSA/ElGamal public-key
  *    encryption of column data) → `hndl:true`.
- *  - libpq `sslmode = disable | allow | prefer | require` in any config/connection
- *    file — a mode that does NOT verify the server certificate, so the classical
- *    TLS session it does (or doesn't) negotiate is both MITM-able and harvestable.
+ *  - libpq `sslmode = allow | prefer | require` in any config/connection file — a
+ *    mode that does NOT verify the server certificate, so the classical TLS session
+ *    it negotiates is both MITM-able and harvestable. `disable` is excluded: it
+ *    negotiates no TLS at all, so there is no key exchange to harvest (a plaintext
+ *    concern, out of scope for a PQC-readiness scanner).
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION } from "../cwe.js";
 
 const RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
-const RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:disable|allow|prefer|require)\b/gi;
+const RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:allow|prefer|require)\b/gi;
 
 const RULE_PGCRYPTO: RuleMeta = {
   id: "db-pgcrypto-pubkey",
@@ -36,7 +38,7 @@ const RULE_PGCRYPTO: RuleMeta = {
 const RULE_WEAK_SSLMODE: RuleMeta = {
   id: "db-weak-sslmode",
   title: "Database sslmode without verification",
-  description: "libpq sslmode is disable/allow/prefer/require (no certificate verification)",
+  description: "libpq sslmode is allow/prefer/require (no certificate verification)",
   category: "tls",
   severity: "medium",
   confidence: "high",

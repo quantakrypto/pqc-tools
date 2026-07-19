@@ -53,7 +53,12 @@ const RE_JAVA_BC_CURVE =
 // all-trusting verifier (Apache HttpClient's NoopHostnameVerifier /
 // ALLOW_ALL_HOSTNAME_VERIFIER).
 const RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
-const RE_JAVA_TLS_NOVERIFY = /\b(NoopHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER)\b/g;
+// Require a USAGE position, not a bare identifier: `NoopHostnameVerifier` followed by
+// `(` (construction) or `.` (`.INSTANCE`), and `ALLOW_ALL_HOSTNAME_VERIFIER` preceded
+// by `.` (member access). This keeps `new NoopHostnameVerifier()` and
+// `SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER` while dropping the common
+// false positive of a plain `import …NoopHostnameVerifier;` line.
+const RE_JAVA_TLS_NOVERIFY = /\bNoopHostnameVerifier\s*[.(]|\.\s*ALLOW_ALL_HOSTNAME_VERIFIER\b/g;
 
 // Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
 // alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but

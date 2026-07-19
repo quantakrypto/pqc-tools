@@ -39,7 +39,7 @@ test(":crypto.generate_key classifies rsa / dh and the ecdh curve variants", () 
   assert.equal(ec?.hndl, true);
 });
 
-test(":crypto.sign classifies the algorithm atom (ecdsa/rsa/eddsa)", () => {
+test(":crypto.sign classifies the algorithm atom (ecdsa/rsa/eddsa/dss)", () => {
   assert.equal(
     rule(run("k.ex", ":crypto.sign(:ecdsa, :sha256, msg, key)"), "elixir-crypto-sign")?.algorithm,
     "ECDSA",
@@ -48,6 +48,11 @@ test(":crypto.sign classifies the algorithm atom (ecdsa/rsa/eddsa)", () => {
     rule(run("k.ex", ":crypto.verify(:eddsa, :none, m, s, [k, :ed25519])"), "elixir-crypto-sign")
       ?.algorithm,
     "EdDSA",
+  );
+  // DSA: Erlang's algorithm atom is :dss — previously misclassified to nothing.
+  assert.equal(
+    rule(run("k.ex", ":crypto.sign(:dss, :sha256, msg, key)"), "elixir-crypto-sign")?.algorithm,
+    "DSA",
   );
 });
 

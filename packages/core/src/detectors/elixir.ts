@@ -146,6 +146,7 @@ function classifySign(type: string): AlgorithmFamily | null {
   if (type === "rsa") return "RSA";
   if (type === "ecdsa") return "ECDSA";
   if (type === "eddsa" || type === "ed25519") return "EdDSA";
+  if (type === "dss") return "DSA"; // Erlang's algorithm atom for DSA signatures
   return null;
 }
 
