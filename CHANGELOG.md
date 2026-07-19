@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-07-19
+
 ### Added — infrastructure post-quantum readiness
 
 - **Six new config-scope detectors** in `@quantakrypto/core`, surfaced

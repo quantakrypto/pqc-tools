@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/qprobe",
-  "version": "0.1.0",
+  "version": "0.4.4",
   "description": "qProbe — actively inspect live TLS/SSH endpoints you OWN for post-quantum readiness (hybrid KEX, classical certs). Gated behind an ownership attestation. Zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
@@ -37,7 +37,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@quantakrypto/core": "0.4.3"
+    "@quantakrypto/core": "0.4.4"
   },
   "scripts": {
     "build": "tsc -b",
