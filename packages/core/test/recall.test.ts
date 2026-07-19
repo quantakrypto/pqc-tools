@@ -262,11 +262,30 @@ async function loadLabels(): Promise<Labels> {
 }
 
 /**
- * Floor set just below the measured recall so a real regression fails the build
- * but the expected (documented) false negatives do not. Update when the corpus or
- * detectors change, per docs/validation/recall-benchmark.md.
+ * Overall floor, set just below the measured recall so a real regression fails
+ * the build but the expected (documented) false negatives do not. Update when the
+ * corpus or detectors change, per docs/validation/recall-benchmark.md.
  */
-const RECALL_FLOOR = 0.78; // measured 0.813; floor sits just below so real regressions fail.
+const RECALL_FLOOR = 0.78; // measured 0.847; floor sits just below so real regressions fail.
+
+/**
+ * Per-language floors. The overall floor alone hides a single-language regression:
+ * one language can collapse while the others hold the aggregate above 0.78. Each
+ * language therefore carries its own floor, set ~0.06–0.10 below its measured
+ * recall so a 2-occurrence drop in ANY language fails CI while a single borderline
+ * flip does not. Every supported language MUST appear here (a new language without
+ * a floor fails loudly below), so detector parity stays a per-language commitment.
+ */
+const PER_LANGUAGE_FLOOR: Readonly<Record<string, number>> = {
+  c: 0.85, // measured 0.933
+  csharp: 0.75, // measured 0.833
+  go: 0.68, // measured 0.760
+  java: 0.58, // measured 0.667
+  js: 0.88, // measured 0.955
+  python: 0.9, // measured 1.000
+  ruby: 0.72, // measured 0.800
+  rust: 0.8, // measured 0.889
+};
 
 test("recall benchmark: detection recall over real-world idioms", async () => {
   const labels = await loadLabels();
@@ -297,4 +316,17 @@ test("recall benchmark: detection recall over real-world idioms", async () => {
 
   const r = recall(report.overall);
   assert.ok(r >= RECALL_FLOOR, `recall regressed: ${r.toFixed(4)} < ${RECALL_FLOOR}`);
+
+  // Per-language floors: a single language must not silently collapse behind a
+  // healthy aggregate. Every measured language must have a declared floor and
+  // clear it.
+  for (const [lang, tally] of report.byLanguage) {
+    const floor = PER_LANGUAGE_FLOOR[lang];
+    assert.ok(
+      floor !== undefined,
+      `language "${lang}" has no PER_LANGUAGE_FLOOR — add one (measured ${recall(tally).toFixed(3)}).`,
+    );
+    const lr = recall(tally);
+    assert.ok(lr >= floor, `recall regressed for ${lang}: ${lr.toFixed(4)} < ${floor}`);
+  }
 });

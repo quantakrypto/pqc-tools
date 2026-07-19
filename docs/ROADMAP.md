@@ -92,8 +92,12 @@ running against this list; findings will be folded in.
   Go's X25519-as-its-own-family, JWT for Go/Ruby, and PEM public-key/DH/CSR
   markers — with 9 new labelled corpus fixtures and the benchmark held at 1.000.
   See [audits/2026-07-15-v0.4-review.md](audits/2026-07-15-v0.4-review.md).
-  *Residual:* a per-language false-negative *depth* benchmark (measuring recall
-  against a larger real-world corpus) is still worthwhile as a standing quality gate.
+  *Residual:* ✅ **closed (2026-07-19).** The false-negative *depth* benchmark
+  ([recall.test.ts](../packages/core/test/recall.test.ts), 85 real-world files /
+  176 occurrences across 8 languages, [doc](validation/recall-benchmark.md)) now
+  gates **per language** — each language carries its own recall floor set just
+  below its measured value, so a single language can't silently collapse behind a
+  healthy aggregate, and a new language with no declared floor fails CI.
 - ~~**Standards-currency cadence.**~~ ✅ **Done (2026-07-19).** Operationalised:
   a single dated, cited source of truth ([`packages/core/src/standards.ts`](../packages/core/src/standards.ts),
   `PQC_STANDARDS`) for FIPS 203/204/205, the CNSA 2.0 tiers, SP 800-208, the

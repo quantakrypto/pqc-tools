@@ -59,6 +59,13 @@ This is **not** gated at 1.000 — real-world recall < 1 is expected. The floor
 assertion (`RECALL_FLOOR`) sits just below the measured value as a regression
 guard; the enumerated false negatives are the point.
 
+The overall floor is not enough on its own: one language could collapse while the
+others hold the aggregate up. So the benchmark also carries a **per-language floor**
+(`PER_LANGUAGE_FLOOR`), each set ~0.06–0.10 below that language's measured recall,
+and every supported language must both **have** a floor and **clear** it. A new
+language with no declared floor fails the test loudly, so detector parity stays a
+per-language commitment rather than an aggregate that can hide a weak language.
+
 ## Current measured results
 
 2026-07-15, `@quantakrypto/core`, after closing the cross-language TLS gap, the
