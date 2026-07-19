@@ -5,7 +5,8 @@
  *
  *  - **ext/openssl** — `openssl_pkey_new()` (classified by its
  *    `OPENSSL_KEYTYPE_*` config, defaulting to RSA), `openssl_public_encrypt` /
- *    `openssl_private_decrypt` (RSA), and `openssl_sign` / `openssl_verify`.
+ *    `openssl_private_decrypt` / `openssl_seal` / `openssl_open` (RSA), and
+ *    `openssl_sign` / `openssl_verify`.
  *  - **phpseclib3** — `RSA::createKey()` / `EC::createKey()` / `DSA::createKey()`.
  *  - **libsodium** — `sodium_crypto_box`/`kx` keypairs (X25519) and
  *    `sodium_crypto_sign` keypairs (Ed25519).
@@ -23,7 +24,10 @@ import { PHP_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../det
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const RE_PHP_PKEY_NEW = /\bopenssl_pkey_new\s*\(/g;
-const RE_PHP_RSA_CRYPT = /\bopenssl_(?:public_encrypt|private_decrypt)\s*\(/g;
+// public_encrypt/private_decrypt (direct RSA) plus seal/open (RSA-envelope: seal
+// encrypts a random symmetric key under each recipient's RSA public key, open
+// decrypts it with the private key) — all RSA key transport, harvest-now exposed.
+const RE_PHP_RSA_CRYPT = /\bopenssl_(?:public_encrypt|private_decrypt|seal|open)\s*\(/g;
 const RE_PHP_SIGN = /\bopenssl_(?:sign|verify)\s*\(/g;
 // phpseclib3 factory methods. The class names are generic, so require `::createKey`.
 const RE_PHP_SECLIB = /\b(RSA|EC|DSA|DH)::createKey\s*\(/g;
@@ -58,7 +62,7 @@ const RULE_PHP_KEYGEN: RuleMeta = {
 const RULE_PHP_RSA_CRYPT: RuleMeta = {
   id: "php-openssl-rsa-crypt",
   title: "PHP openssl RSA public-key encryption",
-  description: "openssl_public_encrypt / openssl_private_decrypt",
+  description: "openssl_public_encrypt / openssl_private_decrypt / openssl_seal / openssl_open",
   category: "kem",
   severity: "high",
   confidence: "high",

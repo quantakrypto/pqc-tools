@@ -140,6 +140,20 @@ test("ELB/ALB SslPolicy flags legacy named policies", () => {
     },
   });
   assert.ok(rule(run("template.json", legacyTls10), "cfn-elb-legacy-tls"));
+
+  // YAML block scalar (unquoted value + unquoted key) — the common CFN form.
+  const yaml = [
+    "Resources:",
+    "  Listener:",
+    "    Type: AWS::ElasticLoadBalancingV2::Listener",
+    "    Properties:",
+    "      SslPolicy: ELBSecurityPolicy-2016-08",
+  ].join("\n");
+  assert.ok(rule(run("lb.yaml", yaml), "cfn-elb-legacy-tls"), "unquoted YAML SslPolicy must fire");
+
+  // A modern policy that merely shares the prefix must NOT fire.
+  const modern = yaml.replace("ELBSecurityPolicy-2016-08", "ELBSecurityPolicy-TLS13-1-2-2021-06");
+  assert.equal(rule(run("lb.yaml", modern), "cfn-elb-legacy-tls"), undefined);
 });
 
 test("Azure ARM Microsoft.KeyVault key kty RSA / EC classify correctly", () => {

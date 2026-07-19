@@ -71,6 +71,23 @@ test("openssl encrypt / sign and phpseclib3 createKey classify correctly", () =>
   );
 });
 
+test("openssl_seal / openssl_open (RSA envelope) are flagged as RSA HNDL", () => {
+  assert.equal(
+    rule(run("a.php", "<?php openssl_seal($d, $s, $ek, $pubkeys);"), "php-openssl-rsa-crypt")?.hndl,
+    true,
+  );
+  assert.equal(
+    rule(run("a.php", "<?php openssl_open($s, $o, $ek, $priv);"), "php-openssl-rsa-crypt")
+      ?.algorithm,
+    "RSA",
+  );
+  // Must not over-broaden onto other openssl_* functions.
+  assert.equal(
+    rule(run("a.php", "<?php $c = openssl_x509_parse($cert);"), "php-openssl-rsa-crypt"),
+    undefined,
+  );
+});
+
 test("libsodium box/kx (X25519) and sign (Ed25519) key pairs are detected", () => {
   assert.equal(
     rule(run("a.php", "<?php $kp = sodium_crypto_box_keypair();"), "php-sodium-x25519")?.algorithm,

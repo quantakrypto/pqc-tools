@@ -36,7 +36,7 @@ const CFN_MARKERS: readonly string[] = [
   "AWSTemplateFormatVersion",
   "MinimumProtocolVersion",
   "Microsoft.KeyVault",
-  '"SslPolicy"',
+  "SslPolicy", // unquoted so a YAML `SslPolicy:` key also gates the file in, not just JSON
 ];
 
 // Each attribute is matched with an optional quote around the key and `:` as
@@ -52,9 +52,12 @@ const RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
 // "TLSv1.2_2018"-style value that merely starts with the same prefix.
 const RE_CFN_CLOUDFRONT_TLS =
   /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1)(?=["'\s,}]|$)/gm;
-// ELB/ALB legacy SSL negotiation policies (named, dated policy strings).
+// ELB/ALB legacy SSL negotiation policies (named, dated policy strings). The value
+// quote is optional (`"?`) so YAML block scalars (`SslPolicy: ELBSecurityPolicy-...`)
+// match too, with a delimiter lookahead so a longer/newer policy name that merely
+// shares the prefix is not matched.
 const RE_CFN_ELB_TLS =
-  /(?<![\w"-])"?SslPolicy"?\s*:\s*"ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})"/g;
+  /(?<![\w"-])"?SslPolicy"?\s*:\s*"?ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})(?=["'\s,}]|$)/g;
 // Azure ARM Microsoft.KeyVault key resource `properties.kty`.
 const RE_CFN_ARM_KV_RSA = /(?<![\w"-])"?kty"?\s*:\s*"?RSA"?(?!\w)/g;
 const RE_CFN_ARM_KV_EC = /(?<![\w"-])"?kty"?\s*:\s*"?EC"?(?!\w)/g;
