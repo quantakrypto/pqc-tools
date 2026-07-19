@@ -70,11 +70,12 @@ const RE_NAMED_EDDSA = /\bED(?:25519|448)\b/g;
 // quoted or separated by `:`/`=`.
 const RE_NAMED_DSA = /\balgorithm\s*[:=]?\s*"?DSA(?:-NSEC3-SHA1)?"?\b/gi;
 
-// --- STRUCTURAL form: `DNSKEY <flags> 3 <algorithm>` presentation RDATA (RFC 4034 §2). ---
-const RE_DNSKEY_RSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
-const RE_DNSKEY_ECDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
-const RE_DNSKEY_EDDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
-const RE_DNSKEY_DSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
+// --- STRUCTURAL form: `[C]DNSKEY <flags> 3 <algorithm>` presentation RDATA (RFC 4034
+// §2). `C?` also matches CDNSKEY (child-zone key with identical RDATA, RFC 7344). ---
+const RE_DNSKEY_RSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
+const RE_DNSKEY_ECDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
+const RE_DNSKEY_EDDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
+const RE_DNSKEY_DSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
 
 const RULE_DNSSEC_RSA: RuleMeta = {
   id: "dnssec-rsa-sig",

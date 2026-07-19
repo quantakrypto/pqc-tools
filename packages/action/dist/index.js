@@ -265,6 +265,19 @@ function eachMatch(re, content, onMatch) {
       g.lastIndex++;
   }
 }
+function maskCommentLines(content, markers) {
+  if (markers.length === 0)
+    return content;
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lead = line.trimStart();
+    if (lead !== "" && markers.some((mk) => lead.startsWith(mk))) {
+      lines[i] = " ".repeat(line.length);
+    }
+  }
+  return lines.join("\n");
+}
 var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, ELIXIR_EXTENSIONS, PHP_EXTENSIONS, C_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
 var init_detect_utils = __esm({
   "../core/dist/detect-utils.js"() {
@@ -3173,7 +3186,7 @@ function classifyGetInstance(factory, rawAlg) {
     return RULE_JAVA_DH;
   return null;
 }
-var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_BC_CURVE, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RE_JAVA_JWT_ALG, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_BC_X448, RULE_JAVA_BC_X25519, RULE_JAVA_BC_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, RULE_JAVA_JWT_ALG, BC_CLASS_RULES, BC_CURVE_CLASS_RULES, javaDetector;
+var RE_JAVA_GETINSTANCE, RE_JAVA_BC, RE_JAVA_BC_CURVE, RE_JAVA_BC_BARE, RE_JAVA_TLS_LEGACY, RE_JAVA_TLS_NOVERIFY, RE_JAVA_JWT_ALG, RULE_JAVA_RSA, RULE_JAVA_RSA_SIGN, RULE_JAVA_EC_KEYGEN, RULE_JAVA_ECDSA_SIGN, RULE_JAVA_ECDH, RULE_JAVA_DSA, RULE_JAVA_DH, RULE_JAVA_XDH, RULE_JAVA_EDDSA, RULE_JAVA_BC_X448, RULE_JAVA_BC_X25519, RULE_JAVA_BC_EDDSA, RULE_JAVA_TLS_LEGACY, RULE_JAVA_TLS_NOVERIFY, RULE_JAVA_JWT_ALG, BC_CLASS_RULES, BC_CURVE_CLASS_RULES, javaDetector;
 var init_java = __esm({
   "../core/dist/detectors/java.js"() {
     "use strict";
@@ -3182,6 +3195,7 @@ var init_java = __esm({
     RE_JAVA_GETINSTANCE = /\b(KeyPairGenerator|Signature|Cipher|KeyAgreement|KeyFactory)\s*\.\s*getInstance\s*\(\s*"([^"]+)"/g;
     RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
     RE_JAVA_BC_CURVE = /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
+    RE_JAVA_BC_BARE = /(?<!\bnew\s+)\b(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|ECDHBasicAgreement|DHBasicAgreement|RSAEngine|OAEPEncoding)\s*\(/g;
     RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
     RE_JAVA_TLS_NOVERIFY = /\bNoopHostnameVerifier\s*[.(]|\.\s*ALLOW_ALL_HOSTNAME_VERIFIER\b/g;
     RE_JAVA_JWT_ALG = /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
@@ -3436,6 +3450,12 @@ var init_java = __esm({
         });
         eachMatch(RE_JAVA_BC_CURVE, content, (m) => {
           const rule = BC_CURVE_CLASS_RULES[m[1]];
+          if (!rule)
+            return;
+          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+        });
+        eachMatch(RE_JAVA_BC_BARE, content, (m) => {
+          const rule = BC_CLASS_RULES[m[1]];
           if (!rule)
             return;
           findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
@@ -5325,8 +5345,8 @@ var init_terraform = __esm({
     RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9_]+)"/g;
     RE_TF_KMS_RSA = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"RSA_\d+"/g;
     RE_TF_KMS_EC = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
-    RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/g;
-    RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/g;
+    RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/gi;
+    RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/gi;
     RULE_TF_RSA = {
       id: "tf-rsa-key",
       title: "Terraform RSA key",
@@ -5421,7 +5441,8 @@ var init_terraform = __esm({
       appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        const add = (re, rule) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_TF_RSA, RULE_TF_RSA);
         add(RE_TF_ECDSA, RULE_TF_ECDSA);
         add(RE_TF_KMS_RSA, RULE_TF_KMS_RSA);
@@ -5523,7 +5544,10 @@ var init_cicd = __esm({
         }
       },
       {
-        re: /\bgpg\b[^\n]*?\s--(?:detach-sign|clearsign|sign)\b/g,
+        // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
+        // into another command's flag), and `(?![\w-])` stops `--sign` matching the
+        // `--sign` prefix of an unrelated flag like `--sign-artifacts`.
+        re: /\bgpg\b[^\n&|;]*?\s--(?:detach-sign|clearsign|sign)(?![\w-])/g,
         meta: {
           id: "ci-gpg-sign",
           title: "GPG signing (RSA)",
@@ -5555,7 +5579,10 @@ var init_cicd = __esm({
         }
       },
       {
-        re: /\bcodesign\s+(?:-s\b|--sign\b)/g,
+        // Allow intervening flags (the common `codesign --force --options runtime --sign`
+        // form), bounded to the codesign invocation so it can't latch onto a later
+        // command's `--sign` across `&&`/`|`/`;`.
+        re: /\bcodesign\b[^\n&|;]*?\s(?:-s\b|--sign\b)/g,
         meta: {
           id: "ci-codesign",
           title: "Apple codesign (RSA)",
@@ -5596,8 +5623,9 @@ var init_cicd = __esm({
       appliesTo: isCiPipelineFile,
       detect({ file, content }) {
         const findings = [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
         for (const rule of CI_RULES) {
-          eachMatch(rule.re, content, (m) => {
+          eachMatch(rule.re, scan2, (m) => {
             findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
           });
         }
@@ -5911,8 +5939,9 @@ var init_messaging = __esm({
       appliesTo: (f) => hasExtension(f, MQ_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
+        const scan2 = maskCommentLines(content, ["#", "!", ";"]);
         for (const rule of MQ_RULES) {
-          eachMatch(rule.re, content, (m) => {
+          eachMatch(rule.re, scan2, (m) => {
             findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
           });
         }
@@ -6267,10 +6296,10 @@ var init_dnssec = __esm({
     RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/g;
     RE_NAMED_EDDSA = /\bED(?:25519|448)\b/g;
     RE_NAMED_DSA = /\balgorithm\s*[:=]?\s*"?DSA(?:-NSEC3-SHA1)?"?\b/gi;
-    RE_DNSKEY_RSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
-    RE_DNSKEY_ECDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
-    RE_DNSKEY_EDDSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
-    RE_DNSKEY_DSA = new RegExp(`\\bDNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
+    RE_DNSKEY_RSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
+    RE_DNSKEY_ECDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
+    RE_DNSKEY_EDDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
+    RE_DNSKEY_DSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
     RULE_DNSSEC_RSA = {
       id: "dnssec-rsa-sig",
       title: "DNSSEC RSA signing algorithm",
@@ -6432,16 +6461,17 @@ var init_vpn = __esm({
       detect({ file, content }) {
         const findings = [];
         const push = (rule, index, length) => findings.push(findingFromRule(rule, { file, content, index, matchLength: length }));
+        const scan2 = maskCommentLines(content, ["#"]);
         if (content.includes("[Interface]") || content.includes("[Peer]")) {
-          eachMatch(RE_WG_KEY, content, (m) => push(RULE_WG, m.index, m[0].length));
+          eachMatch(RE_WG_KEY, scan2, (m) => push(RULE_WG, m.index, m[0].length));
         }
         if (/\b(?:ike|esp|proposals?|keyexchange)\s*=/i.test(content)) {
-          eachMatch(RE_IPSEC_MODP, content, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
-          eachMatch(RE_IPSEC_ECP, content, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
+          eachMatch(RE_IPSEC_MODP, scan2, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
+          eachMatch(RE_IPSEC_ECP, scan2, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
         }
         const base = file.toLowerCase().split("/").pop() ?? "";
         if (base === "sshd_config" || base === "ssh_config") {
-          eachMatch(RE_SSHD_KEX, content, (m) => {
+          eachMatch(RE_SSHD_KEX, scan2, (m) => {
             if (!offersPqKex(m[1]))
               push(RULE_SSHD_KEX, m.index, m[0].length);
           });

@@ -16,7 +16,7 @@
  * (hndl:true) since a provisioned EC key can feed ECDH.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const TF_EXTENSIONS: readonly string[] = [".tf", ".tf.json"];
@@ -32,9 +32,12 @@ const RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9
 // AWS KMS customer master key specs.
 const RE_TF_KMS_RSA = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"RSA_\d+"/g;
 const RE_TF_KMS_EC = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
-// Azure Key Vault key type (incl. the `-HSM` variants).
-const RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/g;
-const RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/g;
+// `key_type` key material: Azure Key Vault (`"RSA"` / `"EC"`, incl. `-HSM`) and
+// HashiCorp Vault PKI, which uses the lowercase `"rsa"` / `"ec"` tokens — so the value
+// is matched case-insensitively. The `"…"` bound keeps `"ec"` from matching `"ecc"`,
+// and `customer_master_key_spec` (AWS) is a different attribute handled above.
+const RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/gi;
+const RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/gi;
 
 const RULE_TF_RSA: RuleMeta = {
   id: "tf-rsa-key",
@@ -137,8 +140,11 @@ export const terraformDetector: Detector = {
   appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
+    // A commented HCL line (`# algorithm = "RSA"`, migration notes, `//` comments) is
+    // not an active resource argument. Mask comment lines; offsets preserved.
+    const scan = maskCommentLines(content, ["#", "//"]);
     const add = (re: RegExp, rule: RuleMeta) =>
-      eachMatch(re, content, (m) =>
+      eachMatch(re, scan, (m) =>
         findings.push(
           findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),

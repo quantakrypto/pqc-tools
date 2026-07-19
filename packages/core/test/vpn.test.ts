@@ -75,3 +75,12 @@ test("gating: modp in a non-IPsec .conf, and WireGuard keys with no section, do 
     [],
   );
 });
+
+test("a COMMENTED-OUT ipsec proposal / disabled-group note is NOT flagged", () => {
+  const conf =
+    "conn tunnel\n  keyexchange=ikev2\n  ike=aes256-sha256-ecp384\n  # esp=aes256-modp1024 (disabled)\n";
+  const fs = run("ipsec.conf", conf);
+  // The active ecp384 line still fires; the commented modp1024 must not.
+  assert.ok(rule(fs, "net-ipsec-ecp-ecdh"), "active ecp384 fires");
+  assert.equal(rule(fs, "net-ipsec-modp-dh"), undefined, "commented modp1024 does not fire");
+});

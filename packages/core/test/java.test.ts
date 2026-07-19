@@ -165,3 +165,18 @@ test("real all-trusting hostname-verifier usage IS flagged (construction + membe
     ".ALLOW_ALL_HOSTNAME_VERIFIER must fire",
   );
 });
+
+test("Kotlin bare-form BouncyCastle constructors (no `new`) are flagged", () => {
+  // Kotlin instantiates without `new`; the RSA/EC/DSA/DH lightweight-API classes were
+  // only matched in their `new …()` (Java/Scala) form before.
+  assert.equal(
+    byRule(run("Keys.kt", "val g = ECKeyPairGenerator()"), "java-ec-keygen")?.algorithm,
+    "ECDH",
+  );
+  assert.ok(byRule(run("Keys.kt", "val r = RSAKeyPairGenerator()"), "java-rsa"));
+  // The Java/Scala `new` form is still matched exactly once (no double-count).
+  const news = run("Keys.java", "var g = new ECKeyPairGenerator();").filter(
+    (f) => f.ruleId === "java-ec-keygen",
+  );
+  assert.equal(news.length, 1);
+});

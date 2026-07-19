@@ -82,6 +82,12 @@ test("structural DNSKEY RDATA (flags 3 <alg>) is caught without any named token 
   assert.equal(f?.algorithm, "ECDSA");
 });
 
+test("structural CDNSKEY RDATA (child-zone key, same RDATA) is also caught", () => {
+  const content = "example.com.\t3600\tIN\tCDNSKEY\t257 3 8 AwEAAdChildKeyMaterial\n";
+  const f = rule(run("example.com.zone", content), "dnssec-rsa-sig");
+  assert.equal(f?.algorithm, "RSA"); // alg 8 = RSASHA256
+});
+
 test("DNSSEC detector is gated to .zone/.db/.conf (a .md mentioning the algorithm name is prose, not config)", () => {
   const prose =
     "## Choosing a DNSSEC algorithm\n\nWe recommend ECDSAP256SHA256 over RSASHA256 for smaller signatures.";

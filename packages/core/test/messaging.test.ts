@@ -42,3 +42,18 @@ test("a modern broker config (TLS 1.3) produces no mq- findings", () => {
     [],
   );
 });
+
+test("a COMMENTED-OUT legacy directive is NOT flagged (broker configs ship examples)", () => {
+  // mosquitto.conf / server.properties are full of commented example lines.
+  assert.deepEqual(
+    run("mosquitto.conf", "#tls_version tlsv1\n! ssl.protocol=TLSv1.1\n").filter((f) =>
+      f.ruleId.startsWith("mq-"),
+    ),
+    [],
+  );
+  // An inline trailing comment does not disable the active directive before it.
+  assert.ok(
+    rule(run("server.properties", "ssl.protocol=TLSv1.1  # legacy\n"), "mq-kafka-legacy-tls"),
+    "active directive with a trailing comment still fires",
+  );
+});

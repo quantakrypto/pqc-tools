@@ -17,7 +17,7 @@
  *    is left alone, so a hardened server stays silent.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { eachMatch, findingFromRule, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const RE_WG_KEY = /\b(?:PrivateKey|PublicKey)\s*=\s*[A-Za-z0-9+/]{42,}=/g;
@@ -107,22 +107,26 @@ export const vpnDetector: Detector = {
     const findings: Finding[] = [];
     const push = (rule: RuleMeta, index: number, length: number) =>
       findings.push(findingFromRule(rule, { file, content, index, matchLength: length }));
+    // ipsec.conf / sshd_config / wg configs all use `#` line comments. A commented
+    // proposal or a `# modp1024 … disabled` note is not an active setting. Match over
+    // comment-masked content (offsets preserved); gates stay on the original.
+    const scan = maskCommentLines(content, ["#"]);
 
     // WireGuard: gated to a WireGuard config section.
     if (content.includes("[Interface]") || content.includes("[Peer]")) {
-      eachMatch(RE_WG_KEY, content, (m) => push(RULE_WG, m.index, m[0].length));
+      eachMatch(RE_WG_KEY, scan, (m) => push(RULE_WG, m.index, m[0].length));
     }
 
     // IPsec / strongSwan: gated to a proposal assignment.
     if (/\b(?:ike|esp|proposals?|keyexchange)\s*=/i.test(content)) {
-      eachMatch(RE_IPSEC_MODP, content, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
-      eachMatch(RE_IPSEC_ECP, content, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
+      eachMatch(RE_IPSEC_MODP, scan, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
+      eachMatch(RE_IPSEC_ECP, scan, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
     }
 
     // sshd_config / ssh_config: KexAlgorithms line with no PQC hybrid offered.
     const base = file.toLowerCase().split("/").pop() ?? "";
     if (base === "sshd_config" || base === "ssh_config") {
-      eachMatch(RE_SSHD_KEX, content, (m) => {
+      eachMatch(RE_SSHD_KEX, scan, (m) => {
         if (!offersPqKex(m[1])) push(RULE_SSHD_KEX, m.index, m[0].length);
       });
     }

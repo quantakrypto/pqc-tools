@@ -56,6 +56,16 @@ test("Azure Key Vault key_type RSA / EC (incl. -HSM) classify correctly", () => 
   assert.equal(rule(run("kv.tf", 'key_type = "EC"'), "tf-keyvault-ec")?.algorithm, "ECDH");
 });
 
+test("HashiCorp Vault PKI lowercase key_type = rsa / ec is caught (case-insensitive value)", () => {
+  assert.equal(rule(run("vault.tf", 'key_type = "rsa"'), "tf-keyvault-rsa")?.algorithm, "RSA");
+  assert.equal(rule(run("vault.tf", 'key_type = "ec"'), "tf-keyvault-ec")?.algorithm, "ECDH");
+  // The `"…"` bound keeps `"ec"` from matching a longer value like `"ecc"`.
+  assert.deepEqual(
+    run("vault.tf", 'other = "ecc"').filter((f) => f.ruleId.startsWith("tf-")),
+    [],
+  );
+});
+
 test("Terraform detector is gated to .tf / .tf.json (not arbitrary files)", () => {
   // The same HCL text in a .txt file must not fire.
   assert.deepEqual(
@@ -71,6 +81,15 @@ test("clean Terraform (symmetric KMS, no asymmetric keys) produces no findings",
   const clean = 'resource "aws_kms_key" "k" {\n  description = "symmetric default"\n}';
   assert.deepEqual(
     run("main.tf", clean).filter((f) => f.ruleId.startsWith("tf-")),
+    [],
+  );
+});
+
+test("a COMMENTED HCL argument (# or //) is NOT flagged", () => {
+  const commented =
+    'resource "tls_private_key" "k" {\n  # algorithm = "RSA" (migrated to ML-DSA)\n  // algorithm = "ECDSA"\n}';
+  assert.deepEqual(
+    run("main.tf", commented).filter((f) => f.ruleId.startsWith("tf-")),
     [],
   );
 });

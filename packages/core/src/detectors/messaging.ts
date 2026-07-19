@@ -11,7 +11,7 @@
  *    `TLS_RSA` suite — the harvestable key-exchange path.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_RISKY_PRIMITIVE, CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const MQ_EXTENSIONS: readonly string[] = [".properties", ".conf", ".cfg", ".ini"];
@@ -86,8 +86,12 @@ export const messagingDetector: Detector = {
   appliesTo: (f) => hasExtension(f, MQ_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
+    // Broker config files ship large commented-out example blocks; a commented
+    // directive is not active. Match over comment-masked content (offsets preserved,
+    // so the snippet from the original `content` is still correct).
+    const scan = maskCommentLines(content, ["#", "!", ";"]);
     for (const rule of MQ_RULES) {
-      eachMatch(rule.re, content, (m) => {
+      eachMatch(rule.re, scan, (m) => {
         findings.push(
           findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }),
         );

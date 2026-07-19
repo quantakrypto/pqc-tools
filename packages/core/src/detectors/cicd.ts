@@ -22,7 +22,7 @@
  * doc does not fire; the surface here is specifically the release pipeline.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule } from "../detect-utils.js";
+import { eachMatch, findingFromRule, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 /** True for the CI/CD pipeline definition files this detector inspects. */
@@ -66,7 +66,10 @@ const CI_RULES: CiRule[] = [
     },
   },
   {
-    re: /\bgpg\b[^\n]*?\s--(?:detach-sign|clearsign|sign)\b/g,
+    // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
+    // into another command's flag), and `(?![\w-])` stops `--sign` matching the
+    // `--sign` prefix of an unrelated flag like `--sign-artifacts`.
+    re: /\bgpg\b[^\n&|;]*?\s--(?:detach-sign|clearsign|sign)(?![\w-])/g,
     meta: {
       id: "ci-gpg-sign",
       title: "GPG signing (RSA)",
@@ -101,7 +104,10 @@ const CI_RULES: CiRule[] = [
     },
   },
   {
-    re: /\bcodesign\s+(?:-s\b|--sign\b)/g,
+    // Allow intervening flags (the common `codesign --force --options runtime --sign`
+    // form), bounded to the codesign invocation so it can't latch onto a later
+    // command's `--sign` across `&&`/`|`/`;`.
+    re: /\bcodesign\b[^\n&|;]*?\s(?:-s\b|--sign\b)/g,
     meta: {
       id: "ci-codesign",
       title: "Apple codesign (RSA)",
@@ -146,8 +152,12 @@ export const cicdDetector: Detector = {
   appliesTo: isCiPipelineFile,
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
+    // A commented-out CI step (`# - run: cosign sign …`, or a `//` line in a
+    // Jenkinsfile) is not an active signing step. Mask comment lines first; offsets
+    // are preserved so the snippet from the original `content` stays correct.
+    const scan = maskCommentLines(content, ["#", "//"]);
     for (const rule of CI_RULES) {
-      eachMatch(rule.re, content, (m) => {
+      eachMatch(rule.re, scan, (m) => {
         findings.push(
           findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }),
         );

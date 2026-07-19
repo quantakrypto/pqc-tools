@@ -363,3 +363,29 @@ export function eachMatch(
     if (m.index === g.lastIndex) g.lastIndex++; // avoid infinite loop on empty match
   }
 }
+
+/**
+ * Blank out FULL-LINE comments so a commented-out directive isn't reported as an
+ * active setting. A line counts as a comment when its first non-whitespace characters
+ * match one of `markers` (e.g. `#`, `//`, `;`, `!`). Each such line's characters are
+ * replaced with spaces of the SAME length (newlines preserved), so every byte offset
+ * is unchanged — the finding line/column/snippet for the non-comment lines that remain
+ * stay exactly correct. Inline trailing comments are intentionally left alone (the
+ * directive before them is still active, so it should still be flagged).
+ *
+ * Config detectors run their rules over the masked content; matches can then only land
+ * on live config, not on commented examples (mosquitto.conf, CI YAML, ipsec.conf, and
+ * HCL all conventionally ship large blocks of commented-out directives).
+ */
+export function maskCommentLines(content: string, markers: readonly string[]): string {
+  if (markers.length === 0) return content;
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lead = line.trimStart();
+    if (lead !== "" && markers.some((mk) => lead.startsWith(mk))) {
+      lines[i] = " ".repeat(line.length);
+    }
+  }
+  return lines.join("\n");
+}

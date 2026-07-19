@@ -47,6 +47,14 @@ const RE_JAVA_BC =
 const RE_JAVA_BC_CURVE =
   /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
 
+// The non-curve BouncyCastle classes (RSA/EC/DSA/DH keygen, signers, engines) as a
+// BARE constructor call — the Kotlin form, `ECKeyPairGenerator()` with no `new`. Java
+// and Scala instantiate Java classes with `new` (caught by RE_JAVA_BC), so bare calls
+// to these distinctive class names are Kotlin. The `(?<!\bnew\s+)` avoids double-
+// counting the `new` form; routed through the same BC_CLASS_RULES map.
+const RE_JAVA_BC_BARE =
+  /(?<!\bnew\s+)\b(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|ECDHBasicAgreement|DHBasicAgreement|RSAEngine|OAEPEncoding)\s*\(/g;
+
 // Insecure JSSE / TLS configuration expressed in Java source. Mirrors the JS
 // tlsDetector in source.ts (category "tls"): a legacy SSL/TLS protocol version
 // requested from SSLContext, and TLS hostname verification neutered via an
@@ -380,6 +388,16 @@ export const javaDetector: Detector = {
     // 448/25519 Kotlin-style matches — no double-counting.
     eachMatch(RE_JAVA_BC_CURVE, content, (m) => {
       const rule = BC_CURVE_CLASS_RULES[m[1]];
+      if (!rule) return;
+      findings.push(
+        findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
+      );
+    });
+
+    // Bare (Kotlin-form) constructor calls to the non-curve BC classes — same rules
+    // as the `new` form, routed via BC_CLASS_RULES.
+    eachMatch(RE_JAVA_BC_BARE, content, (m) => {
+      const rule = BC_CLASS_RULES[m[1]];
       if (!rule) return;
       findings.push(
         findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),

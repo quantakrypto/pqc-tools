@@ -72,3 +72,42 @@ test("a clean workflow with no signing produces no ci- findings", () => {
     [],
   );
 });
+
+test("a COMMENTED-OUT signing step is NOT flagged", () => {
+  assert.deepEqual(
+    run(".github/workflows/rel.yml", "      # - run: cosign sign --key k $IMAGE\n").filter((f) =>
+      f.ruleId.startsWith("ci-"),
+    ),
+    [],
+  );
+  // An active step with a trailing comment still fires.
+  assert.ok(
+    rule(
+      run(".github/workflows/rel.yml", "      - run: cosign sign # release\n"),
+      "ci-cosign-ecdsa",
+    ),
+  );
+});
+
+test("codesign with flags between the command and --sign is flagged", () => {
+  assert.ok(
+    rule(
+      run(
+        ".github/workflows/mac.yml",
+        'run: codesign --force --options runtime --sign "Dev ID" App.app',
+      ),
+      "ci-codesign",
+    ),
+    "codesign --force … --sign must fire",
+  );
+});
+
+test("gpg that only decrypts and a later tool's --sign-artifacts does NOT fire ci-gpg-sign", () => {
+  assert.equal(
+    rule(
+      run(".gitlab-ci.yml", "  script:\n    - gpg --decrypt s.gpg && deploy --sign-artifacts\n"),
+      "ci-gpg-sign",
+    ),
+    undefined,
+  );
+});
