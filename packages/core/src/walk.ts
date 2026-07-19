@@ -223,6 +223,26 @@ export function isBinaryPath(rel: string): boolean {
 }
 
 /**
+ * Cryptographic keystore / container extensions. These are binary, but unlike the
+ * images/archives above we DO want to scan them for classical key material — so
+ * they are read byte-preserving (latin1) and exempted from the minified skip. Kept
+ * separate from {@link BINARY_EXTENSIONS} so the keystore detector can opt in.
+ */
+const KEYSTORE_EXTENSIONS = new Set<string>([
+  ".jks",
+  ".keystore",
+  ".jceks",
+  ".bks",
+  ".p12",
+  ".pfx",
+]);
+
+/** True if the path is a cryptographic keystore we scan as byte-preserving binary. */
+export function isKeystorePath(rel: string): boolean {
+  return KEYSTORE_EXTENSIONS.has(path.posix.extname(rel.toLowerCase()));
+}
+
+/**
  * Compound / pattern extensions that mark generated or bundled output we skip
  * by default (beyond `.min.js` / `.map`, which {@link isBinaryPath} handles).
  */

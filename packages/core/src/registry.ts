@@ -39,6 +39,7 @@ import { ansibleDetector } from "./detectors/ansible.js";
 import { ageDetector } from "./detectors/age.js";
 import { supplyChainDetector } from "./detectors/supply-chain.js";
 import { vaultDetector } from "./detectors/vault.js";
+import { keystoreDetector } from "./detectors/keystore.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -167,6 +168,7 @@ export const builtinDetectors: Detector[] = [
   ageDetector,
   supplyChainDetector,
   vaultDetector,
+  keystoreDetector,
   statefulHbsDetector,
 ];
 

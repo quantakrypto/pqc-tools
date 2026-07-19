@@ -53,6 +53,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ### Added — infrastructure post-quantum readiness
 
+- **Committed-keystore detection (`keystore`)** — JKS/JCEKS (magic `0xFEEDFEED` /
+  `0xCECECECE`), PKCS#12 (`.p12`/`.pfx`, DER SEQUENCE), and BouncyCastle (`.bks`).
+  Keystores are binary, so the scan pipeline now reads keystore extensions
+  byte-preserving (latin1) and exempts them from the minified skip (`walk.ts`
+  `isKeystorePath`, serial + parallel read paths); the match is sensitive key
+  material so the snippet is dropped. Other binaries stay skipped.
+- **`qscan --cbom --merge <cbom.json>`** — wires core's `mergeCboms` so a scan CBOM
+  and an external CBOM (e.g. a qProbe endpoint CBOM) fuse into one combined
+  code + infrastructure CycloneDX bill of materials.
+- **MCP `probe_endpoint` tool** — exposes qProbe to AI agents; the qprobe plane is
+  dynamically imported so the server stays offline until invoked, the ownership
+  attestation is enforced (refuses unless `i_own_this=true`, refuses CIDR/ranges),
+  errored endpoints can't read as a false clean score, and the tool is refused
+  unconditionally on the HTTP transport (`NETWORK_TOOL_NAMES`).
+- **Infrastructure GitHub Action recipe** — IaC scan + weekly scheduled qProbe of
+  owned endpoints + a merged code+infra CBOM artifact.
+- **Detector-audit fixes** — bounded the messaging/cicd ReDoS regexes (+ config
+  inputs in `redos.test.ts`), added `#`/`--` comment-masking to k8s/secrets/database,
+  and corrected `mq-classical-cipher` algorithm labelling / legacy-TLS `hndl` messages.
 - **Six new config-scope detectors** in `@quantakrypto/core`, surfaced
   automatically by qScan, the Action and MCP (no new install) — each gated and
   tested with clean-negative cases to hold the precision bar:

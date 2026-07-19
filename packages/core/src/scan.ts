@@ -13,7 +13,14 @@ import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 
 import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
-import { walkFiles, toPosix, isBinaryPath, looksMinified, matchesAny } from "./walk.js";
+import {
+  walkFiles,
+  toPosix,
+  isBinaryPath,
+  isKeystorePath,
+  looksMinified,
+  matchesAny,
+} from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import {
   stripCommentFindings,
@@ -169,17 +176,20 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
     options.onFile?.(reportedPath);
 
+    // Cryptographic keystores (.jks/.p12/…) are binary; read them byte-preserving
+    // (latin1) so the keystore detector can inspect magic bytes.
+    const keystore = isKeystorePath(reportedPath);
     let content: string;
     try {
-      content = await readFile(absPath, "utf8");
+      content = await readFile(absPath, keystore ? "latin1" : "utf8");
     } catch {
       unreadable += 1; // permissions / vanished / decode failure — tracked, not silent.
       continue;
     }
 
     // Skip machine-minified / generated content (unless explicitly enabled).
-    // Manifests are always scanned (their findings are dependency findings).
-    if (!scanMinified && !isManifestFile(reportedPath) && looksMinified(content)) {
+    // Manifests and keystores are always scanned.
+    if (!scanMinified && !isManifestFile(reportedPath) && !keystore && looksMinified(content)) {
       skippedMinified += 1;
       continue;
     }

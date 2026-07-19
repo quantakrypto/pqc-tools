@@ -15,7 +15,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import type { Finding } from "./types.js";
 import { defaultRegistry } from "./registry.js";
 import { detectFile } from "./scan.js";
-import { looksMinified } from "./walk.js";
+import { isKeystorePath, looksMinified } from "./walk.js";
 import { isManifestFile } from "./dependencies.js";
 
 interface WorkerToggles {
@@ -48,14 +48,16 @@ if (parentPort) {
 
       for (const rel of req.files) {
         const abs = path.join(baseDir, ...rel.split("/"));
+        // Keystores (.jks/.p12/…) are read byte-preserving (latin1); see scan.ts.
+        const keystore = isKeystorePath(rel);
         let content: string;
         try {
-          content = readFileSync(abs, "utf8");
+          content = readFileSync(abs, keystore ? "latin1" : "utf8");
         } catch {
           unreadable += 1;
           continue;
         }
-        if (!toggles.scanMinified && !isManifestFile(rel) && looksMinified(content)) {
+        if (!toggles.scanMinified && !isManifestFile(rel) && !keystore && looksMinified(content)) {
           skippedMinified += 1;
           continue;
         }
