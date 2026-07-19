@@ -223,10 +223,11 @@ export function isBinaryPath(rel: string): boolean {
 }
 
 /**
- * Cryptographic keystore / container extensions. These are binary, but unlike the
- * images/archives above we DO want to scan them for classical key material — so
- * they are read byte-preserving (latin1) and exempted from the minified skip. Kept
- * separate from {@link BINARY_EXTENSIONS} so the keystore detector can opt in.
+ * Binary cryptographic key containers we DO want to scan — Java/PKCS#12 keystores
+ * and binary OpenPGP keyrings/messages. Unlike the images/archives above these are
+ * read byte-preserving (latin1) and exempted from the minified skip, so the
+ * keystore + openpgp detectors can identify them by magic number / packet tag.
+ * Kept separate from {@link BINARY_EXTENSIONS} so those detectors can opt in.
  */
 const KEYSTORE_EXTENSIONS = new Set<string>([
   ".jks",
@@ -235,9 +236,13 @@ const KEYSTORE_EXTENSIONS = new Set<string>([
   ".bks",
   ".p12",
   ".pfx",
+  // Binary OpenPGP keyrings / messages (armored .asc is text; handled elsewhere).
+  ".gpg",
+  ".pgp",
+  ".kbx",
 ]);
 
-/** True if the path is a cryptographic keystore we scan as byte-preserving binary. */
+/** True if the path is a binary cryptographic key container we scan byte-preserving. */
 export function isKeystorePath(rel: string): boolean {
   return KEYSTORE_EXTENSIONS.has(path.posix.extname(rel.toLowerCase()));
 }

@@ -59,6 +59,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   byte-preserving (latin1) and exempts them from the minified skip (`walk.ts`
   `isKeystorePath`, serial + parallel read paths); the match is sensitive key
   material so the snippet is dropped. Other binaries stay skipped.
+- **Binary OpenPGP detection (`openpgp`)** — building on the byte-preserving read,
+  a new detector identifies binary `.gpg`/`.pgp` OpenPGP packets by tag: committed
+  SECRET keys (sensitive, RSA/DSA/ElGamal/EC — the sharp finding), public keys,
+  binary PGP-encrypted messages (PKESK → HNDL), and GnuPG keyboxes (`.kbx`). The
+  public-key algorithm is read from the packet; the parser is bounds-checked and
+  fuzzed. Armored (`-----BEGIN PGP …-----`) blocks remain handled by PEM/secrets.
 - **`qscan --cbom --merge <cbom.json>`** — wires core's `mergeCboms` so a scan CBOM
   and an external CBOM (e.g. a qProbe endpoint CBOM) fuse into one combined
   code + infrastructure CycloneDX bill of materials.
