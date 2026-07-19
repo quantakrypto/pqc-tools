@@ -41,12 +41,21 @@ const CFN_MARKERS: readonly string[] = [
 
 /**
  * True when the content looks like a CloudFormation / ARM deployment template (one
- * of the {@link CFN_MARKERS} is present). The `cloud-kms` and `jwk` detectors use
- * this to DEFER to this detector inside templates, so a `KeySpec`/`kty` line is not
- * counted twice.
+ * of the {@link CFN_MARKERS} is present).
  */
 export function isCloudTemplate(content: string): boolean {
   return CFN_MARKERS.some((marker) => content.includes(marker));
+}
+
+/**
+ * True when a file is one THIS detector actually scans (a `.json`/`.yaml`/`.yml`
+ * template). The `cloud-kms` and `jwk` detectors defer to this detector ONLY on
+ * such files — deferring on any extension that merely contains a marker string
+ * (e.g. a `.ts` with an `AWS::KMS` comment) would drop a real finding, since this
+ * detector never runs there.
+ */
+export function isCloudTemplateFile(file: string, content: string): boolean {
+  return hasExtension(file, CFN_EXTENSIONS) && isCloudTemplate(content);
 }
 
 // Each attribute is matched with an optional quote around the key and `:` as
@@ -225,8 +234,13 @@ export const cloudformationDetector: Detector = {
     add(RE_CFN_ACM_EC, RULE_CFN_ACM_EC);
     add(RE_CFN_CLOUDFRONT_TLS, RULE_CFN_CLOUDFRONT_TLS);
     add(RE_CFN_ELB_TLS, RULE_CFN_ELB_TLS);
-    add(RE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_RSA);
-    add(RE_CFN_ARM_KV_EC, RULE_CFN_ARM_KV_EC);
+    // The bare `kty` attribute is generic (every JWK has it), so only treat it as
+    // an ARM Key Vault key when the ARM resource type is actually present — otherwise
+    // a JWK in a file gated in by another marker (e.g. SslPolicy) would misfire here.
+    if (content.includes("Microsoft.KeyVault")) {
+      add(RE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_RSA);
+      add(RE_CFN_ARM_KV_EC, RULE_CFN_ARM_KV_EC);
+    }
     return findings;
   },
 };

@@ -79,3 +79,13 @@ test("a KeySpec RSA_2048 in prose docs (.md) is NOT flagged", () => {
     [],
   );
 });
+
+test("cloud-kms STILL fires in a .ts SDK file that merely mentions a CFN marker string", () => {
+  // The template-deferral is gated to CFN extensions, so an SDK call in code that
+  // has an `AWS::KMS` comment is not silently dropped (cloudformation never scans .ts).
+  const f = rule(
+    run("kms.ts", '// creates an AWS::KMS::Key\nnew CreateKeyCommand({ KeySpec: "RSA_2048" });'),
+    "cloud-kms-rsa",
+  );
+  assert.equal(f?.algorithm, "RSA");
+});

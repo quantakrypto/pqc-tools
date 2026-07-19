@@ -75,7 +75,7 @@ export function probeSmtpStartTls(
         socket.write("STARTTLS\r\n");
       } else {
         if (!/^220 /m.test(text)) return finish({ error: "STARTTLS refused" });
-        socket.removeAllListeners("data");
+        socket.removeAllListeners(); // the TLS socket now owns the connection; drop stale net listeners
         const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
         const tls = tlsConnect({
           socket,

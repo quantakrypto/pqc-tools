@@ -75,3 +75,28 @@ test("the scan pipeline reads a real binary .jks (latin1) and flags it", async (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a PKCS#12-FORMAT file named .jks / .keystore is detected (keytool default since Java 9)", () => {
+  const p12 = String.fromCharCode(0x30, 0x82, 0x0a, 0x00) + "\x00".repeat(40);
+  assert.ok(has(run("modern.jks", p12), "keystore-pkcs12"));
+  assert.ok(has(run("release.keystore", p12), "keystore-pkcs12"));
+  // DER long-form length 0x81 and 0x83 are also accepted.
+  assert.ok(
+    has(
+      run("small.p12", String.fromCharCode(0x30, 0x81, 0x80) + "x".repeat(40)),
+      "keystore-pkcs12",
+    ),
+  );
+  assert.ok(has(run("big.p12", String.fromCharCode(0x30, 0x83, 0x01, 0, 0)), "keystore-pkcs12"));
+});
+
+test("empty keystores do not fire", () => {
+  assert.deepEqual(
+    run("empty.bks", "").filter((f) => f.ruleId.startsWith("keystore-")),
+    [],
+  );
+  assert.deepEqual(
+    run("empty.jks", "").filter((f) => f.ruleId.startsWith("keystore-")),
+    [],
+  );
+});

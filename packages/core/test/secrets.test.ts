@@ -28,13 +28,14 @@ test("an age/SOPS recipient is flagged as X25519 and HNDL", () => {
   assert.equal(f?.hndl, true);
 });
 
-test("a PGP MESSAGE block is flagged as RSA/ElGamal KEM", () => {
-  const f = rule(
-    run("secret.enc", "-----BEGIN PGP MESSAGE-----\nhQEMA...\n-----END PGP MESSAGE-----\n"),
-    "secrets-pgp-message",
+test("a PGP MESSAGE block is owned by the PEM detector (not duplicated by secrets)", () => {
+  const fs = run(
+    "secret.enc",
+    "-----BEGIN PGP MESSAGE-----\nhQEMA...\n-----END PGP MESSAGE-----\n",
   );
-  assert.equal(f?.category, "kem");
-  assert.equal(f?.hndl, true);
+  // secrets no longer emits a pgp-message rule; the PEM detector owns armored blocks.
+  assert.equal(rule(fs, "secrets-pgp-message"), undefined);
+  assert.ok(rule(fs, "pem-pgp-message"), "pem-pgp-message owns the armored PGP MESSAGE");
 });
 
 test("a SealedSecret is flagged as RSA-OAEP", () => {

@@ -242,9 +242,15 @@ const KEYSTORE_EXTENSIONS = new Set<string>([
   ".kbx",
 ]);
 
-/** True if the path is a binary cryptographic key container we scan byte-preserving. */
+/**
+ * True if the path is a binary cryptographic key container we scan byte-preserving.
+ * Uses a suffix match (not `extname`) so it agrees with the detectors' `hasExtension`
+ * even for a bare dotfile literally named e.g. `.gpg` (where `extname` returns "").
+ */
 export function isKeystorePath(rel: string): boolean {
-  return KEYSTORE_EXTENSIONS.has(path.posix.extname(rel.toLowerCase()));
+  const lower = rel.toLowerCase();
+  for (const ext of KEYSTORE_EXTENSIONS) if (lower.endsWith(ext)) return true;
+  return false;
 }
 
 /**

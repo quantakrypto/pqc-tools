@@ -8,8 +8,11 @@
  * Covered:
  *  - Mozilla SOPS / age recipients: `age1…` bech32 public keys (X25519 key
  *    agreement wrapping the data key).
- *  - PGP-encrypted payloads: `-----BEGIN PGP MESSAGE-----` (RSA/ElGamal ESK).
  *  - Bitnami Sealed Secrets: `kind: SealedSecret` (controller wraps with RSA-OAEP).
+ *
+ * Armored PGP blocks (`-----BEGIN PGP MESSAGE-----` and PGP private keys) are owned
+ * by the PEM detector (`pem-pgp-message` / `pem-pgp-private-key`), so they are not
+ * duplicated here.
  *
  * Symmetric-only schemes (ansible-vault AES, age with a scrypt passphrase) are
  * intentionally NOT flagged: a strong symmetric key is only Grover-weakened, not
@@ -51,24 +54,6 @@ const SECRET_RULES: SecretRule[] = [
     },
   },
   {
-    re: /-----BEGIN PGP MESSAGE-----/g,
-    meta: {
-      id: "secrets-pgp-message",
-      title: "PGP-encrypted secret (RSA/ElGamal)",
-      description: "A PGP MESSAGE block: the session key is wrapped with classical RSA/ElGamal",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message:
-        "A PGP-encrypted secret whose session key is wrapped with classical RSA/ElGamal; harvest-now-decrypt-later exposed.",
-      remediation:
-        "Re-encrypt with a post-quantum KEM (ML-KEM-768) once available; rotate the underlying secret.",
-    },
-  },
-  {
     re: /\bkind:\s*["']?SealedSecret\b/g,
     meta: {
       id: "secrets-sealed-secret",
@@ -100,11 +85,7 @@ export const secretsDetector: Detector = {
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: none of the distinctive markers present.
-    if (
-      !content.includes("age1") &&
-      !content.includes("BEGIN PGP MESSAGE") &&
-      !content.includes("SealedSecret")
-    ) {
+    if (!content.includes("age1") && !content.includes("SealedSecret")) {
       return [];
     }
     // A commented `# kind: SealedSecret` / `# age1…` is not an active setting.

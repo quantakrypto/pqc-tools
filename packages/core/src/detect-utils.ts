@@ -365,6 +365,50 @@ export function eachMatch(
 }
 
 /**
+ * Return the innermost `{ … }` object that contains `index`, as a substring — so a
+ * per-match check (e.g. a JWK's own `use`/`alg`, or whether an `alg` sits inside a
+ * JWK) analyses ONLY that object and can't be contaminated by a neighbouring object
+ * in a packed array. Brace matching is naive (it does not skip braces inside JSON
+ * string values), which is fine for JWK/JOSE (base64url values carry no braces), and
+ * both scans are bounded by `maxSpan` so a pathological input can't blow up. Falls
+ * back to a bounded ±window when no enclosing braces are found.
+ */
+export function enclosingObject(content: string, index: number, maxSpan = 4000): string {
+  let depth = 0;
+  let start = -1;
+  const lo = Math.max(0, index - maxSpan);
+  for (let i = Math.min(index, content.length - 1); i >= lo; i--) {
+    const c = content[i];
+    if (c === "}") depth++;
+    else if (c === "{") {
+      if (depth === 0) {
+        start = i;
+        break;
+      }
+      depth--;
+    }
+  }
+  if (start < 0) {
+    return content.slice(Math.max(0, index - 250), index + 250);
+  }
+  let d = 0;
+  let end = -1;
+  const hi = Math.min(content.length, start + maxSpan);
+  for (let i = start; i < hi; i++) {
+    const c = content[i];
+    if (c === "{") d++;
+    else if (c === "}") {
+      d--;
+      if (d === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  return content.slice(start, end < 0 ? hi : end);
+}
+
+/**
  * Blank out FULL-LINE comments so a commented-out directive isn't reported as an
  * active setting. A line counts as a comment when its first non-whitespace characters
  * match one of `markers` (e.g. `#`, `//`, `;`, `!`). Each such line's characters are

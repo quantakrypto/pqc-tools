@@ -22,14 +22,20 @@ test("Kafka legacy ssl.protocol is flagged", () => {
   assert.ok(rule(run("server.properties", "ssl.protocol=TLSv1.1\n"), "mq-kafka-legacy-tls"));
 });
 
-test("Kafka classical ECDHE_RSA cipher suite is flagged as HNDL key exchange", () => {
+test("Kafka ECDHE cipher is owned by source's tls-classical-kex (not duplicated by messaging)", () => {
+  const fs = run("server.properties", "ssl.cipher.suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\n");
+  // messaging no longer emits a cipher rule for ECDHE — source.ts's token rule does.
+  assert.equal(rule(fs, "mq-rsa-key-transport"), undefined);
+  assert.ok(rule(fs, "tls-classical-kex"), "source's tls-classical-kex owns the ECDHE token");
+});
+
+test("Kafka STATIC-RSA (TLS_RSA_WITH_*) key-transport suite is flagged by messaging (unique to it)", () => {
   const f = rule(
-    run("server.properties", "ssl.cipher.suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\n"),
-    "mq-classical-cipher",
+    run("server.properties", "ssl.cipher.suites=TLS_RSA_WITH_AES_128_GCM_SHA256\n"),
+    "mq-rsa-key-transport",
   );
-  // The suite list can mix ECDHE / DHE / static-RSA, so the family is "unknown"
-  // rather than mislabelling TLS_RSA as ECDH.
-  assert.equal(f?.algorithm, "unknown");
+  assert.equal(f?.algorithm, "RSA");
+  assert.equal(f?.category, "kem");
   assert.equal(f?.hndl, true);
 });
 

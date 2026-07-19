@@ -83,8 +83,8 @@ function algo(id: number): { family: AlgorithmFamily; hndl: boolean } | undefine
 function keyPacketAlgo(content: string, bodyOffset: number): number | undefined {
   if (bodyOffset >= content.length) return undefined;
   const version = content.charCodeAt(bodyOffset);
-  // v3: version(1) created(4) validity(2) algo; v4/v5/v6: version(1) created(4) algo.
-  const algoOffset = version === 3 ? bodyOffset + 7 : bodyOffset + 5;
+  // v2/v3: version(1) created(4) validity(2) algo; v4/v5/v6: version(1) created(4) algo.
+  const algoOffset = version === 2 || version === 3 ? bodyOffset + 7 : bodyOffset + 5;
   if (algoOffset >= content.length) return undefined;
   return content.charCodeAt(algoOffset);
 }
@@ -153,10 +153,10 @@ export const openpgpDetector: Detector = {
   detect({ file, content }): Finding[] {
     const at = { file, content, index: 0, matchLength: Math.min(4, content.length) };
 
-    // GnuPG keybox: a key/cert database (magic "KBXf" in the first blob header).
+    // GnuPG keybox: a key/cert database, identified by the "KBXf" magic in its
+    // first blob header (so a garbage/empty .kbx does not fire).
     if (file.toLowerCase().endsWith(".kbx")) {
-      if (content.includes("KBXf") || content.length > 0) return [findingFromRule(RULE_KEYBOX, at)];
-      return [];
+      return content.includes("KBXf") ? [findingFromRule(RULE_KEYBOX, at)] : [];
     }
 
     const pkt = firstPacket(content);

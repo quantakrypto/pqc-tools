@@ -67,3 +67,20 @@ test("jose defers to jwk when the alg belongs to a JWK object (no double-count)"
   // A standalone JWE header (no kty) is still flagged.
   assert.ok(rule(run("hdr.json", '{"alg":"RSA-OAEP","enc":"A256GCM"}'), "jose-jwe-rsa"));
 });
+
+test("jose does NOT run on source files (source.ts owns JOSE tokens there → no dup)", () => {
+  assert.deepEqual(
+    run("app.ts", 'const hdr = {"alg":"RSA-OAEP"};').filter((f) => f.ruleId.startsWith("jose-jwe")),
+    [],
+  );
+});
+
+test("a real standalone JWE header near an UNRELATED JWK is still flagged (enclosing-object scope)", () => {
+  // The JWE header and the JWK are DIFFERENT objects; the jose deferral must not
+  // trigger just because a "kty" sits within a flat character window.
+  const doc = `{"jwe":{"alg":"RSA-OAEP","enc":"A256GCM"},"verifyKey":{"kty":"EC","crv":"P-256","use":"sig"}}`;
+  assert.ok(
+    rule(run("cfg.json", doc), "jose-jwe-rsa"),
+    "standalone JWE header not spuriously deferred",
+  );
+});

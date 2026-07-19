@@ -80,7 +80,7 @@ export function probeLineStartTls(
       }
       // stage === "response"
       if (!dialog.success.test(text)) return finish({ error: "STARTTLS not offered" });
-      socket.removeAllListeners("data");
+      socket.removeAllListeners(); // the TLS socket now owns the connection; drop stale net listeners
       const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
       const tls = tlsConnect({
         socket,

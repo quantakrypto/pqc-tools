@@ -20,6 +20,7 @@ import {
   isKeystorePath,
   looksMinified,
   matchesAny,
+  DEFAULT_MAX_FILE_SIZE,
 } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import {
@@ -179,6 +180,19 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // Cryptographic keystores (.jks/.p12/…) are binary; read them byte-preserving
     // (latin1) so the keystore detector can inspect magic bytes.
     const keystore = isKeystorePath(reportedPath);
+    // Keystores are read whole into memory as latin1. The walker already caps file
+    // size, but the explicit-file-list (incremental) path does not — so stat and
+    // skip an oversized binary here to avoid reading a huge encrypted archive
+    // (`.gpg`) into a string.
+    if (keystore) {
+      try {
+        const { size } = await stat(absPath);
+        if (size > (options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE)) continue;
+      } catch {
+        unreadable += 1;
+        continue;
+      }
+    }
     let content: string;
     try {
       content = await readFile(absPath, keystore ? "latin1" : "utf8");
@@ -195,7 +209,9 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     }
 
     // Cumulative-byte budget: enforced once this file's bytes are accounted for.
-    bytesScanned += Buffer.byteLength(content, "utf8");
+    // Use the read encoding so a latin1 keystore is counted at its on-disk size
+    // (a utf8 byteLength would double-count every byte ≥ 0x80).
+    bytesScanned += Buffer.byteLength(content, keystore ? "latin1" : "utf8");
     if (typeof maxBytes === "number" && bytesScanned > maxBytes) {
       throw new BudgetExceededError(`maxBytes budget exceeded (limit: ${maxBytes}).`);
     }

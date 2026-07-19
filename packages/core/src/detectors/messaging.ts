@@ -7,8 +7,8 @@
  * Covered in broker config files (`.properties`, `.conf`, `.cfg`, `.ini`):
  *  - Kafka `ssl.protocol` / `ssl.enabled.protocols = TLSv1 | TLSv1.1` (legacy).
  *  - MQTT/Mosquitto `tls_version tlsv1 | tlsv1.1` (legacy).
- *  - Kafka `ssl.cipher.suites` naming a classical `ECDHE_RSA` / `ECDHE_ECDSA` /
- *    `TLS_RSA` suite — the harvestable key-exchange path.
+ *  - Kafka `ssl.cipher.suites` naming a static-RSA `TLS_RSA_WITH_*` key-transport
+ *    suite (the ECDHE/DHE suites are owned by source.ts's `tls-classical-kex`).
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
@@ -57,22 +57,23 @@ const MQ_RULES: MqRule[] = [
     },
   },
   {
-    re: /\bssl\.cipher\.suites\s*=\s*[^\n]{0,200}?(?:ECDHE_RSA|ECDHE_ECDSA|TLS_RSA|_DHE_RSA)/g,
+    // Only static-RSA key transport (`TLS_RSA_WITH_…`) is flagged here: the ECDHE /
+    // DHE suites are owned by source.ts's language-agnostic `tls-classical-kex` token
+    // rule (which fires on `.properties` too), so flagging them here would double-count.
+    re: /\bssl\.cipher\.suites\s*=\s*[^\n]{0,200}?\bTLS_RSA_WITH_/g,
     meta: {
-      id: "mq-classical-cipher",
-      title: "Broker classical (EC)DHE / RSA cipher suite",
+      id: "mq-rsa-key-transport",
+      title: "Broker static-RSA key transport cipher",
       description:
-        "Kafka ssl.cipher.suites names a classical ECDHE/DHE key exchange or RSA key transport",
-      category: "tls",
-      // The suite list can mix ECDHE, DHE, and static-RSA key transport, so the
-      // family is left unspecified rather than mislabelling TLS_RSA as ECDH.
-      algorithm: "unknown",
+        "Kafka ssl.cipher.suites names a static-RSA (TLS_RSA_WITH_*) key-transport suite",
+      category: "kem",
+      algorithm: "RSA",
       severity: "medium",
       confidence: "high",
       hndl: true,
       cwe: CWE_BROKEN_CRYPTO,
       message:
-        "Broker TLS is pinned to a classical (EC)DHE/RSA cipher suite; the key exchange is harvest-now-decrypt-later exposed.",
+        "Broker TLS is pinned to a static-RSA (TLS_RSA_WITH_*) key-transport suite; the wrapped session key is harvest-now-decrypt-later exposed (and it has no forward secrecy).",
       remediation:
         "Move to TLS 1.3 with a PQC-hybrid group (X25519MLKEM768) once the broker/runtime supports it.",
     },

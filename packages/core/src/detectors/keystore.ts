@@ -55,8 +55,8 @@ const RULE_JCEKS = baseRule(
 );
 const RULE_PKCS12 = baseRule(
   "keystore-pkcs12",
-  "PKCS#12 keystore (.p12/.pfx)",
-  "A PKCS#12 (.p12/.pfx) container holds classical private keys / certificate chains (RSA/EC); committed to version control it is harvest-now-decrypt-later exposed.",
+  "PKCS#12 keystore",
+  "A PKCS#12 container (a `.p12`/`.pfx`, or a modern `.jks`/`.keystore` — keytool writes PKCS#12 by default since Java 9) holds classical private keys / certificate chains (RSA/EC); committed to version control it is harvest-now-decrypt-later exposed.",
 );
 const RULE_BKS = baseRule(
   "keystore-bks",
@@ -86,13 +86,25 @@ export const keystoreDetector: Detector = {
     // JKS: 0xFEEDFEED. JCEKS: 0xCECECECE.
     if (magic(content, 0xfe, 0xed, 0xfe, 0xed)) return [findingFromRule(RULE_JKS, at)];
     if (magic(content, 0xce, 0xce, 0xce, 0xce)) return [findingFromRule(RULE_JCEKS, at)];
-    const lower = file.toLowerCase();
-    // PKCS#12: a DER SEQUENCE (0x30 0x82 ...) in a .p12/.pfx file.
-    if ((lower.endsWith(".p12") || lower.endsWith(".pfx")) && magic(content, 0x30, 0x82)) {
+    // PKCS#12 is a DER SEQUENCE. Since Java 9, `keytool` writes PKCS#12 BY DEFAULT
+    // even for files named `.jks`/`.keystore` (and Android release keystores are
+    // PKCS#12), so this runs for ANY keystore extension once the JKS/JCEKS magics
+    // fail. Accept the long-form length octets 0x81/0x82/0x83 (real PKCS#12 is
+    // always >127 bytes, so short-form would be a false positive).
+    if (
+      content.length >= 2 &&
+      content.charCodeAt(0) === 0x30 &&
+      (content.charCodeAt(1) === 0x81 ||
+        content.charCodeAt(1) === 0x82 ||
+        content.charCodeAt(1) === 0x83)
+    ) {
       return [findingFromRule(RULE_PKCS12, { ...at, matchLength: 2 })];
     }
-    // BouncyCastle keystores have no stable magic; key off the extension.
-    if (lower.endsWith(".bks")) return [findingFromRule(RULE_BKS, { ...at, matchLength: 1 })];
+    // BouncyCastle keystores have no stable magic; key off the extension, but
+    // require some content so an empty `.bks` placeholder does not fire.
+    if (file.toLowerCase().endsWith(".bks") && content.length > 0) {
+      return [findingFromRule(RULE_BKS, { ...at, matchLength: 1 })];
+    }
     return [];
   },
 };

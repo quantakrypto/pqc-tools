@@ -20,8 +20,14 @@
  * cloudformation detector owns the `kty` of a `Microsoft.KeyVault` key resource.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
-import { isCloudTemplate } from "./cloudformation.js";
+import {
+  DOC_EXTENSIONS,
+  eachMatch,
+  enclosingObject,
+  findingFromRule,
+  hasExtension,
+} from "../detect-utils.js";
+import { isCloudTemplateFile } from "./cloudformation.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface JwkRule {
@@ -100,14 +106,15 @@ const JWK_RULES: JwkRule[] = [
   },
 ];
 
-/** A window around a match likely stays within the one JWK object it belongs to. */
-function windowAround(content: string, index: number): string {
-  return content.slice(Math.max(0, index - 250), index + 250);
-}
-
-/** True when the surrounding JWK marks a signing key via `use`/`alg`. */
-function isSigningUse(win: string, sigAlg: RegExp): boolean {
-  return /"use"\s*:\s*"sig"/.test(win) || sigAlg.test(win);
+/**
+ * True when THIS key's own object marks it as a signing key via `use`/`alg`. The
+ * caller passes the enclosing `{…}` object so a neighbouring key in a JWKS array
+ * can't contaminate the result, and an explicit `"use":"enc"` on the key always
+ * wins (never classify an encryption key as a signature).
+ */
+function isSigningUse(objectText: string, sigAlg: RegExp): boolean {
+  if (/"use"\s*:\s*"enc"/.test(objectText)) return false;
+  return /"use"\s*:\s*"sig"/.test(objectText) || sigAlg.test(objectText);
 }
 
 const RSA_SIG_ALG = /"alg"\s*:\s*"(?:RS|PS)(?:256|384|512)"/;
@@ -124,29 +131,28 @@ export const jwkDetector: Detector = {
   detect({ file, content }): Finding[] {
     // Fast reject: a JWK always has one of these two members.
     if (!content.includes('"kty"') && !content.includes('"crv"')) return [];
-    // In a CloudFormation/ARM template the cloudformation detector owns the key
-    // resource `kty`; defer to it so a Key Vault key is not counted twice.
-    if (isCloudTemplate(content)) return [];
+    // In a CloudFormation/ARM template FILE the cloudformation detector owns the key
+    // resource `kty`; defer to it so a Key Vault key is not counted twice. (Gated to
+    // the template extensions it actually scans, so a `.ts` that merely mentions a
+    // marker string is still covered here.)
+    if (isCloudTemplateFile(file, content)) return [];
 
     const findings: Finding[] = [];
     for (const rule of JWK_RULES) {
       eachMatch(rule.re, content, (m) => {
         const at = { file, content, index: m.index, matchLength: m[0].length };
+        // Analyse the key's OWN enclosing object so a neighbouring key in a JWKS
+        // array can't flip this key's sig/enc classification.
+        const obj = enclosingObject(content, m.index);
         let overrides;
-        if (
-          rule.meta.id === "jwk-rsa" &&
-          isSigningUse(windowAround(content, m.index), RSA_SIG_ALG)
-        ) {
+        if (rule.meta.id === "jwk-rsa" && isSigningUse(obj, RSA_SIG_ALG)) {
           overrides = {
             category: "signature" as const,
             hndl: false,
             message:
               "RSA JSON Web Key (JWK) used for signing (RS*/PS*); forgeable by a quantum attacker.",
           };
-        } else if (
-          rule.meta.id === "jwk-ec" &&
-          isSigningUse(windowAround(content, m.index), EC_SIG_ALG)
-        ) {
+        } else if (rule.meta.id === "jwk-ec" && isSigningUse(obj, EC_SIG_ALG)) {
           overrides = {
             category: "signature" as const,
             algorithm: "ECDSA" as const,

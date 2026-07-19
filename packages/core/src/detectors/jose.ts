@@ -15,7 +15,14 @@
  * the detector applies to any file (config, JSON, source) after a fast reject.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import {
+  ANALYZABLE_SOURCE_EXTENSIONS,
+  DOC_EXTENSIONS,
+  eachMatch,
+  enclosingObject,
+  findingFromRule,
+  hasExtension,
+} from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 interface JoseRule {
@@ -70,8 +77,12 @@ export const joseDetector: Detector = {
   scope: "config",
   language: "any",
   rules: JOSE_RULES.map((r) => r.meta),
-  // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config.
-  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+  // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config, and in
+  // application SOURCE files the language-agnostic JOSE token rules in source.ts
+  // (`jose-rsa-oaep` / `jose-ecdh-es`) own these tokens — so restrict this config
+  // detector to non-doc, non-source files (config / JSON / YAML).
+  appliesTo: (f) =>
+    !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, ANALYZABLE_SOURCE_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: no JOSE key-management alg token present.
     if (
@@ -84,10 +95,11 @@ export const joseDetector: Detector = {
     const findings: Finding[] = [];
     for (const rule of JOSE_RULES) {
       eachMatch(rule.re, content, (m) => {
-        // If this `alg` belongs to a JWK (a `"kty"` sits in the same object), the
-        // jwk detector already reports the key — defer so it isn't counted twice.
-        const win = content.slice(Math.max(0, m.index - 250), m.index + 250);
-        if (win.includes('"kty"')) return;
+        // If this `alg` belongs to a JWK (a `"kty"` sits in the SAME object), the jwk
+        // detector already reports the key — defer so it isn't counted twice. Scoped
+        // to the enclosing object so an unrelated nearby JWK doesn't suppress a real
+        // standalone JWE header.
+        if (enclosingObject(content, m.index).includes('"kty"')) return;
         findings.push(
           findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }),
         );

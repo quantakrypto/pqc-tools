@@ -97,3 +97,24 @@ test("jwk is skipped on doc extensions (a README JWK example is not live)", () =
     [],
   );
 });
+
+test("in a packed JWKS, each key is classified by its OWN object (no window contamination)", () => {
+  const jwks = `{"keys":[{"kty":"EC","crv":"P-256","use":"sig","alg":"ES256"},{"kty":"EC","crv":"P-256","use":"enc","alg":"ECDH-ES"}]}`;
+  const ecs = run("multi.jwks", jwks).filter((f) => f.ruleId === "jwk-ec");
+  assert.equal(ecs.length, 2);
+  // The sig key → signature/hndl:false; the enc key STAYS key-exchange/hndl:true.
+  assert.ok(
+    ecs.some((f) => f.category === "signature" && f.hndl === false),
+    "sig key classified",
+  );
+  assert.ok(
+    ecs.some((f) => f.category === "key-exchange" && f.hndl === true),
+    "adjacent enc key NOT flipped to signature",
+  );
+});
+
+test("an explicit `use:enc` on an RSA JWK stays HNDL even if a sig alg is present", () => {
+  // A contradictory key still errs toward the harvestable (enc) classification.
+  const f = rule(run("k.json", '{"kty":"RSA","use":"enc","alg":"RS256"}'), "jwk-rsa");
+  assert.equal(f?.hndl, true);
+});
