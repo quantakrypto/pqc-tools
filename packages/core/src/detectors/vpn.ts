@@ -127,7 +127,14 @@ export const vpnDetector: Detector = {
     const base = file.toLowerCase().split("/").pop() ?? "";
     if (base === "sshd_config" || base === "ssh_config") {
       eachMatch(RE_SSHD_KEX, scan, (m) => {
-        if (!offersPqKex(m[1])) push(RULE_SSHD_KEX, m.index, m[0].length);
+        const value = m[1].trim();
+        // A leading -/+/^ MODIFIES the built-in default set instead of replacing it
+        // (OpenSSH: `-` removes, `+` appends, `^` reorders). Modern OpenSSH (>=9.0)
+        // defaults already include sntrup761x25519, so the server still offers a PQC
+        // hybrid even though the line lists only the delta — flagging it is a false
+        // positive. Only a bare replacement list naming no PQC hybrid is classical-only.
+        if (/^[-+^]/.test(value)) return;
+        if (!offersPqKex(value)) push(RULE_SSHD_KEX, m.index, m[0].length);
       });
     }
     return findings;

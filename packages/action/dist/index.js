@@ -6472,7 +6472,10 @@ var init_vpn = __esm({
         const base = file.toLowerCase().split("/").pop() ?? "";
         if (base === "sshd_config" || base === "ssh_config") {
           eachMatch(RE_SSHD_KEX, scan2, (m) => {
-            if (!offersPqKex(m[1]))
+            const value = m[1].trim();
+            if (/^[-+^]/.test(value))
+              return;
+            if (!offersPqKex(value))
               push(RULE_SSHD_KEX, m.index, m[0].length);
           });
         }

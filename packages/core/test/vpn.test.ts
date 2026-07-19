@@ -54,6 +54,26 @@ test("sshd_config that DOES offer a PQC hybrid KEX stays silent", () => {
   );
 });
 
+test("sshd KexAlgorithms with a -/+/^ modifier is NOT flagged (defaults still offer PQC)", () => {
+  // A leading -/+/^ adjusts the OpenSSH default set (which on >=9.0 includes a PQC
+  // hybrid) rather than replacing it, so this is not a classical-only posture.
+  for (const line of [
+    "KexAlgorithms -diffie-hellman-group1-sha1\n",
+    "KexAlgorithms +curve25519-sha256\n",
+    "KexAlgorithms ^ecdh-sha2-nistp256\n",
+  ]) {
+    assert.deepEqual(
+      run("sshd_config", line).filter((f) => f.ruleId.startsWith("net-")),
+      [],
+      `modifier line should not fire: ${line.trim()}`,
+    );
+  }
+  // A bare replacement list with no PQC hybrid is still flagged.
+  assert.ok(
+    rule(run("sshd_config", "KexAlgorithms ecdh-sha2-nistp256\n"), "net-sshd-classical-kex"),
+  );
+});
+
 test("gating: modp in a non-IPsec .conf, and WireGuard keys with no section, do not fire", () => {
   // A .conf that mentions modp2048 but has no ike=/esp= proposal marker.
   assert.deepEqual(
