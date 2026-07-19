@@ -36,19 +36,30 @@ node packages/sieve/dist/cli.js --impl "$SUT" --param slh-dsa-sha2-128s \
 `kat` is correctly **SKIP**ped everywhere (no official NIST ACVP vectors supplied;
 Sieve ships none and never fabricates them).
 
-### The real finding — FIPS 203 §7.2 encapsulation-key check
+### The finding — FIPS 203 §7.2 encapsulation-key check (real, since fixed upstream)
 
 Sieve's `encaps-ek-coeff-out-of-range` check feeds `encapsulate` a correctly-sized
 encapsulation key with one coefficient forced out of range (≥ q = 3329). A
 FIPS 203 §7.2-conformant `Encaps` must reject it (the "modulus check" /
-input validation). `@noble/post-quantum`'s ML-KEM **accepted it and returned a
-success result** instead of rejecting.
+input validation). `@noble/post-quantum` **≤ 0.5.4** accepted it and returned a
+success result instead of rejecting.
 
-This is a defensible, real observation: the §7.2 modulus check is defense-in-depth
-and is **commonly omitted** by implementations (it does not affect honest
-interoperability). The point for this exercise is that **Sieve found a genuine
-conformance deviation in an audited library** — exactly what a conformance battery
-is for. (Reported upstream-style as informational, not a vulnerability.)
+**Status (verified 2026-07-19):** already fixed upstream. `@noble/post-quantum`
+**0.6.0 (2026-03-31)** added the missing mod-q reduction in the d=12 `ByteDecode12`
+path, so the `encapsulate` modulus check is no longer a no-op — 0.6.0 and 0.6.1
+correctly reject the out-of-range key. Confirmed empirically across 0.5.2 / 0.5.4
+(accept) → 0.6.0 / 0.6.1 (reject); noble's own 0.6.x source comment names the exact
+value ("the modulus check … becomes a no-op for malformed coefficients like 4095"),
+which is precisely what Sieve exercises. Our original run hit an older pinned
+release; the fix predates it. **No upstream report is warranted** — the fix shipped
+~3.5 months before we looked.
+
+The observation remains a valid demonstration: the §7.2 modulus check is
+defense-in-depth and **commonly omitted** (it does not affect honest
+interoperability), and **Sieve caught a genuine conformance deviation in audited
+code** — exactly what a conformance battery is for. The lesson: always re-verify a
+conformance finding against the *current* release before publishing, and pin the
+version. A pinned regression test lives in `packages/sieve/test/noble-ml-kem.test.ts`.
 
 ## Negative control — Sieve catches a broken implementation
 

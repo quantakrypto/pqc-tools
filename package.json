@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
+    "@noble/post-quantum": "0.6.1",
     "@types/node": "^26.1.1",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
