@@ -23,6 +23,7 @@ import {
 import type {
   Baseline,
   CryptoPolicy,
+  CycloneDxBom,
   Finding,
   ParallelScanOptions,
   ScanResult,
@@ -264,6 +265,32 @@ export async function runQscan(
     }
   }
 
+  // Load any external CBOMs to merge into a `--cbom` output (combined
+  // code + infrastructure bill of materials). Only relevant for the cbom format.
+  let mergeCbomsData: CycloneDxBom[] | undefined;
+  if (options.format === "cbom" && options.mergeCboms && options.mergeCboms.length > 0) {
+    mergeCbomsData = [];
+    for (const path of options.mergeCboms) {
+      let text: string;
+      try {
+        text = await readFile(path, "utf8");
+      } catch {
+        throw new Error(`--merge: cannot read CBOM file "${path}"`);
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(`--merge: "${path}" is not valid JSON`);
+      }
+      const bom = parsed as CycloneDxBom;
+      if (bom?.bomFormat !== "CycloneDX") {
+        throw new Error(`--merge: "${path}" is not a CycloneDX CBOM (missing bomFormat)`);
+      }
+      mergeCbomsData.push(bom);
+    }
+  }
+
   return {
     result,
     suppressed,
@@ -273,6 +300,7 @@ export async function runQscan(
       topN: options.topN,
       tier: options.tier,
       ...(policy ? { policy } : {}),
+      ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
     }),
     exitCode,
   };
@@ -290,6 +318,8 @@ export interface RenderReportOptions {
   tier?: SecurityTier;
   /** Org cryptography policy for the evidence report's §4 verdicts (`--policy`). */
   policy?: CryptoPolicy;
+  /** External CBOMs to merge into the `cbom` output (CycloneDX bom-link). */
+  mergeCboms?: CycloneDxBom[];
 }
 
 /** Render a scan result in the requested format. */
@@ -305,6 +335,7 @@ export function renderReport(
     topN = undefined,
     tier = undefined,
     policy = undefined,
+    mergeCboms = undefined,
   } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
   switch (format) {
     case "json":
@@ -312,7 +343,7 @@ export function renderReport(
     case "sarif":
       return renderSarif(result, { redactSnippets });
     case "cbom":
-      return renderCbom(result);
+      return renderCbom(result, mergeCboms);
     case "evidence":
       // ISO A.8.24 readiness report; repo/commit come from CI env when present.
       // A `--policy` file adds the §4 conformant/violation/transition verdicts.

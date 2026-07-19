@@ -5,9 +5,38 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderHuman, renderSarif } from "../src/index.js";
+import { renderCbom, renderHuman, renderSarif } from "../src/index.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "@quantakrypto/core";
+import type { CycloneDxBom } from "@quantakrypto/core";
 import { makeFinding, makeResult } from "./helpers.js";
+
+test("renderCbom merges an external CBOM into the scan CBOM (combined code + infra)", () => {
+  const result = makeResult([makeFinding()]); // one RSA component
+  const scanOnly = JSON.parse(renderCbom(result)) as CycloneDxBom;
+  const extra = {
+    bomFormat: "CycloneDX",
+    specVersion: "1.6",
+    version: 1,
+    components: [
+      {
+        type: "cryptographic-asset",
+        "bom-ref": "infra-ecdsa-endpoint",
+        name: "ECDSA",
+        cryptoProperties: { assetType: "algorithm" },
+      },
+    ],
+  } as unknown as CycloneDxBom;
+  const merged = JSON.parse(renderCbom(result, [extra])) as CycloneDxBom;
+  assert.equal(merged.bomFormat, "CycloneDX");
+  assert.ok(
+    merged.components.length > scanOnly.components.length,
+    "merged CBOM has more components than the scan alone",
+  );
+  assert.ok(
+    merged.components.some((c) => c["bom-ref"] === "infra-ecdsa-endpoint"),
+    "the external infra component is present in the merged CBOM",
+  );
+});
 
 test("renderHuman warns when no analyzable source was scanned", () => {
   const result = { ...makeResult([]), filesScanned: 12, analyzedFiles: 0 };

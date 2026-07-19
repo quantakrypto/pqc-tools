@@ -43,6 +43,8 @@ export interface QscanOptions {
   format: QscanFormat;
   /** Write the report to this file instead of stdout, when set. */
   output?: string;
+  /** External CBOM files to merge into the `--cbom` output (CycloneDX bom-link). */
+  mergeCboms?: string[];
   /** Findings at or above this severity cause a non-zero exit. */
   severityThreshold: Severity;
   /** Scan source files for inline crypto usage. */
@@ -253,6 +255,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--cbom":
         rejectInlineValue();
         options.format = "cbom";
+        break;
+      case "--merge":
+        // Merge an external CBOM (e.g. a qprobe endpoint CBOM) into the --cbom
+        // output via CycloneDX bom-link. Repeatable.
+        (options.mergeCboms ??= []).push(takeValue());
         break;
       case "-o":
       case "--output":

@@ -23,8 +23,10 @@ import {
   toCbom,
   toJson,
   toSarif,
+  mergeCboms,
 } from "@quantakrypto/core";
 import type {
+  CycloneDxBom,
   Finding,
   ReportOptions,
   ScanResult,
@@ -86,9 +88,15 @@ export function renderSarif(result: ScanResult, opts?: ReportOptions): string {
  * Render a CycloneDX 1.6 CBOM (cryptographic bill of materials) for the scan,
  * pretty-printed with no trailing newline. Delegates to core's `toCbom` so the
  * serialized shape stays consistent across every tool in the monorepo.
+ *
+ * When `extra` CBOMs are supplied (e.g. a qProbe endpoint CBOM), they are merged
+ * with the scan CBOM via core's `mergeCboms`, producing a single combined
+ * code + infrastructure bill of materials linked by CycloneDX bom-link.
  */
-export function renderCbom(result: ScanResult): string {
-  return JSON.stringify(toCbom(result), null, 2);
+export function renderCbom(result: ScanResult, extra: readonly CycloneDxBom[] = []): string {
+  const scanBom = toCbom(result);
+  const bom = extra.length > 0 ? mergeCboms([scanBom, ...extra]) : scanBom;
+  return JSON.stringify(bom, null, 2);
 }
 
 /**

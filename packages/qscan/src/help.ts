@@ -20,6 +20,10 @@ OPTIONS
   --format <human|json|sarif|cbom|evidence>
                                 Output format (default: human)
   --cbom                        Alias for --format cbom (CycloneDX CBOM)
+  --merge <cbom.json>           Merge an external CBOM (e.g. a qprobe endpoint
+                                CBOM) into the --cbom output via CycloneDX
+                                bom-link — one combined code + infra CBOM.
+                                Repeatable.
   --format evidence             ISO 27001 A.8.24 readiness report — findings +
                                 inventory + CBOM + a deterministic content hash
                                 (sign/timestamp it with an external signer)

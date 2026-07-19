@@ -30,6 +30,14 @@ test("--top parses a finding count (and defaults to undefined)", () => {
   assert.equal(runOptions(["--top=3"]).topN, 3);
 });
 
+test("--merge is repeatable and collects external CBOM paths", () => {
+  assert.equal(runOptions([]).mergeCboms, undefined);
+  assert.deepEqual(runOptions(["--cbom", "--merge", "a.json", "--merge", "b.json"]).mergeCboms, [
+    "a.json",
+    "b.json",
+  ]);
+});
+
 test("--cache takes an optional path (default when bare, doesn't swallow a flag)", () => {
   assert.equal(runOptions([]).cacheFile, undefined);
   assert.equal(runOptions(["--cache"]).cacheFile, DEFAULT_CACHE_FILE);
