@@ -68,8 +68,9 @@ const CI_RULES: CiRule[] = [
   {
     // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
     // into another command's flag), and `(?![\w-])` stops `--sign` matching the
-    // `--sign` prefix of an unrelated flag like `--sign-artifacts`.
-    re: /\bgpg\b[^\n&|;]*?\s--(?:detach-sign|clearsign|sign)(?![\w-])/g,
+    // `--sign` prefix of an unrelated flag like `--sign-artifacts`. The short forms
+    // `-s` (sign) / `-b` (detach-sign) are safe inside the bounded gpg span.
+    re: /\bgpg\b[^\n&|;]*?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
     meta: {
       id: "ci-gpg-sign",
       title: "GPG signing (RSA)",

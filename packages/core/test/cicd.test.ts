@@ -38,6 +38,11 @@ test("gpg --detach-sign is flagged as RSA signing", () => {
   assert.equal(f?.hndl, false);
 });
 
+test("gpg short sign flags (-s / -b) are flagged", () => {
+  assert.ok(rule(run(".github/workflows/r.yml", "run: gpg -s dist/app.tar\n"), "ci-gpg-sign"));
+  assert.ok(rule(run(".github/workflows/r.yml", "run: gpg -b dist/app.tar\n"), "ci-gpg-sign"));
+});
+
 test("jarsigner, codesign and minisign are detected", () => {
   assert.ok(
     rule(run("Jenkinsfile", "sh 'jarsigner -keystore ks.jks app.jar alias'"), "ci-jarsigner"),

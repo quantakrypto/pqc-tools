@@ -34,7 +34,8 @@ const RE_PHP_SECLIB = /\b(RSA|EC|DSA|DH)::createKey\s*\(/g;
 // libsodium X25519 (box / kx / scalarmult) and Ed25519 (sign) key pairs.
 const RE_PHP_SODIUM_X25519 =
   /\bsodium_crypto_(?:box|kx)_(?:seed_)?keypair\s*\(|\bsodium_crypto_scalarmult(?:_base)?\s*\(/g;
-const RE_PHP_SODIUM_ED25519 = /\bsodium_crypto_sign_(?:seed_)?keypair\s*\(/g;
+// Also the explicit-algorithm variant sodium_crypto_sign_ed25519_keypair().
+const RE_PHP_SODIUM_ED25519 = /\bsodium_crypto_sign_(?:ed25519_|seed_)?keypair\s*\(/g;
 
 /** Key-type classification for `openssl_pkey_new`, keyed by its config constant. */
 interface KeyInfo {

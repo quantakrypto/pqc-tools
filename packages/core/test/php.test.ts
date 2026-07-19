@@ -98,6 +98,12 @@ test("libsodium box/kx (X25519) and sign (Ed25519) key pairs are detected", () =
       ?.algorithm,
     "EdDSA",
   );
+  // The explicit-algorithm variant with the `_ed25519_` infix is also caught.
+  assert.equal(
+    rule(run("a.php", "<?php $kp = sodium_crypto_sign_ed25519_keypair();"), "php-sodium-ed25519")
+      ?.algorithm,
+    "EdDSA",
+  );
 });
 
 test("PHP detector is gated to .php and stays silent on clean/symmetric PHP", () => {

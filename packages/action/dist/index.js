@@ -4208,7 +4208,7 @@ var init_php = __esm({
     RE_PHP_SIGN = /\bopenssl_(?:sign|verify)\s*\(/g;
     RE_PHP_SECLIB = /\b(RSA|EC|DSA|DH)::createKey\s*\(/g;
     RE_PHP_SODIUM_X25519 = /\bsodium_crypto_(?:box|kx)_(?:seed_)?keypair\s*\(|\bsodium_crypto_scalarmult(?:_base)?\s*\(/g;
-    RE_PHP_SODIUM_ED25519 = /\bsodium_crypto_sign_(?:seed_)?keypair\s*\(/g;
+    RE_PHP_SODIUM_ED25519 = /\bsodium_crypto_sign_(?:ed25519_|seed_)?keypair\s*\(/g;
     HYBRID = "hybrid X25519MLKEM768 (ML-KEM-768) for key agreement; ML-DSA-65 (FIPS 204) to sign";
     RULE_PHP_KEYGEN = {
       id: "php-openssl-keygen",
@@ -5546,8 +5546,9 @@ var init_cicd = __esm({
       {
         // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
         // into another command's flag), and `(?![\w-])` stops `--sign` matching the
-        // `--sign` prefix of an unrelated flag like `--sign-artifacts`.
-        re: /\bgpg\b[^\n&|;]*?\s--(?:detach-sign|clearsign|sign)(?![\w-])/g,
+        // `--sign` prefix of an unrelated flag like `--sign-artifacts`. The short forms
+        // `-s` (sign) / `-b` (detach-sign) are safe inside the bounded gpg span.
+        re: /\bgpg\b[^\n&|;]*?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
         meta: {
           id: "ci-gpg-sign",
           title: "GPG signing (RSA)",
