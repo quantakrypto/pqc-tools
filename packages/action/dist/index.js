@@ -8852,6 +8852,7 @@ function defaultOptions() {
     changed: false,
     parallel: false,
     quiet: false,
+    colorChoice: "auto",
     noSnippets: false,
     noConfigFile: false,
     triage: false,
