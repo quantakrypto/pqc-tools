@@ -88,6 +88,15 @@ now single-source:
 - **`qscan --cbom --merge <cbom.json>`** — wires core's `mergeCboms` so a scan CBOM
   and an external CBOM (e.g. a qProbe endpoint CBOM) fuse into one combined
   code + infrastructure CycloneDX bill of materials.
+- **qProbe definitive hybrid negotiation** — the TLS probe now sends a WELL-FORMED
+  X25519MLKEM768 key_share (a real X25519 public from `node:crypto` + a valid-range
+  ML-KEM-768 encapsulation key, `ML-KEM-768.ek || X25519.pk` per
+  draft-ietf-tls-ecdhe-mlkem), so a supporting server selects the hybrid group
+  DIRECTLY in its ServerHello — catching servers that support-but-don't-*prefer* it,
+  which the old HelloRetryRequest-only inference missed. No full ML-KEM keygen is
+  needed (qProbe never completes the handshake): a `ByteEncode₁₂` of in-range
+  coefficients passes the server's encaps modulus check; the throwaway secret is
+  never computed. New `mlkem768.ts` (pure, unit-tested encode/decode).
 - **qProbe protocol coverage** — added `--imap` (STARTTLS `:143`), `--pop3` (STLS
   `:110`), and `--postgres` (SSLRequest `:5432`) probes, auto-selected by
   well-known port. IMAP/POP3 reuse the line-based STARTTLS upgrade; PostgreSQL

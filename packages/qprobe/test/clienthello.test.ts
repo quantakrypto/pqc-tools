@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildClientHello,
+  x25519RawPublic,
   parseServerHelloBody,
   readServerHello,
   GROUP_X25519,
@@ -52,6 +53,21 @@ test("buildClientHello is a handshake record advertising the hybrid group", () =
   assert.equal(ch[5], 0x01); // ClientHello
   // The hybrid group codepoint 0x11EC must appear (in supported_groups).
   assert.ok(ch.includes(Buffer.from([0x11, 0xec])));
+});
+
+test("buildClientHello carries a well-formed X25519MLKEM768 key_share (ek 1184 + x25519 32 = 1216)", () => {
+  const ch = buildClientHello({ serverName: "example.com" });
+  // key_share entry: group 0x11EC then a 2-byte length 0x04C0 (1216) for the share.
+  assert.ok(
+    ch.includes(Buffer.from([0x11, 0xec, 0x04, 0xc0])),
+    "hybrid key_share entry (group 0x11EC, length 1216) is present",
+  );
+});
+
+test("x25519RawPublic returns a real 32-byte X25519 public key", () => {
+  const pub = x25519RawPublic();
+  assert.equal(pub.length, 32);
+  assert.notEqual(pub.toString("hex"), x25519RawPublic().toString("hex")); // fresh each time
 });
 
 test("parseServerHelloBody reads the selected group from a HelloRetryRequest", () => {

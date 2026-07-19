@@ -6,16 +6,30 @@
  * be detected through `node:tls`; we advertise it in a raw ClientHello and read the
  * group the server selects.
  *
- * Detection trick (no ML-KEM keygen needed): we send `supported_groups =
- * [X25519MLKEM768, x25519]` but a `key_share` ONLY for x25519. A server that
- * supports and prefers the hybrid group answers with a HelloRetryRequest selecting
- * 0x11EC (asking us to resend with that share) — which is proof of support without
- * us performing any ML-KEM. A server that does not proceeds with our x25519 share.
+ * We advertise `supported_groups = [X25519MLKEM768, x25519, …]` AND send a
+ * WELL-FORMED X25519MLKEM768 key_share (`ML-KEM-768.ek (1184) || X25519.pk (32)`,
+ * per draft-ietf-tls-ecdhe-mlkem) alongside an x25519 share. A supporting server
+ * then selects 0x11EC DIRECTLY in its ServerHello (we read the selected group) —
+ * this catches servers that support-but-don't-*prefer* the hybrid group, which the
+ * older HelloRetryRequest-only inference missed. The ML-KEM ek is well-formed but
+ * throwaway (see mlkem768.ts): qProbe never completes the handshake, so the ML-KEM
+ * shared secret is neither computed nor needed. A server that does not support the
+ * group falls back to our x25519 share (or answers with a HelloRetryRequest, which
+ * the parser still reads).
  *
- * This module is pure byte manipulation over Buffers; the socket I/O lives in
- * tls.ts. Every function here is unit-tested with crafted bytes.
+ * This module is byte manipulation over Buffers (the X25519 key and ML-KEM encoding
+ * come from node:crypto / mlkem768.ts); the socket I/O lives in tls.ts. The pure
+ * functions are unit-tested with crafted bytes.
  */
-import { randomBytes } from "node:crypto";
+import { randomBytes, generateKeyPairSync } from "node:crypto";
+import { wellFormedMlKem768Ek } from "./mlkem768.js";
+
+/** A raw 32-byte X25519 public key (from node:crypto — a real, valid key). */
+export function x25519RawPublic(): Buffer {
+  const { publicKey } = generateKeyPairSync("x25519");
+  const jwk = publicKey.export({ format: "jwk" }) as { x?: string };
+  return Buffer.from(jwk.x ?? "", "base64url");
+}
 
 // TLS constants.
 export const GROUP_X25519 = 0x001d;
@@ -99,10 +113,21 @@ export function buildClientHello(opts: {
   const sigAlgs = [0x0403, 0x0804, 0x0807, 0x0401, 0x0805, 0x0806];
   extensions.push(ext(EXT_SIGNATURE_ALGORITHMS, withLen(2, Buffer.concat(sigAlgs.map(u16)))));
 
-  // key_share: one entry for keyShareGroup with a 32-byte X25519-sized public.
-  // (We never complete the handshake, so the value need not be a real key.)
-  const share = Buffer.concat([u16(keyShareGroup), withLen(2, randomBytes(32))]);
-  extensions.push(ext(EXT_KEY_SHARE, withLen(2, share)));
+  // key_share: send a REAL X25519 public plus a WELL-FORMED X25519MLKEM768 hybrid
+  // share, so a server that supports the hybrid group can select it DIRECTLY (not
+  // only via a HelloRetryRequest). For X25519MLKEM768 the client share is
+  // `ML-KEM-768.ek (1184) || X25519.pk (32)` (draft-ietf-tls-ecdhe-mlkem). We never
+  // complete the handshake, so the ML-KEM secret is neither computed nor needed.
+  void keyShareGroup; // retained for API compat; the share set is now fixed
+  const x25519Pub = x25519RawPublic();
+  const hybridShareVal = Buffer.concat([wellFormedMlKem768Ek(), x25519Pub]);
+  const shareEntries = Buffer.concat([
+    u16(GROUP_X25519MLKEM768),
+    withLen(2, hybridShareVal),
+    u16(GROUP_X25519),
+    withLen(2, x25519Pub),
+  ]);
+  extensions.push(ext(EXT_KEY_SHARE, withLen(2, shareEntries)));
 
   const cipherSuites = Buffer.concat([u16(0x1301), u16(0x1302), u16(0x1303)]);
 
