@@ -182,6 +182,23 @@ in code**; the residual gaps are **F1/F2/F3/F5** (see §6.5).
 | **S**poof | **Provider redirect** via a poisoned base URL. | **HELD (not attacker-reachable).** `baseURL` is not wired from the CLI or config; egress always hits the provider default. Residual: a programmatic `LlmConfig.baseURL` caller can override — doc-note only. | low |
 | **✔ / E** | **MCP stays offline/key-free**, but "engine disposes" is **advisory** on the MCP plane. | **HELD + caveat — F5.** MCP tools never import `@quantakrypto/agent`, never read a key, never call the network — offline/key-free confirmed. But they only emit a request bundle; the deterministic patch-policy/`verify_fix` gates are **not run on the MCP path** — enforcement depends on the host agent. | low (offline) / medium (F5) |
 
+### 4.7 `@quantakrypto/qprobe` (the only tool that INITIATES outbound connections + parses hostile responses)
+
+qProbe dials operator-named endpoints and reads their **attacker-controllable**
+wire responses (ServerHello, cert DER, SSH KEXINIT, SMTP replies). New trust
+boundary: **qprobe → remote endpoint** (the endpoint is untrusted even when the
+operator owns it — it may be compromised or misconfigured). Rows below carry the
+verdicts of the **2026-07-19 audit** (qprobe lens); the one gap it found is **fixed**
+in the same batch.
+
+| STRIDE | Threat | Verdict (2026-07-19 audit) | Severity |
+|---|---|---|---|
+| **D**oS / **T**amper | **Malformed response crashes the prober.** A length-consistent but internally-truncated ServerHello makes the hand-rolled parser throw `RangeError`; in `probeHybridSupport` that throw fired inside the socket `data` handler with no `try/catch` → **uncaught exception → process crash**, probe promise left pending. A hostile/broken endpoint kills the scan. | **FIXED.** Guarded the parse → graceful `"malformed ServerHello"` (mirrors `ssh.ts`); localhost regression test. The sibling parsers (`x509`, `ssh`, `smtp`) were already bounds-guarded + `try/catch`; this TLS path was the one gap. | was high → **resolved** |
+| **D**oS | **Unbounded read / hang** from an endpoint that streams forever or stalls. | **HELD.** Every socket has a per-connection timeout (`--timeout`, default 8 s) and a response read-cap (TLS-hybrid 64 KiB · SSH 512 KiB · SMTP 128 KiB); `runProbe` is sequential with a min-interval. | low (held) |
+| **E**oP (abuse as a scanner / SSRF) | qProbe weaponized to port-scan or SSRF internal infra from CI. | **HELD (code-enforced).** `authorizeTargets` throws **before any network I/O** unless every host is covered by `--i-own-this` or an `--owned-hosts` manifest; `parseTarget` refuses CIDR, IP ranges, wildcards, and lists — one host at a time. Residual: attestation is operator-**asserted** (the tool cannot verify true ownership — an operator responsibility, documented). IPv6 manifest matching was broken (fail-closed) and is **fixed** in this batch. | low (held) |
+| **S**poof | TLS handshake with `rejectUnauthorized:false`. | **BY DESIGN, not a hole.** Posture inspection must connect to self-signed / misconfigured endpoints; the negotiated data is **reported, never used to authenticate or trust** anything ("engine disposes"). | info |
+| **I**nfo | SNI / target leakage. | **HELD.** SNI is omitted for bare IP literals (RFC 6066); qProbe performs **no auth and handles no secrets** — it is a read-only posture probe. | low |
+
 ---
 
 ## 5. The hosted-MCP boundary (TB-3) — deep treatment
