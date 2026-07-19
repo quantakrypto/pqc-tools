@@ -35,6 +35,8 @@ import { cloudformationDetector } from "./detectors/cloudformation.js";
 import { meshDetector } from "./detectors/mesh.js";
 import { dnssecDetector } from "./detectors/dnssec.js";
 import { vpnDetector } from "./detectors/vpn.js";
+import { ansibleDetector } from "./detectors/ansible.js";
+import { ageDetector } from "./detectors/age.js";
 import { statefulHbsDetector } from "./detectors/stateful-hbs.js";
 
 /** Normalised scope of a detector (defaults to "source" when undeclared). */
@@ -159,6 +161,8 @@ export const builtinDetectors: Detector[] = [
   meshDetector,
   dnssecDetector,
   vpnDetector,
+  ansibleDetector,
+  ageDetector,
   statefulHbsDetector,
 ];
 
