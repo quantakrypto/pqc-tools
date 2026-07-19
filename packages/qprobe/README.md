@@ -50,7 +50,7 @@ npx @quantakrypto/qprobe --owned-hosts hosts.txt api.example.com:8443 --json
 |---|---|
 | `--i-own-this` | Attest you are authorized to probe the target(s). Required (or `--owned-hosts`). |
 | `--owned-hosts <file>` | Ownership manifest (one host per line, `#` comments). Every target must be listed. |
-| `--tls` / `--ssh` | Force a probe mode (default: auto — SSH on `:22`, TLS otherwise). |
+| `--tls` / `--ssh` / `--smtp` / `--imap` / `--pop3` / `--postgres` | Force a probe mode. Default: auto by well-known port — SSH `:22`, SMTP STARTTLS `:25`/`:587`, IMAP STARTTLS `:143`, POP3 STLS `:110`, PostgreSQL SSLRequest `:5432`, else direct TLS (which covers HTTPS `:443`, IMAPS `:993`, and DNS-over-TLS `:853`). |
 | `--servername <name>` | TLS SNI server name (default: the host; omitted for bare IPs). |
 | `--timeout <ms>` | Per-connection timeout (default: 8000). |
 | `--format <human\|json\|sarif\|cbom>` | Output format (default: human). `--json` / `--sarif` / `--cbom` are aliases. SARIF 2.1.0 and CycloneDX 1.6 CBOM are the **same formats qScan emits**. |

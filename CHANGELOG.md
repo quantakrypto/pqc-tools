@@ -88,11 +88,17 @@ now single-source:
 - **`qscan --cbom --merge <cbom.json>`** — wires core's `mergeCboms` so a scan CBOM
   and an external CBOM (e.g. a qProbe endpoint CBOM) fuse into one combined
   code + infrastructure CycloneDX bill of materials.
+- **qProbe protocol coverage** — added `--imap` (STARTTLS `:143`), `--pop3` (STLS
+  `:110`), and `--postgres` (SSLRequest `:5432`) probes, auto-selected by
+  well-known port. IMAP/POP3 reuse the line-based STARTTLS upgrade; PostgreSQL
+  sends the 8-byte libpq SSLRequest and upgrades on `S`. DNS-over-TLS (`:853`) and
+  IMAPS (`:993`) already work as direct-TLS probes. All reuse the same negotiated-
+  parameter + certificate inspection and the clean-close hang guard.
 - **MCP `probe_endpoint` tool** — exposes qProbe to AI agents; the qprobe plane is
   dynamically imported so the server stays offline until invoked, the ownership
   attestation is enforced (refuses unless `i_own_this=true`, refuses CIDR/ranges),
-  errored endpoints can't read as a false clean score, and the tool is refused
-  unconditionally on the HTTP transport (`NETWORK_TOOL_NAMES`).
+  errored endpoints can't read as a false clean score, and the tool is disabled by
+  default on the HTTP transport (opt-in via `QUANTAKRYPTO_MCP_ALLOW_NETWORK=1`).
 - **Infrastructure GitHub Action recipe** — IaC scan + weekly scheduled qProbe of
   owned endpoints + a merged code+infra CBOM artifact.
 - **Detector-audit fixes** — bounded the messaging/cicd ReDoS regexes (+ config

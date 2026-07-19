@@ -3,7 +3,7 @@
  * the parser is pure and total — it never throws and never does I/O.
  */
 
-export type ProbeModeArg = "tls" | "ssh" | "smtp" | "auto";
+export type ProbeModeArg = "tls" | "ssh" | "smtp" | "imap" | "pop3" | "postgres" | "auto";
 export type FormatArg = "human" | "json" | "sarif" | "cbom";
 
 export interface CliArgs {
@@ -44,6 +44,15 @@ export function parseArgs(argv: readonly string[]): CliArgs {
         break;
       case "--smtp":
         args.mode = "smtp";
+        break;
+      case "--imap":
+        args.mode = "imap";
+        break;
+      case "--pop3":
+        args.mode = "pop3";
+        break;
+      case "--postgres":
+        args.mode = "postgres";
         break;
       case "--owned-hosts":
         args.ownedHostsFile = argv[++i];
@@ -89,8 +98,11 @@ AUTHORIZATION (required — one of)
   blocks, IP ranges, wildcards and target lists. See THREAT-MODEL.md.
 
 OPTIONS
-  --tls | --ssh | --smtp  Force a probe mode (default: auto — SSH on :22, SMTP
-                          STARTTLS on :25/:587, else TLS).
+  --tls | --ssh | --smtp | --imap | --pop3 | --postgres
+                          Force a probe mode (default: auto by well-known port —
+                          SSH :22, SMTP :25/:587, IMAP :143, POP3 :110,
+                          PostgreSQL :5432, else direct TLS — which covers HTTPS
+                          :443, IMAPS :993, DoT :853).
   --servername <name>     TLS SNI server name (default: the host).
   --timeout <ms>          Per-connection timeout (default: 8000).
   --format <human|json|sarif|cbom>

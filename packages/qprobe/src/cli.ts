@@ -17,7 +17,7 @@ const EXIT = { OK: 0, FINDINGS: 1, ERROR: 2 } as const;
 function endpointLine(r: EndpointReport): string {
   const t = `${r.target.host}:${r.target.port}`;
   const lines: string[] = [`\n${t}  [${r.mode}]`];
-  if ((r.mode === "tls" || r.mode === "smtp") && r.tls) {
+  if (r.mode !== "ssh" && r.tls) {
     if (r.tls.error) lines.push(`  ${r.mode}: ${r.tls.error}`);
     else
       lines.push(
@@ -65,7 +65,14 @@ async function main(): Promise<number> {
     return EXIT.ERROR;
   }
 
-  const defaultPort = args.mode === "ssh" ? 22 : args.mode === "smtp" ? 587 : 443;
+  const DEFAULT_PORTS: Record<string, number> = {
+    ssh: 22,
+    smtp: 587,
+    imap: 143,
+    pop3: 110,
+    postgres: 5432,
+  };
+  const defaultPort = DEFAULT_PORTS[args.mode] ?? 443;
   let targets;
   try {
     targets = args.targets.map((t) => parseTarget(t, defaultPort));
