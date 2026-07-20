@@ -102,6 +102,28 @@ test("Pulumi camelCase customerMasterKeySpec (quoted) is caught", () => {
   );
 });
 
+test("GCP Cloud KMS (RSA_SIGN_/EC_SIGN_) and Azure Key Vault (createRsaKey/KeyType) are caught", () => {
+  assert.equal(
+    rule(
+      run("kms.ts", "algorithm: CryptoKeyVersionAlgorithm.RSA_SIGN_PSS_2048_SHA256"),
+      "cloud-kms-rsa",
+    )?.algorithm,
+    "RSA",
+  );
+  assert.ok(rule(run("kms.go", 'Algorithm: "EC_SIGN_P256_SHA256"'), "cloud-kms-ec"), "GCP EC_SIGN");
+  assert.equal(
+    rule(run("kv.ts", 'await client.createRsaKey("k", { keySize: 2048 })'), "cloud-kms-rsa")
+      ?.algorithm,
+    "RSA",
+  );
+  assert.ok(rule(run("kv.cs", 'new CreateEcKeyOptions("k")'), "cloud-kms-ec"), "Azure EC key");
+  // A benign lowercase `rsa_signature` variable must not fire.
+  assert.deepEqual(
+    run("a.ts", "const rsa_signature = verify(x);").filter((f) => f.ruleId.startsWith("cloud-kms")),
+    [],
+  );
+});
+
 test("a bare `keySpec` variable (not a KMS/ACM value) does not fire", () => {
   assert.deepEqual(
     run("a.ts", "const keySpec = getUserPref(); log(keySpec);").filter((f) =>

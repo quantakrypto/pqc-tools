@@ -39,11 +39,20 @@ const RE_KMS_EC = new RegExp(
 //     — an enum reference, no quoted value, so (a) never matches it.
 const RE_KMS_RSA_ENUM = /\b(?:KeySpec|KeyAlgorithm)\.RSA_\d+\b/g;
 const RE_KMS_EC_ENUM = /\b(?:KeySpec|KeyAlgorithm)\.(?:ECC_[A-Z0-9_]+|EC_[A-Za-z0-9]+)\b/g;
+// (c) GCP Cloud KMS: the CryptoKeyVersion algorithm — `RSA_SIGN_PSS_2048_SHA256`,
+//     `RSA_DECRYPT_OAEP_*`, `EC_SIGN_P256_SHA256` (enum or quoted string). The
+//     `RSA_SIGN`/`RSA_DECRYPT`/`EC_SIGN` prefixes are GCP-KMS-specific.
+const RE_GCP_KMS_RSA = /\bRSA_(?:SIGN|DECRYPT)_[A-Z0-9_]+/g;
+const RE_GCP_KMS_EC = /\bEC_SIGN_[A-Z0-9_]+/g;
+// (d) Azure Key Vault SDK: `createRsaKey` / `createEcKey` (+ `Create*KeyOptions`) and
+//     `KeyType.Rsa` / `KeyType.Ec`.
+const RE_AZURE_KV_RSA = /\b[Cc]reateRsaKey(?:Options)?\b|\bKeyType\.Rsa\b/g;
+const RE_AZURE_KV_EC = /\b[Cc]reateEcKey(?:Options)?\b|\bKeyType\.Ec\b/g;
 
 const RULE_KMS_RSA: RuleMeta = {
   id: "cloud-kms-rsa",
-  title: "AWS KMS RSA key",
-  description: "AWS KMS CreateKey / GenerateDataKeyPair with an RSA_* key spec",
+  title: "Cloud KMS RSA key",
+  description: "AWS/GCP/Azure KMS RSA key spec (KeySpec / RSA_SIGN_* / createRsaKey)",
   category: "kem",
   severity: "high",
   confidence: "high",
@@ -51,13 +60,13 @@ const RULE_KMS_RSA: RuleMeta = {
   hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message:
-    "Mints a classical RSA key via the AWS KMS SDK (harvest-now-decrypt-later exposed for encryption).",
+    "Mints a classical RSA key via a cloud KMS SDK (AWS/GCP/Azure); harvest-now-decrypt-later exposed for encryption.",
   remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs.",
 };
 const RULE_KMS_EC: RuleMeta = {
   id: "cloud-kms-ec",
-  title: "AWS KMS EC key",
-  description: "AWS KMS CreateKey / GenerateDataKeyPair with an ECC_* key spec",
+  title: "Cloud KMS EC key",
+  description: "AWS/GCP/Azure KMS EC key spec (ECC_* / EC_SIGN_* / createEcKey)",
   category: "key-exchange",
   severity: "high",
   confidence: "high",
@@ -65,7 +74,7 @@ const RULE_KMS_EC: RuleMeta = {
   hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message:
-    "Mints a classical EC key via the AWS KMS SDK; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+    "Mints a classical EC key via a cloud KMS SDK (AWS/GCP/Azure); EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
   remediation:
     "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204).",
 };
@@ -81,9 +90,19 @@ export const cloudKmsDetector: Detector = {
   // the KMS API is not a live key-minting call.
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
-    // Fast reject: only proceed if a KMS/ACM key-spec field name is present (any case).
+    // Fast reject: only proceed if an AWS / GCP / Azure KMS key-spec marker is present.
     const lc = content.toLowerCase();
-    if (!lc.includes("keyspec") && !lc.includes("keypairspec") && !lc.includes("keyalgorithm")) {
+    if (
+      !lc.includes("keyspec") &&
+      !lc.includes("keypairspec") &&
+      !lc.includes("keyalgorithm") &&
+      !lc.includes("rsa_sign") &&
+      !lc.includes("rsa_decrypt") &&
+      !lc.includes("ec_sign") &&
+      !lc.includes("creatersakey") &&
+      !lc.includes("createeckey") &&
+      !lc.includes("keytype.")
+    ) {
       return [];
     }
     // Inside a CloudFormation / ARM template FILE, the cloudformation detector owns
@@ -101,6 +120,10 @@ export const cloudKmsDetector: Detector = {
     add(RE_KMS_EC, RULE_KMS_EC);
     add(RE_KMS_RSA_ENUM, RULE_KMS_RSA);
     add(RE_KMS_EC_ENUM, RULE_KMS_EC);
+    add(RE_GCP_KMS_RSA, RULE_KMS_RSA);
+    add(RE_GCP_KMS_EC, RULE_KMS_EC);
+    add(RE_AZURE_KV_RSA, RULE_KMS_RSA);
+    add(RE_AZURE_KV_EC, RULE_KMS_EC);
     return findings;
   },
 };

@@ -112,3 +112,23 @@ test("a `; sslmode=require` ini comment is NOT flagged", () => {
     [],
   );
 });
+
+test("SQL Server TDE with a classical RSA asymmetric key is flagged (kem, HNDL)", () => {
+  const sql =
+    "CREATE ASYMMETRIC KEY TDE_AK\n  WITH ALGORITHM = RSA_2048;\nCREATE DATABASE ENCRYPTION KEY WITH ALGORITHM = AES_256;";
+  const f = rule(run("tde.sql", sql), "db-tde-rsa");
+  assert.equal(f?.algorithm, "RSA");
+  assert.equal(f?.hndl, true);
+  // A symmetric-only DEK (no asymmetric key) must not fire the TDE rule.
+  assert.equal(
+    rule(run("tde.sql", "CREATE DATABASE ENCRYPTION KEY WITH ALGORITHM = AES_256;"), "db-tde-rsa"),
+    undefined,
+  );
+});
+
+test("a commented-out TDE asymmetric key is NOT flagged", () => {
+  assert.equal(
+    rule(run("tde.sql", "-- CREATE ASYMMETRIC KEY K WITH ALGORITHM = RSA_2048;"), "db-tde-rsa"),
+    undefined,
+  );
+});

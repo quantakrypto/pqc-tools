@@ -30,6 +30,11 @@ const RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
 // separator, `:` or `=`, and the libpq/MySQL value spellings.
 const RE_WEAK_SSLMODE =
   /\b(?:pg)?ssl[-_]?mode\s*[:=]\s*["']?(?:allow|prefer(?:red)?|require[d]?)\b/gi;
+// SQL Server TDE: the database encryption key is protected by a classical RSA
+// asymmetric key / certificate. `CREATE ASYMMETRIC KEY … WITH ALGORITHM = RSA_2048`
+// is the distinctive form; the span between the two clauses is lazily bounded to keep
+// matching linear.
+const RE_MSSQL_TDE_RSA = /\bCREATE\s+ASYMMETRIC\s+KEY\b[\s\S]{0,300}?\bALGORITHM\s*=\s*RSA_\d+/gi;
 
 const RULE_PGCRYPTO: RuleMeta = {
   id: "db-pgcrypto-pubkey",
@@ -45,6 +50,21 @@ const RULE_PGCRYPTO: RuleMeta = {
     "Column data is encrypted with pgcrypto public-key crypto (classical RSA/ElGamal); stored ciphertext is harvest-now-decrypt-later exposed.",
   remediation:
     "Plan migration to a post-quantum KEM (ML-KEM-768) envelope for at-rest data; re-encrypt long-lived rows.",
+};
+const RULE_MSSQL_TDE_RSA: RuleMeta = {
+  id: "db-tde-rsa",
+  title: "SQL Server TDE RSA key",
+  description: "SQL Server CREATE ASYMMETRIC KEY ... WITH ALGORITHM = RSA_* (TDE key protection)",
+  category: "kem",
+  severity: "high",
+  confidence: "high",
+  algorithm: "RSA",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Transparent Data Encryption protects the database encryption key with a classical RSA asymmetric key; the at-rest data is harvest-now-decrypt-later exposed once the RSA key falls.",
+  remediation:
+    "Plan migration to a PQC KEM (ML-KEM-768) for TDE key protection as the database engine adds support; re-key long-lived encrypted databases.",
 };
 const RULE_WEAK_SSLMODE: RuleMeta = {
   id: "db-weak-sslmode",
@@ -64,10 +84,11 @@ const RULE_WEAK_SSLMODE: RuleMeta = {
 /** Detects classical database at-rest / transport crypto. */
 export const databaseDetector: Detector = {
   id: "database-crypto",
-  description: "Classical crypto in database usage (pgcrypto public-key, weak client sslmode)",
+  description:
+    "Classical crypto in database usage (pgcrypto public-key, SQL Server TDE, weak client sslmode)",
   scope: "config",
   language: "any",
-  rules: [RULE_PGCRYPTO, RULE_WEAK_SSLMODE],
+  rules: [RULE_PGCRYPTO, RULE_MSSQL_TDE_RSA, RULE_WEAK_SSLMODE],
   // Skip prose/docs: a README showing `sslmode=require` is not a live connection string.
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
@@ -94,6 +115,19 @@ export const databaseDetector: Detector = {
       eachMatch(RE_WEAK_SSLMODE, scan, (m) =>
         findings.push(
           findingFromRule(RULE_WEAK_SSLMODE, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length,
+          }),
+        ),
+      );
+    }
+    // SQL Server TDE: a classical RSA asymmetric key protecting the DEK.
+    if (lc.includes("asymmetric key")) {
+      eachMatch(RE_MSSQL_TDE_RSA, scan, (m) =>
+        findings.push(
+          findingFromRule(RULE_MSSQL_TDE_RSA, {
             file,
             content,
             index: m.index,

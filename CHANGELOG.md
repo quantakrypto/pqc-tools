@@ -6,6 +6,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — detection coverage (SAML/XML-DSig, PKCS#11, TDE, CDK/Pulumi/GCP/Azure KMS)
+
+Closes the real coverage gaps the pre-1.0 audit found:
+
+- **XML-DSig / XML-Enc (SAML, WS-Security)** — a new detector flags classical XML
+  signature algorithm URIs (`xmldsig-more#rsa-sha256`, `#dsa-sha1`, `#ecdsa-sha256`)
+  and XML encryption key transport (`xmlenc#rsa-oaep`) — the algorithm layer under
+  enterprise SSO, whose long-lived IdP signing keys are a prime forgery surface.
+- **PKCS#11 / HSM** — a new detector flags classical keys behind a token: the OpenSC
+  `pkcs11-tool --key-type rsa:2048 | EC:*` keygen and the PKCS#11 mechanism constants
+  (`CKM_RSA_PKCS_KEY_PAIR_GEN`, `CKM_ECDSA_*`, `CKM_DSA*`, `CKM_DH_PKCS_DERIVE`).
+  HSMs hold an org's longest-lived roots — the keys a migration must find first.
+- **SQL Server TDE** — the database detector now flags `CREATE ASYMMETRIC KEY … WITH
+  ALGORITHM = RSA_*` (Transparent Data Encryption protecting the DEK with a classical
+  RSA key — at-rest data is HNDL-exposed).
+- **Cloud KMS breadth** — `cloud-kms` now covers the AWS **CDK enum form**
+  (`kms.KeySpec.RSA_2048`, `acm.KeyAlgorithm.EC_prime256v1`) and Pulumi camelCase
+  props (previously *zero* findings), plus **GCP** (`RSA_SIGN_*` / `EC_SIGN_*`) and
+  **Azure Key Vault** (`createRsaKey`, `KeyType.Rsa`) runtime SDK forms.
+
+All added with positive + negative + doc-suppression tests; benchmark unaffected.
+
 ### Added — selectable standards regimes (`--profile`)
 
 - **`qscan --profile <id>`** tailors the migration guidance to a standards regime
