@@ -6,6 +6,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — evidence verification (`verifyReadinessReport`)
+
+- New `@quantakrypto/core` API `verifyReadinessReport(report)` closes the
+  build → sign → **verify** loop for the ISO A.8.24 evidence chain. It recomputes
+  the deterministic content hash over the report's own body and returns
+  `{ valid, computedHash, claimedHash, reason? }`, detecting tampering with any
+  hashed field (findings, inventory, policy verdicts, subject/tool metadata) while
+  ignoring the excluded scan time / CBOM envelope / attestation block. Integrity
+  only — the detached signature/timestamp remain the external signer's to verify
+  (ADR-0004).
+
+### Changed — test hardening
+
+- De-stubbed the qScan CLI and MCP tool tests that predated a real `core.scan`
+  and tolerated every exit code / both if-else branches; they now assert
+  deterministic outcomes against real fixtures.
+- Added coverage for previously-untested failure paths: the sieve runner's
+  timeout/crash/spawn-failure rejections, the stateful-HBS detector (its first
+  unit test), the CI guard scripts' reject logic (via known-bad fixtures), and
+  the agent BYOK adapters' timeout / network-error / key-only-in-header invariants.
+- Fixed a latent bug surfaced by the guard tests: `scripts/validate-sarif.mjs` ran
+  its CLI `main()` at import time (no `import.meta.url` guard), so importing it
+  triggered a scan and `process.exit()`. CLI behaviour is unchanged.
+
 ### Added — detection coverage (SAML/XML-DSig, PKCS#11, TDE, CDK/Pulumi/GCP/Azure KMS)
 
 Closes the real coverage gaps the pre-1.0 audit found:
