@@ -139,8 +139,9 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 | `ssh-cert` | config | SSH public keys (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`) and X.509 certificate signature algorithms (`sha256WithRSAEncryption`, `ecdsa-with-SHA256`, …) |
 
 The rows above cover JavaScript/TypeScript plus the language-agnostic PEM/SSH/TLS
-surfaces. Twelve further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
-detection to other ecosystems (each is a single umbrella detector):
+surfaces. Thirteen further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
+detection to other ecosystems — including a smart-contract pack (Solidity/Move/
+Cairo on-chain signature verification) — each a single umbrella detector:
 
 | Detector | Scope | Language |
 | --- | --- | --- |

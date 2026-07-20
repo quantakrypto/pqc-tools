@@ -56,6 +56,10 @@ const C_LIKE: readonly string[] = [
   ".m",
   ".mm",
   ".dart",
+  // Smart-contract languages (Solidity/Move/Cairo) also use C-style comments.
+  ".sol",
+  ".move",
+  ".cairo",
 ];
 
 /** Hash-style (`#`) comment languages, by extension. */

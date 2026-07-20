@@ -6,6 +6,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — new detection surfaces (Solidity/blockchain, WebAuthn, proxy/gRPC TLS, code-signing, weak-hash)
+
+Five new detectors from a fresh coverage-gap research pass (52 detectors / 297 rules):
+
+- **Smart-contract / blockchain** (`.sol` / `.move` / `.cairo`) — a 14th source
+  language pack flagging on-chain classical signature verification: Solidity/EVM
+  `ecrecover` + OpenZeppelin/Solady `ECDSA.recover`/`SignatureChecker` (secp256k1),
+  Move `ed25519_verify` / `ecdsa_k1::secp256k1_verify`, Cairo `check_ecdsa_signature`.
+  `severity: high` — on-chain keys often ARE asset custody.
+- **WebAuthn / FIDO2 / passkeys** — catches the numeric COSE algorithm ids
+  (`alg: -7` ES256, `-257` RS256, `-8` EdDSA) and enum identifiers that the quoted-
+  string JWT rule misses, in @simplewebauthn / py_webauthn / go-webauthn / webauthn4j.
+- **Reverse-proxy / gRPC TLS** — standalone Envoy / Nginx / HAProxy / Traefik TLS
+  config + in-code gRPC channel credentials (Python/Node/Java/Go): the classical-cert
+  ECDHE termination that the k8s/mesh detectors don't see (HNDL).
+- **Code-signing CLIs** in build scripts (not just CI) — Authenticode `signtool`/
+  `osslsigncode`, Android `apksigner`/Gradle signing, `rpmsign`/`dpkg-sig`,
+  `nuget sign`, Apple `codesign`/`notarytool`.
+- **Weak hash in signatures/certs** (quantum-adjacent) — activates the `hash`
+  category: SHA-1/MD5 in a signature or X.509 certificate context (`SHA1withRSA`,
+  `sha1WithRSAEncryption` + its OID, `openssl -sha1` in a cert/sign command). NIST
+  retires SHA-1 by 2030 — the same window as the PQC migration. Narrowly scoped to
+  signature/cert contexts; password hashing is deliberately out of scope.
+
 ### Fixed — pre-release hardening (adversarial audit)
 
 - **Offline-boundary guard** was bypassable by ordinary formatter-produced code

@@ -26,8 +26,10 @@ Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
 **PHP** (openssl / phpseclib3 / libsodium), **Elixir** (`:crypto` / X509 / JOSE),
 **C/C++** (OpenSSL, Mbed TLS, wolfSSL), **Swift** (CryptoKit / Security),
 **Objective-C** (Security `SecKey*`), and **Dart/Flutter** (pointycastle /
-`cryptography`) source — **13 languages**. PEM key material, SSH keys (including
-SSH-CA certificates), TLS/certificate config, DKIM, SPIFFE/SPIRE, and dependency
+`cryptography`), and **smart contracts** (Solidity/Move/Cairo on-chain
+signature verification) source — **14 languages**. PEM key material, SSH keys (including
+SSH-CA certificates), TLS/certificate config, reverse-proxy/gRPC TLS, WebAuthn/FIDO2,
+code-signing, weak signature hashes (SHA-1/MD5), DKIM, SPIFFE/SPIRE, and dependency
 manifests for **seven ecosystems** — npm (plus `yarn.lock` / `pnpm-lock.yaml`),
 PyPI, Cargo, Go modules, Maven, RubyGems, and NuGet — are detected in **any**
 file regardless of language.

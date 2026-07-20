@@ -16,16 +16,17 @@ Audit sources: [security](audits/security.md) · [cryptography](audits/cryptogra
 > GitHub Action, not npm). Last published line: **0.4.4**; **0.5.0** is tagged and
 > pending publish.
 >
-> - **Detectors:** **13 source languages** — JS/TS, Python, Go, Java/Kotlin/Scala,
->   C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart — plus
+> - **Detectors:** **14 source languages** — JS/TS, Python, Go, Java/Kotlin/Scala,
+>   C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo — plus
 >   PEM/keystore/OpenPGP key material and config-scope infra detectors (Terraform,
 >   Bicep, Pulumi, CloudFormation, cloud KMS, k8s, mesh, DNSSEC, Vault, database/TDE,
 >   messaging, VPN, Ansible, supply-chain, CI/CD, secrets, age, JWK, XML-DSig/SAML,
->   PKCS#11/HSM, DKIM, SSH-CA, SPIFFE/SPIRE, …).
+>   PKCS#11/HSM, DKIM, SSH-CA, SPIFFE/SPIRE, reverse-proxy/gRPC TLS, WebAuthn/FIDO2,
+>   code-signing, weak-hash-in-signature, …).
 > - **`qprobe`** — a live-endpoint prober (TLS/SSH/SMTP/IMAP/POP3/Postgres, behind an
 >   ownership-attestation gate) that checks what an endpoint actually negotiates
 >   (e.g. X25519MLKEM768), complementing the static scan.
-> - **Quality:** **~1063 tests** across the workspaces; precision/recall benchmark
+> - **Quality:** **~1118 tests** across the workspaces; precision/recall benchmark
 >   **= 1.000** (curated corpus) with a separate real-world recall-depth benchmark at
 >   **0.84** (per-language floors); a **frozen public API surface** with a drift gate
 >   (`api:check`); build + ESLint + Prettier clean; **zero runtime dependencies**.

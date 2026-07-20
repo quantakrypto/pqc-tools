@@ -255,6 +255,9 @@ export const OBJC_EXTENSIONS: readonly string[] = [".m", ".mm"];
 /** Dart / Flutter source extensions. */
 export const DART_EXTENSIONS: readonly string[] = [".dart"];
 
+/** Smart-contract source extensions (Solidity/EVM, Move, Cairo/Starknet). */
+export const SMART_CONTRACT_EXTENSIONS: readonly string[] = [".sol", ".move", ".cairo"];
+
 /**
  * Prose/documentation extensions. The language-agnostic *token* detectors (SSH
  * public keys, TLS cipher suites, certificate signature algorithms) must not run
@@ -318,6 +321,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...SWIFT_EXTENSIONS,
   ...OBJC_EXTENSIONS,
   ...DART_EXTENSIONS,
+  ...SMART_CONTRACT_EXTENSIONS,
 ];
 
 /**
@@ -326,7 +330,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
  * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
  */
 export const ANALYZABLE_LANGUAGES_LABEL =
-  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart";
+  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {

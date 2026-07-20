@@ -140,6 +140,7 @@ export type DetectorLanguage =
   | "swift"
   | "objc"
   | "dart"
+  | "solidity"
   | "any";
 
 /**
