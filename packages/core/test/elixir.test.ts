@@ -88,3 +88,22 @@ test("Elixir detector is gated to .ex/.exs and ignores symmetric/HMAC :crypto ca
     [],
   );
 });
+
+test("Elixir :crypto.compute_key (the (EC)DH agreement op) is flagged with curve", () => {
+  const f = rule(
+    run("k.ex", ":crypto.compute_key(:ecdh, peer_pub, my_priv, :x25519)"),
+    "elixir-crypto-keygen",
+  );
+  assert.equal(f?.algorithm, "X25519");
+  assert.equal(f?.hndl, true);
+});
+
+test("Elixir JOSE OKP X25519 is key agreement (HNDL), not an EdDSA signature", () => {
+  const x = rule(run("k.ex", "JOSE.JWK.generate_key({:okp, :X25519})"), "elixir-jose-jwk");
+  assert.equal(x?.algorithm, "X25519");
+  assert.equal(x?.hndl, true);
+  // An OKP Ed25519 key stays an EdDSA signature.
+  const ed = rule(run("k.ex", "JOSE.JWK.generate_key({:okp, :Ed25519})"), "elixir-jose-jwk");
+  assert.equal(ed?.algorithm, "EdDSA");
+  assert.equal(ed?.hndl, false);
+});

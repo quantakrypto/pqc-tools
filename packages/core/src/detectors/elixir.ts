@@ -19,6 +19,10 @@ import { ELIXIR_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const RE_EX_GEN = /:crypto\.generate_key\s*\(\s*:(\w+)/g;
+// `:crypto.compute_key(:ecdh|:dh, PeerPub, MyKey, :curve)` is the DH/ECDH AGREEMENT
+// operation itself — the harvest-now-decrypt-later step — which generate_key alone
+// misses. Classified by the same type/curve logic as generate_key.
+const RE_EX_COMPUTE = /:crypto\.compute_key\s*\(\s*:(\w+)/g;
 const RE_EX_SIGN = /:crypto\.(?:sign|verify)\s*\(\s*:(\w+)/g;
 const RE_EX_X509_RSA = /\bX509\.PrivateKey\.new_rsa\s*\(/g;
 const RE_EX_X509_EC = /\bX509\.PrivateKey\.new_ec\s*\(/g;
@@ -184,6 +188,23 @@ export const elixirDetector: Detector = {
       );
     });
 
+    // :crypto.compute_key(:type, …) — the (EC)DH agreement operation.
+    eachMatch(RE_EX_COMPUTE, content, (m) => {
+      const cls = classifyGen(m[1], content.slice(m.index, m.index + 120));
+      if (!cls) return;
+      findings.push(
+        findingFromRule(RULE_EX_KEYGEN, at(m), {
+          title: `Elixir :crypto ${cls.label} key agreement`,
+          category: cls.cat,
+          severity: cls.sev,
+          algorithm: cls.algo,
+          hndl: cls.hndl,
+          message: `Performs classical ${cls.label} key agreement via Erlang :crypto (Elixir) — harvest-now-decrypt-later exposed.`,
+          ...(cls.remediation ? { remediation: cls.remediation } : {}),
+        }),
+      );
+    });
+
     // :crypto.sign / :crypto.verify(:type, …).
     eachMatch(RE_EX_SIGN, content, (m) => {
       const algo = classifySign(m[1]);
@@ -214,11 +235,20 @@ export const elixirDetector: Detector = {
       ),
     );
 
-    // JOSE.JWK.generate_key({:rsa|:ec|:okp, …}).
+    // JOSE.JWK.generate_key({:rsa|:ec|:okp, …}). An OKP key is EdDSA (Ed25519/Ed448,
+    // signature) OR a Montgomery key-agreement key (X25519/X448, HNDL) — inspect the
+    // curve atom in a short window so an X25519 OKP is not mislabeled as an EdDSA
+    // signature.
     eachMatch(RE_EX_JOSE, content, (m) => {
       const kind = m[1];
+      let okpCls: Cls = EDDSA_CLS;
+      if (kind === "okp") {
+        const window = content.slice(m.index, m.index + 80);
+        if (/:x25519\b/i.test(window)) okpCls = X25519_CLS;
+        else if (/:x448\b/i.test(window)) okpCls = X448_CLS;
+      }
       const cls =
-        kind === "rsa" ? RSA_CLS : kind === "ec" ? EC_CLS : kind === "okp" ? EDDSA_CLS : null;
+        kind === "rsa" ? RSA_CLS : kind === "ec" ? EC_CLS : kind === "okp" ? okpCls : null;
       if (!cls) return;
       findings.push(
         findingFromRule(RULE_EX_JOSE, at(m), {

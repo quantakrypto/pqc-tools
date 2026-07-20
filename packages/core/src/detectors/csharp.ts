@@ -36,8 +36,9 @@ const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
 // Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
 // alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but
 // Microsoft.IdentityModel passes the alg as an IDENTIFIER, not a string literal:
-// SecurityAlgorithms.RsaSha256 / SecurityAlgorithms.EcdsaSha256.
-const RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
+// SecurityAlgorithms.RsaSha256 / SecurityAlgorithms.EcdsaSha256, and the
+// `…Signature`-suffixed constants used in SigningCredentials (RsaSha256Signature).
+const RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)(?:Signature)?\b/g;
 // BouncyCastle (Org.BouncyCastle) modern-curve and finite-field DH primitives,
 // which System.Security.Cryptography does not expose directly. Each regex is
 // anchored to the distinctive BouncyCastle class names for one family so it

@@ -34,7 +34,16 @@ import {
  * A match inside a string (e.g. `t.Error("SigningMethodPS256 …")`) is prose and
  * is dropped. Rules that legitimately match quoted tokens are NOT listed here.
  */
-const CODE_ONLY_RULES: ReadonlySet<string> = new Set(["go-jwt-signingmethod"]);
+const CODE_ONLY_RULES: ReadonlySet<string> = new Set([
+  "go-jwt-signingmethod",
+  // Identifier-form JWT alg constants (jjwt `SignatureAlgorithm.RS256`, auth0
+  // `Algorithm.RSA256`, C# `SecurityAlgorithms.*`, Rust `Algorithm::RS256`). Like the
+  // Go rule, these are only meaningful as code; the SAME token inside a string literal
+  // (an error message that names/forbids the alg) is prose, not a usage.
+  "java-jwt-alg",
+  "csharp-jwt-alg",
+  "rust-jwt-algorithm",
+]);
 import { hashContent, loadCache, rulesetFingerprint, saveCache } from "./cache.js";
 import type { CacheEntry } from "./cache.js";
 import { builtinDetectors, defaultRegistry, detectorScope } from "./registry.js";

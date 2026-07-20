@@ -511,9 +511,21 @@ export const cDetector: Detector = {
     add(RE_C_DSA, RULE_C_DSA);
     add(RE_C_DH, RULE_C_DH);
     add(RE_C_EVP_KEYGEN, RULE_C_EVP_KEYGEN);
-    add(RE_C_EVP_DERIVE, RULE_C_EVP_DERIVE);
+    // `EVP_PKEY_derive` is OpenSSL's entry point for BOTH (EC)DH key agreement and the
+    // symmetric KDFs (HKDF/scrypt/TLS1-PRF). Real (EC)DH always sets a peer key via
+    // `EVP_PKEY_derive_set_peer`; a KDF never does. So only treat it as classical key
+    // agreement when a peer is set, or when no KDF context marker is present.
+    const hasKdfCtx = /\bEVP_PKEY_(?:HKDF|SCRYPT|TLS1_PRF)\b/.test(content);
+    if (content.includes("EVP_PKEY_derive_set_peer") || !hasKdfCtx) {
+      add(RE_C_EVP_DERIVE, RULE_C_EVP_DERIVE);
+    }
     add(RE_C_EVP_CRYPT, RULE_C_EVP_CRYPT);
-    add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
+    // `EVP_DigestSign*` also drives HMAC/CMAC (a symmetric MAC keyed by
+    // `EVP_PKEY_new_mac_key(EVP_PKEY_HMAC/CMAC, …)`), which is NOT a classical
+    // asymmetric signature. Suppress when the file sets up a MAC key.
+    const hasMacCtx =
+      /\bEVP_PKEY_(?:HMAC|CMAC)\b/.test(content) || content.includes("EVP_PKEY_new_mac_key");
+    if (!hasMacCtx) add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
     add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
     add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
     add(RE_C_ECDSA_VERIFY, RULE_C_ECDSA_VERIFY);

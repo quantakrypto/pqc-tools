@@ -66,6 +66,37 @@ test("PHP/Scala // and Elixir # commented-out crypto is suppressed (but code fir
   );
 });
 
+test("legacy PHP extensions (.php3/.php4/.php5) strip commented-out crypto", () => {
+  assert.equal(
+    has(scan1("legacy.php5", "// openssl_sign($d, $s, $k);"), "php-openssl-sign"),
+    false,
+  );
+  assert.equal(has(scan1("legacy.php5", "openssl_sign($d, $s, $k);"), "php-openssl-sign"), true);
+});
+
+test("identifier-form JWT alg constants inside a string literal are suppressed", () => {
+  // A Java/C#/Rust error message that NAMES (and rejects) the alg is prose, not usage.
+  assert.equal(
+    has(
+      scan1(
+        "A.java",
+        'throw new IllegalArgumentException("SignatureAlgorithm.RS256 not allowed");',
+      ),
+      "java-jwt-alg",
+    ),
+    false,
+  );
+  assert.equal(
+    has(scan1("A.java", "var a = SignatureAlgorithm.RS256;"), "java-jwt-alg"),
+    true,
+    "the real identifier usage still fires",
+  );
+  assert.equal(
+    has(scan1("A.cs", 'Log.Warn("SecurityAlgorithms.RsaSha256 is weak");'), "csharp-jwt-alg"),
+    false,
+  );
+});
+
 test("crypto in a /* block comment */ is suppressed", () => {
   const src =
     "/*\n  legacy: crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })\n*/\nexport {};";

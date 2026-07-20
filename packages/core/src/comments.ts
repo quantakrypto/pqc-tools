@@ -45,6 +45,9 @@ const C_LIKE: readonly string[] = [
   // `#`, handled by the hash lexer running first would miss `//`; C-style covers both
   // since PHP `//` is the common form and `#` lines are rare in modern PHP).
   ".php",
+  ".php3",
+  ".php4",
+  ".php5",
   ".phtml",
   ".scala",
   ".sc",

@@ -35,7 +35,7 @@ const RE_JAVA_GETINSTANCE =
 
 // BouncyCastle lightweight-API class instantiations.
 const RE_JAVA_BC =
-  /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
+  /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|X448KeyPairGenerator|Ed25519KeyPairGenerator|Ed448KeyPairGenerator|X448PrivateKeyParameters|RSAEngine|OAEPEncoding)\s*\(/g;
 
 // BouncyCastle lightweight-API curve/EdDSA classes as a BARE constructor call —
 // the Kotlin form (`X448KeyPairGenerator()`, no `new` keyword). RE_JAVA_BC above
@@ -60,7 +60,11 @@ const RE_JAVA_BC_BARE =
 // requested from SSLContext, and TLS hostname verification neutered via an
 // all-trusting verifier (Apache HttpClient's NoopHostnameVerifier /
 // ALLOW_ALL_HOSTNAME_VERIFIER).
-const RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
+// `TLSv1(?:\.1)?` catches both TLS 1.0 and the equally-deprecated TLS 1.1 (RFC 8996),
+// mirroring the JS tlsDetector; the closing `"` keeps `"TLSv1.2"`/`"TLSv1.3"`/`"TLS"`
+// from matching. `SSLv2` is included alongside `SSLv3`.
+const RE_JAVA_TLS_LEGACY =
+  /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv2|SSLv3|TLSv1(?:\.1)?)"/g;
 // Require a USAGE position, not a bare identifier: `NoopHostnameVerifier` followed by
 // `(` (construction) or `.` (`.INSTANCE`), and `ALLOW_ALL_HOSTNAME_VERIFIER` preceded
 // by `.` (member access). This keeps `new NoopHostnameVerifier()` and
@@ -291,6 +295,10 @@ function classifyGetInstance(factory: string, rawAlg: string): RuleMeta | null {
   const isSignature = factory === "Signature";
 
   if (alg.includes("ECDSA")) return RULE_JAVA_ECDSA_SIGN;
+  // ECIES (EC Integrated Encryption Scheme, incl. `ECIESwithAES-CBC`) is classical EC
+  // public-key ENCRYPTION — harvest-now-decrypt-later exposed. Checked before the EC
+  // branches below (which would otherwise miss it) and the RSA/DSA checks.
+  if (alg.includes("ECIES")) return RULE_JAVA_ECDH;
   if (alg.includes("ECDH")) return RULE_JAVA_ECDH;
   if (alg === "EC") return isSignature ? RULE_JAVA_ECDSA_SIGN : RULE_JAVA_EC_KEYGEN;
   if (alg.includes("ED25519") || alg.includes("ED448") || alg.includes("EDDSA"))
@@ -320,7 +328,10 @@ const BC_CLASS_RULES: Record<string, RuleMeta> = {
   ECDHBasicAgreement: RULE_JAVA_ECDH,
   DHBasicAgreement: RULE_JAVA_DH,
   X25519KeyPairGenerator: RULE_JAVA_XDH,
+  X448KeyPairGenerator: RULE_JAVA_XDH,
+  X448PrivateKeyParameters: RULE_JAVA_XDH,
   Ed25519KeyPairGenerator: RULE_JAVA_EDDSA,
+  Ed448KeyPairGenerator: RULE_JAVA_EDDSA,
   RSAEngine: RULE_JAVA_RSA,
   OAEPEncoding: RULE_JAVA_RSA,
 };

@@ -319,10 +319,13 @@ export function isAnalyzableSource(filePath: string): boolean {
 }
 
 /**
- * Given a SORTED ascending array of call offsets, return true when `idx` is at
- * or after some call offset `c` with `idx - c < window`. Runs in O(log n) by
- * binary-searching the largest call offset ≤ `idx` and checking the gap. This
- * replaces the previous O(matches × calls) linear scan (`nearCall`).
+ * Given a SORTED ascending array of call offsets, return true when `idx` is at or
+ * after some call offset `c` with `idx - c < window`. Deliberately ONE-SIDED
+ * (forward only): the WebCrypto algorithm name follows the `subtle.*(` call it
+ * belongs to, and reaching backward would wrongly attribute an UNRELATED earlier
+ * call's argument (e.g. a Node `generateKeyPairSync('rsa-pss', …)` sitting a few
+ * lines above a subtle call) to the wrong API. Runs in O(log n) by binary-searching
+ * the largest call offset ≤ `idx` and checking the gap.
  */
 export function nearSortedCall(
   sortedCalls: readonly number[],

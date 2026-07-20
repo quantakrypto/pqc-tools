@@ -27,6 +27,10 @@ const RE_RUST_ECDH = /\becdh::EphemeralSecret\b|\bagreement::ECDH_P(?:256|384)\b
 const RE_RUST_ED25519 = /\bed25519_dalek::(?:SigningKey|Keypair|SecretKey)\b|\bEd25519KeyPair::/g;
 // X25519 key agreement (dalek).
 const RE_RUST_X25519 = /\bx25519_dalek::(?:EphemeralSecret|StaticSecret)\b/g;
+// X448 key agreement (`x448` crate). The qualified `x448::Secret` path — covers the
+// plain `use x448::Secret;` / fully-qualified form the alias mechanism (which only
+// fires on a RENAMED `use … as`) misses.
+const RE_RUST_X448 = /\bx448::Secret\b/g;
 // openssl crate bindings — the `Type::generate(` / `Dh::` call forms, distinct
 // from the ring / RustCrypto path syntax above (audit F5/F9 false-negatives).
 const RE_RUST_OPENSSL_RSA = /\bRsa::generate\s*\(/g;
@@ -346,6 +350,7 @@ export const rustDetector: Detector = {
     add(RE_RUST_ECDH, RULE_RUST_ECDH);
     add(RE_RUST_ED25519, RULE_RUST_ED25519);
     add(RE_RUST_X25519, RULE_RUST_X25519);
+    add(RE_RUST_X448, RULE_RUST_X448);
     add(RE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_RSA);
     add(RE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_EC);
     add(RE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DSA);

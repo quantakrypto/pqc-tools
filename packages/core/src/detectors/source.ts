@@ -32,6 +32,7 @@ import {
   DOC_EXTENSIONS,
   JWT_HOST_EXTENSIONS,
   eachMatch,
+  enclosingObject,
   findingFromRule,
   hasExtension,
   nearSortedCall,
@@ -225,11 +226,13 @@ const RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
 // Hardened cipher regex: bounded spans (no unbounded `[^'"`]*` straddling the
 // alternation), single-quote-style anchoring removed in favour of {0,256} bounds
 // so worst-case backtracking is linear in the bound, not the file (P0-6).
-// The `(?<![!-])` lookbehind skips OpenSSL EXCLUSION syntax — `!MD5` / `-RC4`
-// DISABLE those ciphers, so a hardened list like `...:!aNULL:!MD5:!RC4` must not
-// be flagged as weak (audit: crypto #7). A genuinely-enabled `RC4` still matches.
+// The two lookbehinds skip OpenSSL EXCLUSION syntax — `!MD5` / `:-RC4` DISABLE those
+// ciphers, so a hardened list like `...:!aNULL:!MD5:!RC4` must not be flagged as weak
+// (audit: crypto #7). `(?<!!)` drops the `!` form; `(?<![:'"`,\s]-)` drops a `-` ONLY
+// when it sits at a list-element boundary (an actual exclusion operator), so the
+// intra-name hyphen in a real weak suite like `ECDHE-RSA-RC4-SHA` STILL matches.
 const RE_TLS_WEAK_CIPHER =
-  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![!-])(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<!!)(?<![:'"`,\s]-)(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
 
 /* -------------------------------------------------------------------------- */
 /* Node.js `crypto` module                                                    */
@@ -818,8 +821,21 @@ const jwtDetector: Detector = {
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
 
+    // Deferral guards against double-counting:
+    //  - webCryptoDetector owns a quoted `RSA-OAEP`/`ECDH-ES` sitting next to a
+    //    `subtle.*(` call (it matches the `RSA-OAEP`/`ECDH` name). Collect the subtle
+    //    call offsets so the JOSE key-management loops can skip those. (In non-JS host
+    //    files there are no subtle calls, so nothing is skipped.)
+    //  - jwkDetector owns any alg/`kty` that lives inside a JWK object; skip a token
+    //    whose enclosing `{…}` carries a `"kty"` so a JWK's own `alg` is not counted by
+    //    both detectors. Mirrors the same guard jose.ts applies for other languages.
+    const subtleCalls: number[] = [];
+    eachMatch(RE_SUBTLE_CALL, content, (m) => subtleCalls.push(m.index));
+    const inJwk = (index: number): boolean => enclosingObject(content, index).includes('"kty"');
+
     // Classical JWS signature alg tokens. Anchored to quotes to avoid words.
     eachMatch(RE_JWT_ALG, content, (m) => {
+      if (inJwk(m.index)) return; // jwk-{rsa,ec,eddsa} owns a JWK's own alg
       const alg = m[1];
       let algorithm: Finding["algorithm"];
       if (alg.startsWith("RS") || alg.startsWith("PS")) algorithm = "RSA";
@@ -840,6 +856,8 @@ const jwtDetector: Detector = {
 
     // JOSE ECDH-ES key agreement (and ECDH-ES+A*KW) — confidentiality, HNDL.
     eachMatch(RE_JOSE_ECDH, content, (m) => {
+      if (inJwk(m.index)) return; // jwk-ec owns a JWK's own alg
+      if (nearSortedCall(subtleCalls, m.index, 400)) return; // webcrypto owns it
       findings.push(
         findingFromRule(
           RULE_JOSE_ECDH,
@@ -854,6 +872,8 @@ const jwtDetector: Detector = {
 
     // JOSE RSA key transport (RSA-OAEP / RSA1_5) — classical RSA encryption, HNDL.
     eachMatch(RE_JOSE_KEM, content, (m) => {
+      if (inJwk(m.index)) return; // jwk-rsa owns a JWK's own alg
+      if (nearSortedCall(subtleCalls, m.index, 400)) return; // webcrypto owns it
       findings.push(
         findingFromRule(
           RULE_JOSE_RSA_OAEP,

@@ -201,3 +201,68 @@ test("clean sources across the four languages produce no findings", () => {
   assert.deepEqual(run("k.rb", "d = OpenSSL::Digest::SHA256.new"), []);
   assert.deepEqual(run("a.c", "SHA256_Init(&ctx); AES_encrypt(a, b, &k);"), []);
 });
+
+test("Java: ECIES / TLSv1.1 / new X448KeyPairGenerator are all caught", () => {
+  const ecies = rule(run("A.java", 'Cipher c = Cipher.getInstance("ECIES");'), "java-ecdh");
+  assert.ok(ecies, "ECIES (EC encryption) is flagged as HNDL key establishment");
+  assert.equal(ecies.hndl, true);
+  assert.ok(
+    rule(run("A.java", 'SSLContext.getInstance("TLSv1.1");'), "java-tls-legacy-version"),
+    "TLSv1.1 is flagged like TLSv1.0",
+  );
+  assert.ok(
+    run("A.java", "var g = new X448KeyPairGenerator();").some((f) => f.ruleId.startsWith("java-")),
+    "Java `new X448KeyPairGenerator()` is caught",
+  );
+  // TLS 1.2/1.3 must NOT fire.
+  assert.deepEqual(
+    run("A.java", 'SSLContext.getInstance("TLSv1.2");').filter((f) => f.category === "tls"),
+    [],
+  );
+});
+
+test("C#: SecurityAlgorithms.RsaSha256Signature (SigningCredentials constant) is caught", () => {
+  assert.ok(
+    rule(
+      run("A.cs", "new SigningCredentials(key, SecurityAlgorithms.RsaSha256Signature)"),
+      "csharp-jwt-alg",
+    ),
+  );
+});
+
+test("Rust: qualified x448::Secret is caught", () => {
+  assert.ok(rule(run("m.rs", "use x448::Secret;"), "rust-x448"), "x448::Secret flagged");
+});
+
+test("C: EVP_PKEY_derive on an HKDF context is NOT flagged; real ECDH still is", () => {
+  const hkdf =
+    "EVP_PKEY_CTX *p = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);\nEVP_PKEY_derive(p, out, &len);";
+  assert.equal(rule(run("a.c", hkdf), "c-evp-derive"), undefined, "HKDF is not (EC)DH");
+  const ecdh = "EVP_PKEY_derive_set_peer(ctx, peer);\nEVP_PKEY_derive(ctx, secret, &len);";
+  assert.ok(rule(run("a.c", ecdh), "c-evp-derive"), "real ECDH (with set_peer) still flagged");
+});
+
+test("C: EVP_DigestSignInit for HMAC is NOT flagged as an asymmetric signature", () => {
+  const hmac =
+    "EVP_PKEY *k = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, len);\nEVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, k);";
+  assert.equal(rule(run("a.c", hmac), "c-evp-sign"), undefined);
+  // A plain EVP_DigestSignInit with no MAC context still fires (RSA/ECDSA/EdDSA sign).
+  assert.ok(
+    rule(run("a.c", "EVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, rsa_key);"), "c-evp-sign"),
+  );
+});
+
+test("no double-count: a JWK object in JS source is owned by jwk, not jwt-jose", () => {
+  // `{ "kty":"RSA", "alg":"RS256" }` — jwk-rsa owns it; jwt-classical-alg must defer.
+  const src = 'const k = { "kty": "RSA", "alg": "RS256" };';
+  const found = run("a.ts", src);
+  assert.ok(rule(found, "jwk-rsa"), "jwk-rsa fires");
+  assert.equal(rule(found, "jwt-classical-alg"), undefined, "jwt-classical-alg defers on kty");
+});
+
+test("no double-count: subtle RSA-OAEP is owned by webcrypto, not jose-rsa-oaep", () => {
+  const src = 'crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, data);';
+  const found = run("a.ts", src);
+  assert.ok(rule(found, "webcrypto-classical"), "webcrypto fires");
+  assert.equal(rule(found, "jose-rsa-oaep"), undefined, "jose-rsa-oaep defers near a subtle call");
+});
