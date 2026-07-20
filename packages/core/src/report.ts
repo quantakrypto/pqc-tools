@@ -7,8 +7,9 @@ import type { AlgorithmFamily, Finding, RuleMeta, ScanResult, Severity } from ".
 import { VERSION } from "./version.js";
 import { SEVERITY_ORDER, sarifLevel } from "./severity.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "./detect-utils.js";
-import { remediationFor, remediationForTier } from "./remediation.js";
+import { remediationFor, remediationForTier, remediationForProfile } from "./remediation.js";
 import type { SecurityTier } from "./remediation.js";
+import type { StandardsProfile } from "./standards-profiles.js";
 import { fingerprintFinding } from "./baseline.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
@@ -473,5 +474,39 @@ export function formatTierGuidance(
       "  CNSA 2.0 mandates ML-KEM-1024 / ML-DSA-87 for national-security systems and long-lived secrets (2030/2033 milestones).",
     );
   }
+  return out;
+}
+
+/**
+ * Per-family migration targets tailored to a selected {@link StandardsProfile}
+ * (`--profile`). Unlike {@link formatTierGuidance} (CNSA-tier only), this surfaces the
+ * regime's parameter sets AND its hybrid stance — required (ANSSI/BSI) vs recommended
+ * (NIST/NCSC) vs optional (CNSA 2.0) — so guidance isn't regime-wrong. Returns plain
+ * (un-coloured) lines; the caller styles them.
+ */
+export function formatProfileGuidance(
+  byAlgorithm: Record<string, number>,
+  profile: StandardsProfile,
+): string[] {
+  const out: string[] = [`${profile.name} migration targets:`];
+  const seen = new Set<string>();
+  for (const [k, n] of Object.entries(byAlgorithm)) {
+    if (n <= 0) continue;
+    const fam = k as AlgorithmFamily;
+    if (fam === "unknown" || !remediationFor(fam)) continue; // skip unmapped families
+    const rem = remediationForProfile(fam, profile);
+    if (seen.has(rem.recommendation)) continue;
+    seen.add(rem.recommendation);
+    out.push(`  ${fam} → ${rem.recommendation}`);
+  }
+  const stance =
+    profile.hybridStance === "required"
+      ? "requires classical+PQC hybridization"
+      : profile.hybridStance === "recommended"
+        ? "recommends hybridization"
+        : "does not require hybridization";
+  out.push(
+    `  ${profile.authority} ${stance}; classical public-key crypto disallowed after ${profile.disallowAfter} (${profile.citation}).`,
+  );
   return out;
 }

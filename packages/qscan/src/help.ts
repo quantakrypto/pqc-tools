@@ -56,7 +56,12 @@ OPTIONS
                                 0 forces the in-process serial path
   --top <n>                     List <n> findings in the human report (default: 5)
   --tier <category-3|category-5> Add CNSA migration targets to the report footer
-                                (category-5 = CNSA 2.0: ML-KEM-1024 / ML-DSA-87)
+                                (category-5 = CNSA 2.0: ML-KEM-1024 / ML-DSA-87;
+                                an alias for --profile cnsa-2.0)
+  --profile <id>                Tailor migration guidance to a standards regime:
+                                nist (default) | cnsa-2.0 | bsi-tr-02102 | anssi |
+                                uk-ncsc. Sets the parameter sets, deadlines, and
+                                whether hybridization is required/recommended/optional
   --cache [file]                Reuse findings for unchanged files across runs
                                 (default file: .quantakrypto-cache.json)
   --triage                      BYOK LLM pass that re-ranks findings by real

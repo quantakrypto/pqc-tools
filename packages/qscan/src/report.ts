@@ -15,7 +15,8 @@ import {
   ANALYZABLE_LANGUAGES_LABEL,
   defaultRegistry,
   DEP_VULNERABLE_RULE,
-  formatTierGuidance,
+  formatProfileGuidance,
+  getStandardsProfile,
   PQC_TRANSITION_NOTE,
   SEVERITY_ORDER,
   severityRank,
@@ -32,7 +33,21 @@ import type {
   ScanResult,
   SecurityTier,
   Severity,
+  StandardsProfile,
 } from "@quantakrypto/core";
+
+/** Map the legacy `--tier` to its equivalent standards profile (back-compat alias). */
+const TIER_TO_PROFILE: Record<SecurityTier, string> = {
+  "category-3": "nist",
+  "category-5": "cnsa-2.0",
+};
+
+/** Resolve the effective standards profile from `--profile` or the `--tier` alias. */
+function resolveProfile(profileId?: string, tier?: SecurityTier): StandardsProfile | undefined {
+  if (profileId) return getStandardsProfile(profileId);
+  if (tier) return getStandardsProfile(TIER_TO_PROFILE[tier]);
+  return undefined;
+}
 
 /** Minimal ANSI palette. Empty strings when color is disabled. */
 interface Palette {
@@ -108,7 +123,7 @@ export function renderCbom(result: ScanResult, extra: readonly CycloneDxBom[] = 
  */
 export function renderHuman(
   result: ScanResult,
-  opts: { color?: boolean; topN?: number; tier?: SecurityTier } = {},
+  opts: { color?: boolean; topN?: number; tier?: SecurityTier; profile?: string } = {},
 ): string {
   const c = opts.color ? COLOR : PLAIN;
   const topN = opts.topN ?? 5;
@@ -219,10 +234,12 @@ export function renderHuman(
   lines.push("");
   lines.push(`${c.dim}Next step:${c.reset} ${nextStep(findings)}`);
 
-  // CNSA security-tier migration targets (`--tier`), surfacing remediationForTier.
-  if (opts.tier) {
+  // Regime-tailored migration targets (`--profile`, or the `--tier` alias). Surfaces
+  // the parameter sets AND the regime's hybrid stance so guidance isn't regime-wrong.
+  const profile = resolveProfile(opts.profile, opts.tier);
+  if (profile) {
     lines.push("");
-    const g = formatTierGuidance(inventory.byAlgorithm, opts.tier);
+    const g = formatProfileGuidance(inventory.byAlgorithm, profile);
     lines.push(`${c.bold}${g[0]}${c.reset}`);
     for (const t of g.slice(1)) lines.push(`${c.cyan}${t}${c.reset}`);
   }

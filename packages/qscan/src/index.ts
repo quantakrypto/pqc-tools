@@ -320,6 +320,7 @@ export async function runQscan(
     redactSnippets: options.noSnippets,
     topN: options.topN,
     tier: options.tier,
+    ...(options.profile ? { profile: options.profile } : {}),
     ...(policy ? { policy } : {}),
     ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
   });
@@ -347,6 +348,8 @@ export interface RenderReportOptions {
   topN?: number;
   /** CNSA security tier for the migration-targets footer (`--tier`). */
   tier?: SecurityTier;
+  /** Standards regime for the migration-targets footer (`--profile`). */
+  profile?: string;
   /** Org cryptography policy for the evidence report's §4 verdicts (`--policy`). */
   policy?: CryptoPolicy;
   /** External CBOMs to merge into the `cbom` output (CycloneDX bom-link). */
@@ -365,6 +368,7 @@ export function renderReport(
     redactSnippets = false,
     topN = undefined,
     tier = undefined,
+    profile = undefined,
     policy = undefined,
     mergeCboms = undefined,
   } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
@@ -389,7 +393,7 @@ export function renderReport(
     }
     case "human":
     default:
-      return renderHuman(result, { color, topN, tier });
+      return renderHuman(result, { color, topN, tier, profile });
   }
 }
 

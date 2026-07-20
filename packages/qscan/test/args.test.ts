@@ -152,6 +152,13 @@ test("unknown option throws ArgError", () => {
   assert.throws(() => parseArgs(["-x"]), ArgError);
 });
 
+test("--profile parses a valid regime id and rejects an unknown one", () => {
+  assert.equal(runOptions([]).profile, undefined);
+  assert.equal(runOptions(["--profile", "bsi-tr-02102"]).profile, "bsi-tr-02102");
+  assert.equal(runOptions(["--profile=anssi"]).profile, "anssi");
+  assert.throws(() => parseArgs(["--profile", "eu-made-up"]), /invalid --profile/);
+});
+
 test("missing value throws ArgError", () => {
   assert.throws(() => parseArgs(["--format"]), ArgError);
   assert.throws(() => parseArgs(["--output"]), ArgError);

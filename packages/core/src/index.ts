@@ -105,7 +105,13 @@ export { vulnerableDependencies, DEP_VULNERABLE_RULE, isManifestFile } from "./d
 export { SEVERITY_ORDER, severityRank, meetsThreshold, sarifLevel } from "./severity.js";
 
 // Reporters.
-export { toSarif, toJson, formatSummary, formatTierGuidance } from "./report.js";
+export {
+  toSarif,
+  toJson,
+  formatSummary,
+  formatTierGuidance,
+  formatProfileGuidance,
+} from "./report.js";
 export type { ReportOptions } from "./report.js";
 
 // CycloneDX 1.6 cryptographic bill of materials (CBOM) export.
@@ -127,10 +133,11 @@ export type {
 export { buildPolicyMapping, parseCryptoPolicy } from "./policy.js";
 export type { CryptoPolicy, PolicyVerdict, PolicyMapping, PolicyFindingVerdict } from "./policy.js";
 
-// Remediation lookup (family + tier-aware) and stateful-HBS guidance.
+// Remediation lookup (family + tier-aware + profile-aware) and stateful-HBS guidance.
 export {
   remediationFor,
   remediationForTier,
+  remediationForProfile,
   TIER_PARAMS,
   STATEFUL_HBS_NOTE,
   PQC_TRANSITION_NOTE,
@@ -141,6 +148,16 @@ export type { SecurityTier } from "./remediation.js";
 // Post-quantum standards source of truth + review cadence.
 export { PQC_STANDARDS } from "./standards.js";
 export type { PqcStandards, StandardsCitation, StandardsReviewStatus } from "./standards.js";
+
+// Selectable standards regime profiles (NIST / CNSA / BSI / ANSSI / NCSC).
+export {
+  STANDARDS_PROFILES,
+  DEFAULT_PROFILE_ID,
+  standardsProfileIds,
+  getStandardsProfile,
+  defaultStandardsProfile,
+} from "./standards-profiles.js";
+export type { StandardsProfile, HybridStance } from "./standards-profiles.js";
 
 // CWE identifier constants.
 export {

@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 130 exported symbols.
+Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `CryptoInventory` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `CryptoPolicy` | type |  |
 | `CycloneDxBom` | type |  |
+| `DEFAULT_PROFILE_ID` | value |  |
 | `DEP_VULNERABLE_RULE` | value |  |
 | `DependencyEcosystem` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `Detector` | interface | @quantakrypto/core — shared types (the locked public contract). |
@@ -48,6 +49,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `Finding` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `FindingCategory` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `FixProposal` | type |  |
+| `HybridStance` | type |  |
 | `LoadConfigResult` | type |  |
 | `PQC_STANDARDS` | value |  |
 | `PQC_TRANSITION_NOTE` | value |  |
@@ -73,6 +75,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `ReportOptions` | type |  |
 | `RuleMeta` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `SEVERITY_ORDER` | value |  |
+| `STANDARDS_PROFILES` | value |  |
 | `STATEFUL_HBS_NOTE` | value |  |
 | `SarifLog` | type |  |
 | `ScanChunk` | type |  |
@@ -84,6 +87,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `SignEvidenceOptions` | type |  |
 | `SourceLocation` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `StandardsCitation` | type |  |
+| `StandardsProfile` | type |  |
 | `StandardsReviewStatus` | type |  |
 | `TIER_PARAMS` | value |  |
 | `TRIAGE_RUBRIC` | value |  |
@@ -111,11 +115,14 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `compareFindings` | value |  |
 | `configToggleCodemod` | value |  |
 | `defaultRegistry` | value |  |
+| `defaultStandardsProfile` | value |  |
 | `detectFile` | value |  |
 | `detectors` | value |  |
 | `fingerprintFinding` | value |  |
+| `formatProfileGuidance` | value |  |
 | `formatSummary` | value |  |
 | `formatTierGuidance` | value |  |
+| `getStandardsProfile` | value |  |
 | `isAnalyzableSource` | value |  |
 | `isBinaryPath` | value |  |
 | `isManifestFile` | value |  |
@@ -128,6 +135,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `parseCryptoPolicy` | value |  |
 | `remediateFindings` | value |  |
 | `remediationFor` | value |  |
+| `remediationForProfile` | value |  |
 | `remediationForTier` | value |  |
 | `renderPreflight` | value |  |
 | `sarifLevel` | value |  |
@@ -136,6 +144,7 @@ Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 | `scanParallel` | value |  |
 | `severityRank` | value |  |
 | `signReadinessReport` | value |  |
+| `standardsProfileIds` | value |  |
 | `statefulHbsApplies` | value |  |
 | `toCbom` | value |  |
 | `toJson` | value |  |

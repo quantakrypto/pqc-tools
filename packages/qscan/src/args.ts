@@ -8,7 +8,12 @@
  * path. Unknown flags are a usage error.
  */
 
-import { meetsThreshold, SEVERITY_ORDER, severityRank } from "@quantakrypto/core";
+import {
+  meetsThreshold,
+  SEVERITY_ORDER,
+  severityRank,
+  standardsProfileIds,
+} from "@quantakrypto/core";
 import type { ContextLevel, ReportFormat, SecurityTier, Severity } from "@quantakrypto/core";
 import type { ColorChoice } from "./color.js";
 
@@ -106,6 +111,13 @@ export interface QscanOptions {
   maxFindings?: number;
   /** CNSA security tier for the migration-targets footer (`--tier`). Default: none. */
   tier?: SecurityTier;
+  /**
+   * Standards regime the migration guidance is tailored to (`--profile`): one of the
+   * built-in ids (nist / cnsa-2.0 / bsi-tr-02102 / anssi / uk-ncsc). Default: none
+   * (`--tier` maps to a profile for back-compat). Governs parameter sets, deadlines,
+   * and the hybrid stance surfaced in remediation.
+   */
+  profile?: string;
   /** Org cryptography policy file (`--policy`) for the evidence report's §4 verdicts. */
   policy?: string;
   /**
@@ -322,6 +334,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--tier":
         options.tier = asTier(takeValue());
         break;
+      case "--profile":
+        options.profile = asProfile(takeValue());
+        break;
       case "--context":
         options.contextLevel = asContextLevel(takeValue());
         break;
@@ -464,6 +479,13 @@ function asContextLevel(value: string): ContextLevel {
 function asTier(value: string): SecurityTier {
   if ((SECURITY_TIERS as readonly string[]).includes(value)) return value as SecurityTier;
   throw new ArgError(`invalid --tier "${value}" (expected one of: ${SECURITY_TIERS.join(", ")})`);
+}
+
+/** Validate a `--profile` value against the built-in standards regimes. */
+function asProfile(value: string): string {
+  const ids = standardsProfileIds();
+  if (ids.includes(value)) return value;
+  throw new ArgError(`invalid --profile "${value}" (expected one of: ${ids.join(", ")})`);
 }
 
 /** Validate/normalize a `--llm-provider` value. */

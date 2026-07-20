@@ -49,13 +49,28 @@ test("renderHuman warns when no analyzable source was scanned", () => {
   assert.doesNotMatch(out, /No quantum-vulnerable cryptography detected/);
 });
 
-test("renderHuman --tier category-5 surfaces the CNSA 2.0 migration targets", () => {
+test("renderHuman --tier category-5 aliases to the CNSA 2.0 profile guidance", () => {
   const result = makeResult([makeFinding({ algorithm: "RSA" })]);
   const out = renderHuman(result, { tier: "category-5" });
-  assert.match(out, /CNSA 2\.0 \(Category 5\) migration targets/);
+  assert.match(out, /CNSA 2\.0.*migration targets/);
   assert.match(out, /ML-KEM-1024/);
-  // Without --tier the CNSA footer is absent (opt-in).
-  assert.doesNotMatch(renderHuman(result), /CNSA 2\.0 \(Category 5\)/);
+  // Without --tier / --profile the migration-targets footer is absent (opt-in).
+  assert.doesNotMatch(renderHuman(result), /migration targets/);
+});
+
+test("renderHuman --profile tailors guidance + hybrid stance per regime", () => {
+  const result = makeResult([makeFinding({ algorithm: "ECDH" })]);
+  // ANSSI: hybrid REQUIRED.
+  const anssi = renderHuman(result, { profile: "anssi" });
+  assert.match(anssi, /ANSSI.*migration targets/);
+  assert.match(anssi, /hybrid required/i);
+  assert.match(anssi, /requires classical\+PQC hybridization/i);
+  // CNSA 2.0: hybrids OPTIONAL and the 1024-level params.
+  const cnsa = renderHuman(result, { profile: "cnsa-2.0" });
+  assert.match(cnsa, /hybrids optional/i);
+  assert.match(cnsa, /ML-KEM-1024/);
+  // BSI: hybrid required, commercial-level params.
+  assert.match(renderHuman(result, { profile: "bsi-tr-02102" }), /hybrid required/i);
 });
 
 test("renderHuman surfaces the PQC standards-&-timeline footer when there are findings", () => {

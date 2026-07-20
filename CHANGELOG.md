@@ -6,6 +6,22 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — selectable standards regimes (`--profile`)
+
+- **`qscan --profile <id>`** tailors the migration guidance to a standards regime
+  instead of a single hardcoded NIST/CNSA worldview: **nist** (default), **cnsa-2.0**,
+  **bsi-tr-02102**, **anssi**, **uk-ncsc**. Each profile carries its parameter sets,
+  deprecate/disallow deadlines, and — the key fix — a **hybrid stance**. The
+  pre-profile code told everyone "hybrids optional" (CNSA's position), which is
+  **wrong** for an ANSSI or BSI audience where hybridization is *required*; now the
+  report says "hybrid required" for ANSSI/BSI and "hybrids optional" for CNSA 2.0,
+  with the regime's own citation. `--tier category-5` is now an alias for
+  `--profile cnsa-2.0`, and `--policy` still composes an org's exceptions on top.
+  New `@quantakrypto/core` API: `StandardsProfile`, `STANDARDS_PROFILES`,
+  `getStandardsProfile`, `standardsProfileIds`, `defaultStandardsProfile`,
+  `remediationForProfile`, `formatProfileGuidance`. A drift test keeps the profile
+  parameter sets aligned with `PQC_STANDARDS`.
+
 ### Added — evidence signing orchestration (A.8.24)
 
 - **`qscan --format evidence --sign <cmd>` / `--timestamp <cmd>`** complete the

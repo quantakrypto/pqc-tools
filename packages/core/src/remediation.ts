@@ -6,6 +6,7 @@
  * standards to track are captured in {@link PQC_TRANSITION_NOTE}.
  */
 import type { AlgorithmFamily, Remediation } from "./types.js";
+import type { StandardsProfile } from "./standards-profiles.js";
 
 /** Canonical remediation table, keyed by algorithm family. */
 const REMEDIATIONS: Record<AlgorithmFamily, Remediation> = {
@@ -185,6 +186,44 @@ export function remediationForTier(
     algorithm,
     recommendation: `${base.recommendation} — ${tier}: ${primary}`,
     detail: `${base.detail} ${params.note} For this tier use ${params.kem} (KEM) and ${params.signature} (signatures).`,
+  };
+}
+
+/**
+ * Regime-aware remediation. Composes the base family guidance with a
+ * {@link StandardsProfile}'s parameter sets, HYBRID STANCE, and deprecation
+ * deadlines, so an ANSSI/BSI audience is told hybrid is *required* while a CNSA 2.0
+ * audience is told it is *optional* (and pointed at the 1024-level hybrid). This is
+ * the profile-driven successor to {@link remediationForTier}; `--tier category-5`
+ * resolves to the `cnsa-2.0` profile.
+ */
+export function remediationForProfile(
+  algorithm: AlgorithmFamily,
+  profile: StandardsProfile,
+): Remediation {
+  const base = REMEDIATIONS[algorithm];
+  const isConf = isConfidentialityFamily(algorithm);
+  const primary = isConf ? profile.paramSets.kem : profile.paramSets.signature;
+  // The hybrid stance governs KEY ESTABLISHMENT, so it is surfaced for confidentiality
+  // families; signature families migrate to a stateless PQC signer directly.
+  const stanceWord =
+    profile.hybridStance === "required"
+      ? "hybrid required"
+      : profile.hybridStance === "recommended"
+        ? "hybrid recommended"
+        : "hybrids optional";
+  const recommendation = isConf
+    ? `${primary} — ${profile.name}: ${stanceWord}`
+    : `${primary} — ${profile.name}`;
+  const hybridClause = isConf ? ` ${profile.hybridGuidance}` : "";
+  return {
+    algorithm,
+    recommendation,
+    detail:
+      `${base.detail} Under ${profile.name} (${profile.citation}), use ${profile.paramSets.kem} for ` +
+      `key establishment and ${profile.paramSets.signature} for signatures; classical public-key ` +
+      `crypto is deprecated after ${profile.deprecateAfter} and disallowed after ${profile.disallowAfter}.` +
+      hybridClause,
   };
 }
 
