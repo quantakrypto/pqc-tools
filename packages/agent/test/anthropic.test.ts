@@ -87,3 +87,62 @@ test("adapter surfaces an HTTP error", async () => {
     /HTTP 401/,
   );
 });
+
+test("adapter aborts a hung request when the timeout fires", async () => {
+  // The fetch only settles when the request's AbortSignal fires, so this proves
+  // the adapter's timeout actually aborts an unresponsive endpoint.
+  const hangUntilAbort = (async (_url: string, init: { signal: AbortSignal }) =>
+    new Promise<Response>((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new Error("aborted by signal")));
+    })) as unknown as typeof fetch;
+  const client = anthropicClient(
+    { provider: "anthropic", model: "claude-x", apiKey: "k", timeoutMs: 20 },
+    hangUntilAbort,
+  );
+  await assert.rejects(
+    () => client.complete({ system: "s", user: "u", schema, maxTokens: 256 }),
+    /aborted/,
+  );
+});
+
+test("adapter propagates a transport (network) error", async () => {
+  const netFail = (async () => {
+    throw new Error("ECONNREFUSED 127.0.0.1:443");
+  }) as unknown as typeof fetch;
+  const client = anthropicClient(
+    { provider: "anthropic", model: "claude-x", apiKey: "k" },
+    netFail,
+  );
+  await assert.rejects(
+    () => client.complete({ system: "s", user: "u", schema, maxTokens: 256 }),
+    /ECONNREFUSED/,
+  );
+});
+
+test("the API key travels ONLY in the x-api-key header, never in the URL or body", async () => {
+  const SECRET = "sk-ant-SECRET-abc123";
+  let captured: { url: string; init: { headers: Record<string, string>; body: string } } = {
+    url: "",
+    init: { headers: {}, body: "" },
+  };
+  const capFetch = (async (
+    url: string,
+    init: { headers: Record<string, string>; body: string },
+  ) => {
+    captured = { url, init };
+    return new Response(
+      JSON.stringify({
+        content: [{ type: "text", text: JSON.stringify({ exposureScore: 1, priority: "later" }) }],
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const client = anthropicClient(
+    { provider: "anthropic", model: "claude-x", apiKey: SECRET },
+    capFetch,
+  );
+  await client.complete({ system: "s", user: "u", schema, maxTokens: 64 });
+  assert.equal(captured.init.headers["x-api-key"], SECRET, "key is in the x-api-key header");
+  assert.doesNotMatch(captured.url, /SECRET/, "key is not in the request URL");
+  assert.doesNotMatch(captured.init.body, /SECRET/, "key is not in the request body");
+});
