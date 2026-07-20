@@ -1,11 +1,10 @@
 /**
  * Tool-level tests, driven through {@link McpServer.handle} via `tools/call`.
  *
- * `@quantakrypto/core` is partly stubbed (scan/buildInventory/remediationFor throw
- * "not implemented"). These tests assert the MCP envelope contract and the
- * behaviour that holds regardless of core's stub state:
- *   - tool handlers never crash the server (no protocol error from a stub);
+ * These exercise the real `@quantakrypto/core` pipeline through the MCP envelope:
+ *   - tool handlers never crash the server (no protocol error escapes);
  *   - every result is a well-formed { content: [...], isError? } object;
+ *   - scan_path / explain_finding return real scan summaries and remediation;
  *   - suggest_hybrid always returns actionable text via its static fallback.
  */
 
@@ -161,16 +160,12 @@ test("explain_finding with neither ruleId nor algorithm errors", async () => {
   assert.match(result.content[0].text, /requires at least one/i);
 });
 
-test("explain_finding by algorithm returns remediation or a clean error", async () => {
+test("explain_finding by algorithm returns real PQC remediation", async () => {
   const result = await callTool("explain_finding", { algorithm: "ECDSA" });
+  assert.notEqual(result.isError, true, "core resolves ECDSA remediation, no error");
   const text = result.content.map((c) => c.text).join("\n");
-  // With a real core: remediation text. With the stub: a readable failure result.
-  // Either way the envelope is valid and the algorithm is echoed/referenced.
-  if (result.isError) {
-    assert.match(text, /failed/i);
-  } else {
-    assert.match(text, /ECDSA/);
-  }
+  assert.match(text, /ECDSA/, "the algorithm is echoed");
+  assert.match(text, /Shor|quantum|ML-DSA|migrat/i, "explains the quantum risk / migration target");
 });
 
 test("list_rules returns a catalog (possibly empty) as valid content", async () => {
@@ -186,13 +181,23 @@ test("scan_path requires a path argument", async () => {
   assert.match(result.content[0].text, /path/i);
 });
 
-test("scan_path on a stubbed core surfaces a clean error, not a crash", async () => {
-  const result = await callTool("scan_path", { path: "." });
-  // The stub throws "not implemented"; the tool maps it to an isError result.
-  // When core lands, this returns a real summary instead.
-  assert.ok(Array.isArray(result.content));
-  if (result.isError) {
-    assert.match(result.content[0].text, /scan failed/i);
+test("scan_path returns a real scan summary for a fixture with classical crypto", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "qk-mcp-scan-")));
+  try {
+    writeFileSync(
+      join(root, "keys.ts"),
+      "import { generateKeyPairSync } from 'node:crypto';\n" +
+        "export const k = () => generateKeyPairSync('rsa', { modulusLength: 2048 });\n",
+    );
+    await withEnv({ QUANTAKRYPTO_MCP_ROOT: root }, async () => {
+      const result = await callTool("scan_path", { path: "keys.ts" });
+      assert.notEqual(result.isError, true, "a real scan succeeds, no stub error");
+      const text = result.content.map((c) => c.text).join("\n");
+      assert.match(text, /Files scanned:\s*1/, "reports the single file scanned");
+      assert.match(text, /Findings:\s*[1-9]/, "reports the RSA finding");
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

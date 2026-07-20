@@ -443,7 +443,8 @@ export function maskCommentLines(content: string, markers: readonly string[]): s
 }
 
 /**
- * Blank out C-style `/* … *​/` BLOCK comments (multi-line included), replacing every
+ * Blank out C-style block comments (the `slash-star … star-slash` form, multi-line
+ * included), replacing every
  * character with a space and preserving newlines so byte offsets — and therefore
  * finding line/column — stay exact. Complements {@link maskCommentLines}, which only
  * masks whole single-line comments: an HCL/Bicep resource wrapped in a block comment
