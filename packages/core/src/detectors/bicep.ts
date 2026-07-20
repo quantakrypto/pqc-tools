@@ -15,7 +15,13 @@
  *    "tls".
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
+import {
+  eachMatch,
+  findingFromRule,
+  hasExtension,
+  maskBlockComments,
+  maskCommentLines,
+} from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 const BICEP_EXTENSIONS: readonly string[] = [".bicep"];
@@ -79,9 +85,9 @@ export const bicepDetector: Detector = {
   rules: [RULE_BICEP_KTY_RSA, RULE_BICEP_KTY_EC, RULE_BICEP_MIN_TLS],
   appliesTo: (f) => hasExtension(f, BICEP_EXTENSIONS),
   detect({ file, content }): Finding[] {
-    // Bicep comments are `//` and `/* */`; mask whole comment lines so a commented-out
-    // resource can't fire. Offsets preserved.
-    const scan = maskCommentLines(content, ["//", "/*"]);
+    // Bicep comments are `//` and `/* … */`; mask block comments (multi-line) then
+    // whole `//` comment lines so a commented-out resource can't fire. Offsets preserved.
+    const scan = maskCommentLines(maskBlockComments(content), ["//"]);
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, scan, (m) =>

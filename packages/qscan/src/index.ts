@@ -28,6 +28,7 @@ import type {
   EvidenceSigner,
   Finding,
   ParallelScanOptions,
+  ReadinessReport,
   ScanResult,
   SecurityTier,
 } from "@quantakrypto/core";
@@ -314,21 +315,26 @@ export async function runQscan(
     }
   }
 
-  return {
-    result,
-    suppressed,
-    report: renderReport(result, options.format, {
-      color: hooks.color ?? false,
-      redactSnippets: options.noSnippets,
-      topN: options.topN,
-      tier: options.tier,
-      ...(policy ? { policy } : {}),
-      ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
-      ...(signer ? { signer } : {}),
-      ...(timestamper ? { timestamper } : {}),
-    }),
-    exitCode,
-  };
+  let report = renderReport(result, options.format, {
+    color: hooks.color ?? false,
+    redactSnippets: options.noSnippets,
+    topN: options.topN,
+    tier: options.tier,
+    ...(policy ? { policy } : {}),
+    ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
+  });
+  // Evidence signing is orchestrated here (async: an external signer may be async),
+  // after the synchronous renderer has produced the unsigned report (ADR-0004: the
+  // tool orchestrates a signer, it does not implement crypto).
+  if (options.format === "evidence" && (signer || timestamper)) {
+    const signed = await signReadinessReport(JSON.parse(report) as ReadinessReport, {
+      signer,
+      timestamper,
+    });
+    report = JSON.stringify(signed, null, 2);
+  }
+
+  return { result, suppressed, report, exitCode };
 }
 
 /** Rendering controls for {@link renderReport}. */
@@ -345,10 +351,6 @@ export interface RenderReportOptions {
   policy?: CryptoPolicy;
   /** External CBOMs to merge into the `cbom` output (CycloneDX bom-link). */
   mergeCboms?: CycloneDxBom[];
-  /** External signer for the evidence attestation's detached signature (`--sign`). */
-  signer?: EvidenceSigner;
-  /** External RFC-3161 timestamper for the evidence attestation (`--timestamp`). */
-  timestamper?: EvidenceSigner;
 }
 
 /** Render a scan result in the requested format. */
@@ -365,8 +367,6 @@ export function renderReport(
     tier = undefined,
     policy = undefined,
     mergeCboms = undefined,
-    signer = undefined,
-    timestamper = undefined,
   } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
   switch (format) {
     case "json":
@@ -377,17 +377,14 @@ export function renderReport(
       return renderCbom(result, mergeCboms);
     case "evidence": {
       // ISO A.8.24 readiness report; repo/commit come from CI env when present.
-      // A `--policy` file adds the §4 conformant/violation/transition verdicts.
-      let report = buildReadinessReport(result, {
+      // A `--policy` file adds the §4 conformant/violation/transition verdicts. The
+      // attestation is left unsigned here; signing is an async step in runQscan (an
+      // external signer may be async), so this renderer stays synchronous.
+      const report = buildReadinessReport(result, {
         repository: process.env.GITHUB_REPOSITORY,
         commit: process.env.GITHUB_SHA,
         ...(policy ? { policy } : {}),
       });
-      // Optionally fill the attestation via an EXTERNAL signer / timestamper (ADR-0004:
-      // the tool orchestrates, it does not implement crypto).
-      if (signer || timestamper) {
-        report = signReadinessReport(report, { signer, timestamper });
-      }
       return JSON.stringify(report, null, 2);
     }
     case "human":

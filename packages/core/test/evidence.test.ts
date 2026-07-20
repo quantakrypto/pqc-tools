@@ -73,11 +73,11 @@ function fakeSigner(label: string, sink?: { payload?: string }): EvidenceSigner 
   };
 }
 
-test("signReadinessReport fills the attestation from an external signer over the contentHash", () => {
+test("signReadinessReport fills the attestation from an external signer over the contentHash", async () => {
   const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
   assert.equal(base.attestation.signature, null);
   const seen = {};
-  const signed = signReadinessReport(base, { signer: fakeSigner("openssl", seen) });
+  const signed = await signReadinessReport(base, { signer: fakeSigner("openssl", seen) });
   // The signer receives EXACTLY the contentHash and its output is recorded verbatim.
   assert.equal(seen.payload, base.attestation.contentHash);
   assert.equal(signed.attestation.signature, `SIG(${base.attestation.contentHash})`);
@@ -88,17 +88,28 @@ test("signReadinessReport fills the attestation from an external signer over the
   assert.equal(base.attestation.signature, null);
 });
 
-test("signReadinessReport can attach a timestamp independently of a signature", () => {
+test("signReadinessReport can attach a timestamp independently of a signature", async () => {
   const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
-  const tsOnly = signReadinessReport(base, { timestamper: fakeSigner("openssl-ts") });
+  const tsOnly = await signReadinessReport(base, { timestamper: fakeSigner("openssl-ts") });
   assert.equal(tsOnly.attestation.timestamp, `SIG(${base.attestation.contentHash})`);
   assert.equal(tsOnly.attestation.timestampedWith, "openssl-ts");
   assert.equal(tsOnly.attestation.signature, null, "no --sign → signature stays null");
 });
 
-test("signReadinessReport with no signers is a no-op", () => {
+test("signReadinessReport with no signers is a no-op", async () => {
   const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
-  const same = signReadinessReport(base, {});
+  const same = await signReadinessReport(base, {});
   assert.equal(same.attestation.signature, null);
   assert.equal(same.attestation.timestamp, null);
+});
+
+test("signReadinessReport awaits an ASYNC signer (KMS/TSA-over-HTTP shape)", async () => {
+  const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
+  const asyncSigner: EvidenceSigner = {
+    label: "kms",
+    sign: async (payload) => Promise.resolve(`ASYNC(${payload})`),
+  };
+  const signed = await signReadinessReport(base, { signer: asyncSigner });
+  assert.equal(signed.attestation.signature, `ASYNC(${base.attestation.contentHash})`);
+  assert.equal(signed.attestation.signedWith, "kms");
 });

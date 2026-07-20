@@ -154,8 +154,12 @@ export function buildReadinessReport(
  */
 export interface EvidenceSigner {
   label: string;
-  /** Produce a detached signature / timestamp token (opaque string) over `payload`. */
-  sign(payload: string): string;
+  /**
+   * Produce a detached signature / timestamp token (opaque string) over `payload`.
+   * May be async so a future signer can shell out OR call a KMS / RFC-3161 TSA over
+   * the network without foreclosing that once this contract freezes at 1.0.
+   */
+  sign(payload: string): string | Promise<string>;
 }
 
 /** Options for {@link signReadinessReport}: a detached-signature and/or a timestamp signer. */
@@ -172,14 +176,14 @@ export interface SignEvidenceOptions {
  * NEW report; the hashed body is untouched (attestation is excluded from the hash),
  * so signing never changes `contentHash`.
  */
-export function signReadinessReport(
+export async function signReadinessReport(
   report: ReadinessReport,
   opts: SignEvidenceOptions,
-): ReadinessReport {
+): Promise<ReadinessReport> {
   const payload = report.attestation.contentHash;
-  const signature = opts.signer ? opts.signer.sign(payload) : report.attestation.signature;
+  const signature = opts.signer ? await opts.signer.sign(payload) : report.attestation.signature;
   const timestamp = opts.timestamper
-    ? opts.timestamper.sign(payload)
+    ? await opts.timestamper.sign(payload)
     : report.attestation.timestamp;
   return {
     ...report,

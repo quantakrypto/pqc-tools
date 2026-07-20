@@ -71,6 +71,13 @@ test("a commented-out Bicep key declaration does not fire", () => {
   assert.equal(rule(run("keyvault.bicep", commented), "bicep-keyvault-rsa"), undefined);
 });
 
+test("a key inside a /* … */ BLOCK comment does not fire (multi-line)", () => {
+  // Regression: line-only masking left the inner `kty: 'RSA'` live because it doesn't
+  // START with `/*`. Block-comment masking now blanks the whole span.
+  const blocked = ["/*", KV_RSA, "*/", "output ok bool = true"].join("\n");
+  assert.equal(rule(run("keyvault.bicep", blocked), "bicep-keyvault-rsa"), undefined);
+});
+
 test("bicep detector is gated to .bicep files", () => {
   assert.deepEqual(
     run("main.tf", KV_RSA).filter((f) => f.ruleId.startsWith("bicep-")),

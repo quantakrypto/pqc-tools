@@ -16,7 +16,13 @@
  * (hndl:true) since a provisioned EC key can feed ECDH.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
+import {
+  eachMatch,
+  findingFromRule,
+  hasExtension,
+  maskBlockComments,
+  maskCommentLines,
+} from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const TF_EXTENSIONS: readonly string[] = [".tf", ".tf.json"];
@@ -160,9 +166,10 @@ export const terraformDetector: Detector = {
   appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
-    // A commented HCL line (`# algorithm = "RSA"`, migration notes, `//` comments) is
-    // not an active resource argument. Mask comment lines; offsets preserved.
-    const scan = maskCommentLines(content, ["#", "//"]);
+    // A commented HCL argument (`# algorithm = "RSA"`, `//` lines, and `/* … */` block
+    // comments) is not an active resource argument. Mask block comments then line
+    // comments; offsets preserved.
+    const scan = maskCommentLines(maskBlockComments(content), ["#", "//"]);
     const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, scan, (m) =>
         findings.push(

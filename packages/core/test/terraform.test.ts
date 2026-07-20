@@ -94,6 +94,15 @@ test("a COMMENTED HCL argument (# or //) is NOT flagged", () => {
   );
 });
 
+test("a resource inside a /* … */ HCL block comment is NOT flagged", () => {
+  const blocked =
+    '/*\nresource "tls_private_key" "old" {\n  algorithm = "RSA"\n}\n*/\nvariable "x" {}';
+  assert.deepEqual(
+    run("main.tf", blocked).filter((f) => f.ruleId.startsWith("tf-")),
+    [],
+  );
+});
+
 test("tls_private_key ED25519 is flagged as EdDSA (signature, not HNDL)", () => {
   const tf = 'resource "tls_private_key" "k" {\n  algorithm = "ED25519"\n}';
   const f = rule(run("main.tf", tf), "tf-ed25519-key");

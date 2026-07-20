@@ -441,3 +441,31 @@ export function maskCommentLines(content: string, markers: readonly string[]): s
   }
   return lines.join("\n");
 }
+
+/**
+ * Blank out C-style `/* … *​/` BLOCK comments (multi-line included), replacing every
+ * character with a space and preserving newlines so byte offsets — and therefore
+ * finding line/column — stay exact. Complements {@link maskCommentLines}, which only
+ * masks whole single-line comments: an HCL/Bicep resource wrapped in a block comment
+ * has its inner lines mid-block (they don't START with `/*`), so a line-only masker
+ * leaves them live. Not string-aware — a literal `/*` inside a config string value is
+ * rare and, for these token detectors, a tolerable over-mask.
+ */
+export function maskBlockComments(content: string): string {
+  if (!content.includes("/*")) return content;
+  const out: string[] = [];
+  let i = 0;
+  const n = content.length;
+  while (i < n) {
+    if (content[i] === "/" && content[i + 1] === "*") {
+      const end = content.indexOf("*/", i + 2);
+      const stop = end === -1 ? n : end + 2;
+      for (let j = i; j < stop; j++) out.push(content[j] === "\n" ? "\n" : " ");
+      i = stop;
+    } else {
+      out.push(content[i]);
+      i++;
+    }
+  }
+  return out.join("");
+}
