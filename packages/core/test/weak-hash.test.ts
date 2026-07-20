@@ -117,3 +117,43 @@ test("the same tokens in prose docs (.md) are NOT flagged", () => {
 test("a commented-out SHA1withRSA line is NOT flagged", () => {
   assert.deepEqual(run("Sign.java", '// Signature s = Signature.getInstance("SHA1withRSA");'), []);
 });
+
+test("audit H3: .NET SignData with a nested-call first argument is still flagged", () => {
+  const src =
+    "var sig = rsa.SignData(Encoding.UTF8.GetBytes(msg), HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);";
+  assert.ok(rule(run("Signer.cs", src), "weak-hash-sha1-signature"), "nested-arg SignData(SHA1)");
+  const md5 =
+    "var h = rsa.SignHash(Hash.Compute(x), HashAlgorithmName.MD5, RSASignaturePadding.Pkcs1);";
+  assert.ok(rule(run("Signer.cs", md5), "weak-hash-md5-signature"), "nested-arg SignHash(MD5)");
+});
+
+test("audit M1: openssl x509 read-only thumbprint ops are NOT flagged (only signing is)", () => {
+  // Display/identifier operations — NOT signature generation.
+  assert.deepEqual(
+    run("ops.sh", "openssl x509 -in cert.pem -noout -fingerprint -sha1").filter((f) =>
+      f.ruleId.startsWith("weak-hash-"),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    run("ops.sh", "openssl x509 -in cert.pem -subject_hash -sha1").filter((f) =>
+      f.ruleId.startsWith("weak-hash-"),
+    ),
+    [],
+  );
+  // Actual signing operations still fire.
+  assert.ok(
+    rule(
+      run("ca.sh", "openssl req -new -x509 -sha1 -key k.pem -out c.pem"),
+      "weak-hash-sha1-signature",
+    ),
+    "self-signed cert gen",
+  );
+  assert.ok(
+    rule(
+      run("ca.sh", "openssl x509 -req -signkey ca.key -sha1 -in csr.pem"),
+      "weak-hash-sha1-signature",
+    ),
+    "sign a CSR",
+  );
+});

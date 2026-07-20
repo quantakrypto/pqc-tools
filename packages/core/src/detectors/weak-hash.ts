@@ -83,22 +83,33 @@ const RE_SHA1_X509 = /\b(?:sha-?1WithRSAEncryption|ecdsa-with-SHA-?1|dsaWithSHA-
 // X.509 signature-algorithm dotted OIDs (sha1WithRSAEncryption, ecdsa-with-SHA1).
 // Lookarounds keep the id from matching inside a longer OID.
 const RE_SHA1_OID = /(?<![\d.])(?:1\.2\.840\.113549\.1\.1\.5|1\.2\.840\.10045\.4\.1)(?![\d.])/g;
-// OpenSSL CLI: `-sha1` on the same line as `openssl` AND a cert/signing marker
-// (`req` / `x509` / `ca` / `-sign` / `-signkey`), in either order. A bare
-// `openssl dgst -sha1 file` (checksum, no `-sign`) is NOT matched.
-const RE_SHA1_OPENSSL =
-  /openssl\b[^\n]*?(?:\b(?:req|x509|ca)\b|-sign(?:key)?\b)[^\n]*?-sha1\b|openssl\b[^\n]*?-sha1\b[^\n]*?(?:\b(?:req|x509|ca)\b|-sign(?:key)?\b)/gi;
-// .NET: a weak hash bound to a signing call (`.SignData(…)` / `.SignHash(…)`),
-// as `HashAlgorithmName.SHA1` or the legacy `"SHA1"` string argument.
-const RE_SHA1_DOTNET = /\.Sign(?:Data|Hash)\s*\([^)]*?(?:HashAlgorithmName\.SHA1|["']SHA-?1["'])/gi;
+// OpenSSL CLI: `-sha1` on the same line as `openssl` AND an actual SIGNING marker
+// (`req` / `ca` subcommand, or `-sign`/`-signkey`/`-CA`/`-CAkey`), in either order.
+// A bare `x509` subcommand is NOT a signing marker — `openssl x509 -fingerprint
+// -sha1` / `-subject_hash` are read-only thumbprint/identifier ops, not signature
+// generation (audit M1). `openssl dgst -sha1 file` (checksum) is likewise unmatched.
+const OPENSSL_SIGN = String.raw`(?:\breq\b|\bca\b|-sign(?:key)?\b|-CA(?:key)?\b)`;
+const RE_SHA1_OPENSSL = new RegExp(
+  `openssl\\b[^\\n]*?${OPENSSL_SIGN}[^\\n]*?-sha1\\b|openssl\\b[^\\n]*?-sha1\\b[^\\n]*?${OPENSSL_SIGN}`,
+  "gi",
+);
+// .NET: a weak hash bound to a signing call (`.SignData(…)` / `.SignHash(…)`), as
+// `HashAlgorithmName.SHA1` or the legacy `"SHA1"` string arg. Bounded by `;` (the
+// statement), NOT `)` — the first argument is often itself a call
+// (`.SignData(Encoding.UTF8.GetBytes(m), HashAlgorithmName.SHA1, …)`), so a
+// `[^)]` span would stop at the inner `)` and miss it (audit H3).
+const RE_SHA1_DOTNET =
+  /\.Sign(?:Data|Hash)\s*\([^;]*?(?:HashAlgorithmName\.SHA-?1|["']SHA-?1["'])/gi;
 
 // --- MD5 in a signature/certificate algorithm identifier -----------------------
 const RE_MD5_JAVA = /\bMD5with(?:RSA|DSA|ECDSA)\b/gi;
 const RE_MD5_X509 = /\bmd5WithRSAEncryption\b/gi;
 const RE_MD5_OID = /(?<![\d.])1\.2\.840\.113549\.1\.1\.4(?![\d.])/g;
-const RE_MD5_OPENSSL =
-  /openssl\b[^\n]*?(?:\b(?:req|x509|ca)\b|-sign(?:key)?\b)[^\n]*?-md5\b|openssl\b[^\n]*?-md5\b[^\n]*?(?:\b(?:req|x509|ca)\b|-sign(?:key)?\b)/gi;
-const RE_MD5_DOTNET = /\.Sign(?:Data|Hash)\s*\([^)]*?(?:HashAlgorithmName\.MD5|["']MD5["'])/gi;
+const RE_MD5_OPENSSL = new RegExp(
+  `openssl\\b[^\\n]*?${OPENSSL_SIGN}[^\\n]*?-md5\\b|openssl\\b[^\\n]*?-md5\\b[^\\n]*?${OPENSSL_SIGN}`,
+  "gi",
+);
+const RE_MD5_DOTNET = /\.Sign(?:Data|Hash)\s*\([^;]*?(?:HashAlgorithmName\.MD5|["']MD5["'])/gi;
 
 const RULE_SHA1: RuleMeta = {
   id: "weak-hash-sha1-signature",

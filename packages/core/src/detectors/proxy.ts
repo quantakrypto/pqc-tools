@@ -53,13 +53,14 @@ import {
 } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
-// --- Envoy: a downstream/upstream TLS context that references a leaf cert + key.
-// `common_tls_context:` (shared by Downstream/UpstreamTlsContext) with a
-// `tls_certificates:` list is the canonical shape; anchor on the distinctive
-// `certificate_chain:` and `private_key:` fields that list carries. Also match
-// the two `*TlsContext` type names directly, and the `tls_certificates:` key.
+// --- Envoy: match ONLY the Envoy-DISTINCTIVE tokens (`common_tls_context:`, the
+// `*TlsContext` type names, `tls_certificates:`, the `envoy.transport_sockets.tls`
+// transport socket). The generic `certificate_chain:` / `private_key:` fields are
+// deliberately NOT matched here — they appear in unrelated YAML and would
+// cross-label a non-Envoy file as Envoy (audit L2). A distinctive token IS the
+// evidence, so no separate marker gate is needed for this rule (audit L1).
 const RE_ENVOY_TLS =
-  /\b(?:DownstreamTlsContext|UpstreamTlsContext|common_tls_context\s*:|tls_certificates\s*:|(?:certificate_chain|private_key)\s*:)/g;
+  /\b(?:DownstreamTlsContext|UpstreamTlsContext|common_tls_context\s*:|tls_certificates\s*:|envoy\.transport_sockets\.tls)/g;
 
 // --- Nginx: the classic `ssl_certificate` / `ssl_certificate_key` directive
 // pair. `ssl_certificate_key` is matched first-class; `ssl_certificate` requires
@@ -157,24 +158,29 @@ const RULE_GRPC: RuleMeta = {
 };
 
 /**
- * Distinctive proxy/gRPC markers. `detect()` bails unless the (comment-masked)
- * content carries one, so generic tokens (`ssl_certificate`, `private_key:`)
- * can't fire on unrelated config. Deliberately strict: a bare `private_key:` in
- * a random YAML, or a plain `certificates:` list, has NO marker here.
+ * PERF fast-reject only — a superset of substrings that appear in every rule's
+ * matchable input, so it can never drop a file a rule would flag. Correctness is
+ * in the per-rule regexes (each is distinctive enough to self-gate); this list
+ * exists purely to skip the regex work on files with no proxy/gRPC token at all.
  */
-const PROXY_MARKERS: readonly string[] = [
-  "common_tls_context",
-  "DownstreamTlsContext",
-  "UpstreamTlsContext",
-  "envoy.transport_sockets.tls",
+const PROXY_FAST_REJECT: readonly string[] = [
+  // Envoy
+  "tls_context",
+  "TlsContext",
+  "tls_certificates",
+  "transport_sockets.tls",
+  // Nginx
   "ssl_certificate",
-  "ssl_certificate_key",
-  "crt-store",
+  // HAProxy (`crt-store` and `bind … ssl … crt` both contain "crt")
+  "crt",
+  // Traefik
   "certResolver",
-  "grpc.ssl_channel_credentials",
+  "certFile",
+  "keyFile",
+  // gRPC
+  "ssl_channel_credentials",
   "createSsl",
   "TlsChannelCredentials",
-  // Go grpc TLS transport credentials — was matched by the rule but not gated in.
   "credentials.NewTLS",
 ];
 
@@ -208,10 +214,14 @@ export const proxyDetector: Detector = {
   // sentence can't fire (the marker gate already handles most of this).
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
-    // Mask comments first, THEN gate: a proxy marker that appears only inside a
-    // commented-out block must not un-gate the file.
+    // Mask comments first so a directive that only appears inside a commented-out
+    // block cannot fire.
     const scan = maskCommentLines(maskBlockComments(content), ["#", "//"]);
-    if (!PROXY_MARKERS.some((mk) => scan.includes(mk))) return [];
+    // Cheap fast-reject: skip files with none of the distinctive tokens. This is a
+    // perf gate only — each rule's regex is distinctive enough to SELF-GATE (a
+    // separate too-narrow marker list previously dropped canonical HAProxy/Traefik
+    // configs entirely — audit H1/H2), so correctness lives in the per-rule regexes.
+    if (!PROXY_FAST_REJECT.some((mk) => scan.includes(mk))) return [];
 
     const findings: Finding[] = [];
     for (const { meta, re } of PROXY_RULES) {

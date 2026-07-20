@@ -164,3 +164,38 @@ test("negative: a nginx-shaped ssl_certificate marker inside a block comment doe
   ].join("\n");
   assert.deepEqual(run("service.conf", cfg), []);
 });
+
+test("audit H1/H2/L1: canonical HAProxy/Traefik/Envoy configs without the old narrow marker still fire", () => {
+  // HAProxy: a plain `bind … ssl … crt` with no `crt-store` (the common form).
+  assert.ok(
+    rule(
+      run("haproxy.cfg", "frontend fe_https\n  bind :443 ssl crt /etc/haproxy/site.pem"),
+      "proxy-haproxy-tls",
+    ),
+    "HAProxy bind ssl crt fires without crt-store",
+  );
+  // Traefik: self-managed certFile/keyFile with no ACME `certResolver`.
+  assert.ok(
+    rule(
+      run("dynamic.yml", "tls:\n  certificates:\n    - certFile: /c.crt\n      keyFile: /c.key"),
+      "proxy-traefik-tls",
+    ),
+    "Traefik certFile/keyFile fires without certResolver",
+  );
+  // Envoy: a DownstreamTlsContext fragment (a distinctive token IS the evidence).
+  assert.ok(
+    rule(
+      run("envoy-frag.yaml", "typed_config: DownstreamTlsContext\n  tls_certificates: []"),
+      "proxy-envoy-tls",
+    ),
+    "Envoy fragment fires on a distinctive token",
+  );
+});
+
+test("audit L2: a generic `private_key:` does NOT cross-label a non-Envoy file as Envoy", () => {
+  const findings = run("nginx.conf", "server { ssl_certificate /a.pem; }\nprivate_key: /k.pem\n");
+  assert.ok(rule(findings, "proxy-nginx-tls"), "nginx rule fires");
+  assert.equal(rule(findings, "proxy-envoy-tls"), undefined, "no spurious Envoy attribution");
+  // And a bare private_key: in unrelated YAML still fires nothing.
+  assert.deepEqual(run("app.yml", "database:\n  private_key: /k.pem\n"), []);
+});

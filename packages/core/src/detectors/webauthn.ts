@@ -73,9 +73,12 @@ const NUM_EDDSA = "8"; // EdDSA
 
 // --- NUMERIC form: a COSE `alg` value written as an integer. ---
 // (a) object member: `alg: -7`, `alg = -257` (JS/JSON, Python `alg=-7`).
-const RE_NUM_ECDSA = new RegExp(`\\balg\\s*[:=]\\s*-(?:${NUM_ECDSA})\\b`, "g");
-const RE_NUM_RSA = new RegExp(`\\balg\\s*[:=]\\s*-(?:${NUM_RSA})\\b`, "g");
-const RE_NUM_EDDSA = new RegExp(`\\balg\\s*[:=]\\s*-(?:${NUM_EDDSA})\\b`, "g");
+// `["']?alg["']?` tolerates the JSON/serialized form `"alg": -7` (the WebAuthn
+// options object is JSON-serializable and often stored/transmitted/tested as JSON
+// with a quoted key), as well as the unquoted `alg: -7` / `alg = -7` (audit M2).
+const RE_NUM_ECDSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_ECDSA})\\b`, "g");
+const RE_NUM_RSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_RSA})\\b`, "g");
+const RE_NUM_EDDSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_EDDSA})\\b`, "g");
 // (b) `supportedAlgorithmIDs: [-7, -257]` array (@simplewebauthn verify option).
 // `[^\]]*` stays inside a single array literal; one match per family even when
 // the array lists several ids of that family.

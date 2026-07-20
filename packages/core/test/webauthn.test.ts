@@ -146,3 +146,12 @@ test("symmetric-ish / non-classical COSE values (HS256, alg -6) do not fire", ()
   ].join("\n");
   assert.deepEqual(run("opts.js", content), []);
 });
+
+test('audit M2: the JSON-serialized quoted `"alg": -N` form is flagged', () => {
+  // PublicKeyCredentialCreationOptions is JSON-serializable and frequently stored/
+  // transmitted/tested as JSON with string keys — the quoted-key form was missed.
+  const json =
+    '{"pubKeyCredParams":[{"alg": -7,"type":"public-key"},{"alg": -257,"type":"public-key"}]}';
+  const found = run("options.json", json).map((f) => f.ruleId);
+  assert.deepEqual([...new Set(found)].sort(), ["webauthn-ecdsa", "webauthn-rsa"]);
+});
