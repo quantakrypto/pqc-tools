@@ -29,6 +29,14 @@ test("cosign signing in a GitHub Actions workflow is flagged as ECDSA (signature
   assert.equal(f?.hndl, false);
 });
 
+test("cosign sign-blob subcommand is covered", () => {
+  const f = rule(
+    run(".github/workflows/release.yml", "      - run: cosign sign-blob --key k artifact.tar\n"),
+    "ci-cosign-ecdsa",
+  );
+  assert.ok(f, "sign-blob is flagged as classical signing");
+});
+
 test("gpg --detach-sign is flagged as RSA signing", () => {
   const f = rule(
     run(".gitlab-ci.yml", "  script:\n    - gpg --detach-sign --armor dist/app.tar.gz\n"),
