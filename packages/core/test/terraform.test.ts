@@ -93,3 +93,25 @@ test("a COMMENTED HCL argument (# or //) is NOT flagged", () => {
     [],
   );
 });
+
+test("tls_private_key ED25519 is flagged as EdDSA (signature, not HNDL)", () => {
+  const tf = 'resource "tls_private_key" "k" {\n  algorithm = "ED25519"\n}';
+  const f = rule(run("main.tf", tf), "tf-ed25519-key");
+  assert.equal(f?.algorithm, "EdDSA");
+  assert.equal(f?.hndl, false);
+});
+
+test("aws_kms_key modern `key_spec` alias is flagged (RSA/ECC), counted once", () => {
+  const rsa = 'resource "aws_kms_key" "k" {\n  key_spec = "RSA_2048"\n}';
+  assert.ok(rule(run("kms.tf", rsa), "tf-kms-rsa"), "modern key_spec RSA flagged");
+  const ec = 'resource "aws_kms_key" "k" {\n  key_spec = "ECC_NIST_P256"\n}';
+  assert.ok(rule(run("kms.tf", ec), "tf-kms-ec"), "modern key_spec ECC flagged");
+  // The legacy attribute name must still match exactly once (no double-count on the
+  // `key_spec` suffix inside `customer_master_key_spec`).
+  const legacy = 'resource "aws_kms_key" "k" {\n  customer_master_key_spec = "RSA_4096"\n}';
+  assert.equal(
+    run("kms.tf", legacy).filter((f) => f.ruleId === "tf-kms-rsa").length,
+    1,
+    "legacy customer_master_key_spec counted exactly once",
+  );
+});

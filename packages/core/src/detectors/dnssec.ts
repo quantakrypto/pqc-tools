@@ -50,7 +50,7 @@
  * mention `ED25519` or `DSA` for its own reasons.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
 const DNSSEC_EXTENSIONS: readonly string[] = [".zone", ".db", ".conf"];
@@ -62,9 +62,13 @@ const NUM_EDDSA = "15|16"; // ED25519, ED448
 const NUM_DSA = "3|6"; // DSA, DSA-NSEC3-SHA1
 
 // --- NAMED form: mnemonic algorithm names in signer/policy config or CLI args. ---
-const RE_NAMED_RSA = /\bRSASHA(?:256|512|1(?:-NSEC3-SHA1)?)\b/g;
-const RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/g;
-const RE_NAMED_EDDSA = /\bED(?:25519|448)\b/g;
+// Case-insensitive: BIND `dnssec-policy` and Knot config conventionally write the
+// mnemonics in lowercase (`algorithm rsasha256;`, `algorithm ed25519;`), so a
+// case-sensitive match would miss the primary real-world signer-config syntax. Still
+// gated by `hasDnssecMarker` + the DNSSEC extensions, so generic tokens can't fire.
+const RE_NAMED_RSA = /\bRSASHA(?:256|512|1(?:-NSEC3-SHA1)?)\b/gi;
+const RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/gi;
+const RE_NAMED_EDDSA = /\bED(?:25519|448)\b/gi;
 // Bare "DSA" is too generic to key off alone; require it right after an
 // `algorithm` keyword (Knot/BIND config / dnssec-policy style), optionally
 // quoted or separated by `:`/`=`.
@@ -172,10 +176,14 @@ export const dnssecDetector: Detector = {
   detect({ file, content }): Finding[] {
     if (!hasDnssecMarker(content)) return [];
 
+    // Mask whole comment lines so a commented-out algorithm can't fire: zone files
+    // use `;`, named.conf uses `#` and `//`. These extensions are not centrally
+    // stripped; offsets are preserved so finding locations stay exact.
+    const scan = maskCommentLines(content, [";", "#", "//"]);
     const findings: Finding[] = [];
     for (const { meta, res } of DNSSEC_RULES) {
       for (const re of res) {
-        eachMatch(re, content, (m) =>
+        eachMatch(re, scan, (m) =>
           findings.push(
             findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length }),
           ),

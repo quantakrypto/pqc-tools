@@ -24,7 +24,12 @@ import {
 import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION } from "../cwe.js";
 
 const RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
-const RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:allow|prefer|require)\b/gi;
+// Matches the no-verification TLS modes across libpq (`sslmode=require`), the
+// `PGSSLMODE` env var, MySQL (`ssl-mode=PREFERRED`/`REQUIRED`, hyphenated), and YAML
+// connection config (`sslmode: require`) — i.e. an optional `pg` prefix, `-`/`_` or no
+// separator, `:` or `=`, and the libpq/MySQL value spellings.
+const RE_WEAK_SSLMODE =
+  /\b(?:pg)?ssl[-_]?mode\s*[:=]\s*["']?(?:allow|prefer(?:red)?|require[d]?)\b/gi;
 
 const RULE_PGCRYPTO: RuleMeta = {
   id: "db-pgcrypto-pubkey",
@@ -67,9 +72,9 @@ export const databaseDetector: Detector = {
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
-    // Mask SQL (`--`) and shell/ini (`#`) line comments: a commented
-    // `-- pgp_pub_encrypt` or `# …sslmode=require` is not an active setting.
-    const scan = maskCommentLines(content, ["#", "--"]);
+    // Mask SQL (`--`, single-line `/* … */`), shell/ini (`#`), and ini (`;`) line
+    // comments: a commented `-- pgp_pub_encrypt` or `; sslmode=require` is not active.
+    const scan = maskCommentLines(content, ["#", "--", ";", "/*"]);
     if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {
       eachMatch(RE_PGCRYPTO, scan, (m) =>
         findings.push(
@@ -82,7 +87,8 @@ export const databaseDetector: Detector = {
         ),
       );
     }
-    if (content.includes("sslmode")) {
+    const lc = content.toLowerCase();
+    if (lc.includes("sslmode") || lc.includes("ssl-mode")) {
       eachMatch(RE_WEAK_SSLMODE, scan, (m) =>
         findings.push(
           findingFromRule(RULE_WEAK_SSLMODE, {

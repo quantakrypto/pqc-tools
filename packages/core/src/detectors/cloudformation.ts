@@ -22,7 +22,7 @@
  * these property names in an unrelated context.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO, CWE_WEAK_STRENGTH } from "../cwe.js";
 
 const CFN_EXTENSIONS: readonly string[] = [".json", ".yaml", ".yml"];
@@ -74,7 +74,7 @@ const RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
 // values are legacy; the lookahead delimiter stops this from matching a
 // "TLSv1.2_2018"-style value that merely starts with the same prefix.
 const RE_CFN_CLOUDFRONT_TLS =
-  /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1)(?=["'\s,}]|$)/gm;
+  /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1|SSLv3)(?=["'\s,}]|$)/gm;
 // ELB/ALB legacy SSL negotiation policies (named, dated policy strings). The value
 // quote is optional (`"?`) so YAML block scalars (`SslPolicy: ELBSecurityPolicy-...`)
 // match too, with a delimiter lookahead so a longer/newer policy name that merely
@@ -221,9 +221,13 @@ export const cloudformationDetector: Detector = {
   detect({ file, content }): Finding[] {
     if (!CFN_MARKERS.some((marker) => content.includes(marker))) return [];
 
+    // Mask whole `#` comment lines (YAML CFN/ARM templates ship large commented-out
+    // blocks); harmless for JSON, which has no comments. Offsets preserved so finding
+    // locations stay exact. `.yaml`/`.json` are not centrally comment-stripped.
+    const scan = maskCommentLines(content, ["#"]);
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
-      eachMatch(re, content, (m) =>
+      eachMatch(re, scan, (m) =>
         findings.push(
           findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),

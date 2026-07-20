@@ -87,3 +87,24 @@ test("commented-out `# …sslmode=require` and `-- pgp_pub_encrypt` are NOT flag
     [],
   );
 });
+
+test("weak sslmode is caught across PGSSLMODE / MySQL ssl-mode / YAML forms", () => {
+  assert.ok(rule(run(".env", "PGSSLMODE=require\n"), "db-weak-sslmode"), "PGSSLMODE env var");
+  assert.ok(
+    rule(run("my.cnf", "ssl-mode=PREFERRED\n"), "db-weak-sslmode"),
+    "MySQL hyphenated ssl-mode=PREFERRED",
+  );
+  assert.ok(
+    rule(run("database.yml", "  sslmode: require\n"), "db-weak-sslmode"),
+    "Rails YAML sslmode: require",
+  );
+  // verify-full (real verification) must NOT fire.
+  assert.equal(rule(run(".env", "PGSSLMODE=verify-full\n"), "db-weak-sslmode"), undefined);
+});
+
+test("a `; sslmode=require` ini comment is NOT flagged", () => {
+  assert.deepEqual(
+    run("db.ini", "; sslmode=require\n").filter((f) => f.ruleId.startsWith("db-")),
+    [],
+  );
+});

@@ -99,6 +99,26 @@ test("a bare BEGIN-marker string literal (no body, no END) does NOT fire", () =>
   assert.equal(pem.length, 0, "bare marker string literals must not fire");
 });
 
+test("paired header AND footer string constants (a PEM parser) do NOT fire", () => {
+  // Regression: the END-marker fallback must not accept two separate quoted constants.
+  // A real PEM body never contains a `"`; the intervening `";\nconst F = "` does.
+  const content = [
+    'const PEM_BEGIN = "-----BEGIN RSA PRIVATE KEY-----";',
+    'const PEM_END = "-----END RSA PRIVATE KEY-----";',
+  ].join("\n");
+  const pem = run("pem-parser.ts", content).filter((f) => f.ruleId.startsWith("pem-"));
+  assert.equal(pem.length, 0, "paired header/footer constants must not fire");
+});
+
+test("a real key embedded in a single quoted string with \\n escapes still fires", () => {
+  // The quotes sit OUTSIDE the markers, so nothing quotes-out between them, and the
+  // long base64 run is present — a genuine embedded key must still be caught.
+  const b64 = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDabc123def456";
+  const content = `const key = "-----BEGIN RSA PRIVATE KEY-----\\n${b64}\\n-----END RSA PRIVATE KEY-----";`;
+  const f = run("keys.ts", content).find((x) => x.ruleId === "pem-rsa-private-key");
+  assert.ok(f, "embedded escaped single-line key still fires");
+});
+
 test("a real PEM block with only a short/placeholder body still fires (END marker)", () => {
   // The END-marker fallback keeps recall for short fixtures/bodies that lack a long
   // base64 run (the strong signal reserved for real long keys).

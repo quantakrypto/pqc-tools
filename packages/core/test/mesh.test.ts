@@ -121,12 +121,20 @@ test("gating: mesh markers require the mesh detector's fast-reject tokens, not j
   );
 });
 
-test("mesh detector is gated to .yaml / .yml / .hcl (not arbitrary files)", () => {
+test("mesh detector is gated to config extensions (not arbitrary files)", () => {
   const values = "identityTrustAnchorsPEM: |\n  -----BEGIN CERTIFICATE-----";
   assert.deepEqual(
-    run("values.json", values).filter((f) => f.ruleId.startsWith("mesh-")),
+    run("notes.txt", values).filter((f) => f.ruleId.startsWith("mesh-")),
     [],
   );
+});
+
+test("Consul agent config in JSON is scanned (private_key_type)", () => {
+  // Consul agent config is commonly JSON; the `.json` extension is a mesh surface.
+  const cfg =
+    '{"data_dir":"/opt/consul","connect":{"ca_config":{"private_key_type":"rsa"}},"datacenter":"dc1"}';
+  const f = run("consul.json", cfg).find((x) => x.ruleId === "mesh-consul-connect-rsa");
+  assert.ok(f, "Consul Connect RSA CA in JSON is detected");
 });
 
 test("clean mesh config (TLS 1.3-only cipher suite, no classical CA settings) produces no findings", () => {

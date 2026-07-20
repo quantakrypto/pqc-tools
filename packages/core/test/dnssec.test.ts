@@ -54,11 +54,19 @@ test("BIND dnssec-policy algorithm ECDSAP256SHA256 classifies as ECDSA", () => {
 test("ldns-signzone -a ED25519 in ops config classifies as EdDSA", () => {
   const content = [
     "# Re-sign the zone after every edit:",
-    "# ldns-signzone -a ED25519 -k Kexample.com.+015+12345 example.com.zone",
+    "ldns-signzone -a ED25519 -k Kexample.com.+015+12345 example.com.zone",
   ].join("\n");
   const f = rule(run("signer.conf", content), "dnssec-eddsa-sig");
   assert.equal(f?.algorithm, "EdDSA");
   assert.equal(f?.hndl, false);
+});
+
+test("a COMMENTED-OUT ldns-signzone command does NOT fire (comment masking)", () => {
+  const content = [
+    "# Old approach, do not use:",
+    "# ldns-signzone -a ED25519 -k Kexample.com.+015+12345 example.com.zone",
+  ].join("\n");
+  assert.equal(rule(run("signer.conf", content), "dnssec-eddsa-sig"), undefined);
 });
 
 test("bare `algorithm DSA;` (Knot legacy policy) classifies as DSA (deprecated)", () => {

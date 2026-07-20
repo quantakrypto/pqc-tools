@@ -24,10 +24,13 @@
  * double-count.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { eachMatch, findingFromRule, hasExtension, maskCommentLines } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
-const MESH_EXTENSIONS: readonly string[] = [".yaml", ".yml", ".hcl"];
+// `.json` is included because Consul agent config is commonly JSON (the
+// `private_key_type` rules already support the JSON `:` form); the content gates
+// keep unrelated generic JSON/YAML out.
+const MESH_EXTENSIONS: readonly string[] = [".yaml", ".yml", ".hcl", ".json"];
 
 // Linkerd's default self-managed identity scheme (`linkerd.io/tls`, as opposed
 // to a `kubernetes.io/tls` bring-your-own-cert secret) mints its trust anchor
@@ -106,9 +109,13 @@ export const meshDetector: Detector = {
     const isConsulConnect = content.includes("consul") && content.includes("connect");
     if (!isLinkerd && !isConsulConnect) return [];
 
+    // Mask whole comment lines (YAML/HCL `#`, HCL/JSON5 `//`) so a commented-out
+    // directive can't fire — `.yaml`/`.hcl`/`.json` are not centrally stripped.
+    // Offsets are preserved, so the finding location stays exact.
+    const scan = maskCommentLines(content, ["#", "//"]);
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta) =>
-      eachMatch(re, content, (m) =>
+      eachMatch(re, scan, (m) =>
         findings.push(
           findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),

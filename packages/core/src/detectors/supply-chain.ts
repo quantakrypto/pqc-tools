@@ -101,7 +101,9 @@ export const supplyChainDetector: Detector = {
   rules: SC_RULES.map((r) => r.meta),
   appliesTo: isSigningContext,
   detect({ file, content }): Finding[] {
-    const scan = maskCommentLines(content, ["#"]);
+    // `#` covers YAML/Dockerfile/shell; `//` covers Jenkinsfile (Groovy), which has no
+    // extension so it is never centrally comment-stripped.
+    const scan = maskCommentLines(content, ["#", "//"]);
     const findings: Finding[] = [];
     for (const rule of SC_RULES) {
       eachMatch(rule.re, scan, (m) => {

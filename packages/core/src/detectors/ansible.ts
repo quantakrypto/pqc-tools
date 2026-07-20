@@ -15,6 +15,10 @@ const YAML_EXTENSIONS: readonly string[] = [".yml", ".yaml"];
 
 const RE_ANSIBLE_RSA = /\btype:\s*["']?RSA\b/g;
 const RE_ANSIBLE_ECC = /\btype:\s*["']?ECC\b/g;
+// community.crypto also supports these `type:` values, all classical.
+const RE_ANSIBLE_EDDSA = /\btype:\s*["']?Ed(?:25519|448)\b/g;
+const RE_ANSIBLE_XDH = /\btype:\s*["']?X(?:25519|448)\b/g;
+const RE_ANSIBLE_DSA = /\btype:\s*["']?DSA\b/g;
 
 const RULE_ANSIBLE_RSA: RuleMeta = {
   id: "ansible-openssl-rsa",
@@ -46,13 +50,62 @@ const RULE_ANSIBLE_ECC: RuleMeta = {
     "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204).",
 };
 
+const RULE_ANSIBLE_EDDSA: RuleMeta = {
+  id: "ansible-openssl-eddsa",
+  title: "Ansible community.crypto Ed25519/Ed448 key",
+  description: "Ansible community.crypto openssl_privatekey with type: Ed25519/Ed448",
+  category: "signature",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ansible provisions a classical Ed25519/Ed448 key (community.crypto), forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205).",
+};
+const RULE_ANSIBLE_XDH: RuleMeta = {
+  id: "ansible-openssl-xdh",
+  title: "Ansible community.crypto X25519/X448 key",
+  description: "Ansible community.crypto openssl_privatekey with type: X25519/X448",
+  category: "key-exchange",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "X25519",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ansible provisions a classical X25519/X448 key-agreement key (community.crypto), which is harvest-now-decrypt-later exposed.",
+  remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768).",
+};
+const RULE_ANSIBLE_DSA: RuleMeta = {
+  id: "ansible-openssl-dsa",
+  title: "Ansible community.crypto DSA key (deprecated)",
+  description: "Ansible community.crypto openssl_privatekey with type: DSA",
+  category: "signature",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "DSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "Ansible provisions a classical DSA key (community.crypto); deprecated and forgeable by a quantum attacker.",
+  remediation: "Rotate off DSA today; migrate to ML-DSA-65 (FIPS 204).",
+};
+
 /** Detects classical asymmetric keys provisioned by Ansible community.crypto. */
 export const ansibleDetector: Detector = {
   id: "ansible-crypto",
   description: "Classical asymmetric keys provisioned by Ansible community.crypto",
   scope: "config",
   language: "any",
-  rules: [RULE_ANSIBLE_RSA, RULE_ANSIBLE_ECC],
+  rules: [
+    RULE_ANSIBLE_RSA,
+    RULE_ANSIBLE_ECC,
+    RULE_ANSIBLE_EDDSA,
+    RULE_ANSIBLE_XDH,
+    RULE_ANSIBLE_DSA,
+  ],
   appliesTo: (f) => hasExtension(f, YAML_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Gate: only inside a community.crypto / openssl_privatekey context.
@@ -69,6 +122,9 @@ export const ansibleDetector: Detector = {
       );
     add(RE_ANSIBLE_RSA, RULE_ANSIBLE_RSA);
     add(RE_ANSIBLE_ECC, RULE_ANSIBLE_ECC);
+    add(RE_ANSIBLE_EDDSA, RULE_ANSIBLE_EDDSA);
+    add(RE_ANSIBLE_XDH, RULE_ANSIBLE_XDH);
+    add(RE_ANSIBLE_DSA, RULE_ANSIBLE_DSA);
     return findings;
   },
 };

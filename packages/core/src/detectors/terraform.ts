@@ -29,9 +29,15 @@ const TF_EXTENSIONS: readonly string[] = [".tf", ".tf.json"];
 const RE_TF_RSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"RSA(?:_[A-Z0-9_]+)?"/g;
 // ECDSA / EC signing: tls_private_key `"ECDSA"` and Google KMS `"EC_SIGN_…"`.
 const RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9_]+)"/g;
-// AWS KMS customer master key specs.
-const RE_TF_KMS_RSA = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"RSA_\d+"/g;
-const RE_TF_KMS_EC = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
+// EdDSA signing: hashicorp/tls `tls_private_key` `algorithm = "ED25519"` (a supported,
+// classical algorithm the RSA/ECDSA rules miss).
+const RE_TF_ED25519 = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"ED25519"/g;
+// AWS KMS key specs: the legacy `customer_master_key_spec` and the modern `key_spec`
+// alias (aws provider v4+). The `(?<![\w"-])` lookbehind rejects the `key_spec` suffix
+// inside `customer_master_key_spec` (preceded by `_`), so no double-count.
+const RE_TF_KMS_RSA = /(?<![\w"-])"?(?:customer_master_key_spec|key_spec)"?\s*[:=]\s*"RSA_\d+"/g;
+const RE_TF_KMS_EC =
+  /(?<![\w"-])"?(?:customer_master_key_spec|key_spec)"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
 // `key_type` key material: Azure Key Vault (`"RSA"` / `"EC"`, incl. `-HSM`) and
 // HashiCorp Vault PKI, which uses the lowercase `"rsa"` / `"ec"` tokens — so the value
 // is matched case-insensitively. The `"…"` bound keeps `"ec"` from matching `"ecc"`,
@@ -63,6 +69,19 @@ const RULE_TF_ECDSA: RuleMeta = {
   hndl: false,
   cwe: CWE_BROKEN_CRYPTO,
   message: "Terraform provisions a classical ECDSA key, forgeable by a quantum attacker.",
+  remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205).",
+};
+const RULE_TF_ED25519: RuleMeta = {
+  id: "tf-ed25519-key",
+  title: "Terraform Ed25519 key",
+  description: 'Terraform tls_private_key algorithm = "ED25519"',
+  category: "signature",
+  severity: "medium",
+  confidence: "high",
+  algorithm: "EdDSA",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message: "Terraform provisions a classical Ed25519 key, forgeable by a quantum attacker.",
   remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205).",
 };
 const RULE_TF_KMS_RSA: RuleMeta = {
@@ -132,6 +151,7 @@ export const terraformDetector: Detector = {
   rules: [
     RULE_TF_RSA,
     RULE_TF_ECDSA,
+    RULE_TF_ED25519,
     RULE_TF_KMS_RSA,
     RULE_TF_KMS_EC,
     RULE_TF_AZ_RSA,
@@ -151,6 +171,7 @@ export const terraformDetector: Detector = {
       );
     add(RE_TF_RSA, RULE_TF_RSA);
     add(RE_TF_ECDSA, RULE_TF_ECDSA);
+    add(RE_TF_ED25519, RULE_TF_ED25519);
     add(RE_TF_KMS_RSA, RULE_TF_KMS_RSA);
     add(RE_TF_KMS_EC, RULE_TF_KMS_EC);
     add(RE_TF_AZ_RSA, RULE_TF_AZ_RSA);
