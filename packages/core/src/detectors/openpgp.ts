@@ -74,6 +74,15 @@ function algo(id: number): { family: AlgorithmFamily; hndl: boolean } | undefine
       return { family: "ECDSA", hndl: false }; // ECDSA (sign only)
     case 22:
       return { family: "EdDSA", hndl: false }; // EdDSA (sign only)
+    // RFC 9580 (crypto-refresh) v6 algorithm ids.
+    case 25:
+      return { family: "X25519", hndl: true }; // X25519 (encrypt / key agreement)
+    case 26:
+      return { family: "X448", hndl: true }; // X448 (encrypt / key agreement)
+    case 27:
+      return { family: "EdDSA", hndl: false }; // Ed25519 (sign only)
+    case 28:
+      return { family: "EdDSA", hndl: false }; // Ed448 (sign only)
     default:
       return undefined;
   }

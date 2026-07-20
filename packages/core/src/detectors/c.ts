@@ -48,7 +48,9 @@ const RE_C_RSA_VERIFY = /\bRSA_verify\s*\(/g;
 const RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
 // C/OpenSSL legacy TLS configuration (mirrors source.ts tlsDetector): forcing a
 // deprecated protocol version or disabling certificate verification.
-const RE_C_TLS_VERSION = /\bTLSv1_method\b|\bSSLv3_method\b/g;
+// TLSv1_method / TLSv1_1_method (+ the client/server-specific variants) and the
+// SSLv2/SSLv3 method constructors — all pin a deprecated protocol (RFC 8996).
+const RE_C_TLS_VERSION = /\b(?:TLSv1(?:_1)?|SSLv2|SSLv3)(?:_client|_server)?_method\b/g;
 const RE_C_TLS_VERIFY_NONE = /\bSSL_VERIFY_NONE\b/g;
 // Embedded C crypto libraries (the "embedded" niche): Mbed TLS and wolfSSL /
 // wolfCrypt. Both use highly-distinctive `mbedtls_*` / `wc_*` prefixes, so the
