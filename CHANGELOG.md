@@ -6,6 +6,23 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — evidence signing orchestration (A.8.24)
+
+- **`qscan --format evidence --sign <cmd>` / `--timestamp <cmd>`** complete the
+  A.8.24 evidence chain: the readiness report's deterministic `contentHash` is piped
+  to an operator-provided external signer (openssl / cosign / an RFC-3161 TSA client)
+  on **stdin**, and its **stdout** is recorded as the detached signature / timestamp
+  token in `attestation.signature` / `attestation.timestamp`, alongside a
+  non-sensitive `signedWith` / `timestampedWith` provenance label (the program name —
+  never the argument list, so a key path can't leak). The payload is never
+  interpolated into the command, and signing never changes `contentHash` (attestation
+  is excluded from the hashed body). Per **ADR-0004** the tool implements no
+  cryptography — it orchestrates the signer; per **ADR-0005** this is a `qscan` CLI
+  feature only (the MCP server stays offline and key-free). New `@quantakrypto/core`
+  API: `signReadinessReport`, `EvidenceSigner`, `SignEvidenceOptions`. Both flags
+  require `--format evidence` (a loud error otherwise), and a non-zero signer exit
+  aborts with a clear message.
+
 ### Added — frozen public API surface + generated reference (1.0 gate)
 
 - **`docs/API.md`** (human reference) and **`docs/api-surface.json`** (the

@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 136 exported symbols.
+Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -44,6 +44,7 @@ Public entry: `packages/core/src/index.ts` — 136 exported symbols.
 | `DetectorRegistry` | value |  |
 | `DetectorScope` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `EvidenceFinding` | type |  |
+| `EvidenceSigner` | type |  |
 | `FIX_REQUEST_SCHEMA` | value |  |
 | `Finding` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `FindingCategory` | type | @quantakrypto/core — shared types (the locked public contract). |
@@ -82,6 +83,7 @@ Public entry: `packages/core/src/index.ts` — 136 exported symbols.
 | `ScanResult` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `SecurityTier` | type |  |
 | `Severity` | type | @quantakrypto/core — shared types (the locked public contract). |
+| `SignEvidenceOptions` | type |  |
 | `SizedFile` | type |  |
 | `SourceLocation` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `StandardsCitation` | type |  |
@@ -140,6 +142,7 @@ Public entry: `packages/core/src/index.ts` — 136 exported symbols.
 | `scan` | value |  |
 | `scanParallel` | value |  |
 | `severityRank` | value |  |
+| `signReadinessReport` | value |  |
 | `standardsReviewStatus` | value |  |
 | `statefulHbsApplies` | value |  |
 | `toCbom` | value |  |

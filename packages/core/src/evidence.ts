@@ -52,10 +52,21 @@ export interface ReadinessReport {
   attestation: {
     /** sha256 over the canonicalized deterministic body (excludes scanTimeUtc). */
     contentHash: string;
-    /** RFC-3161 / transparency-log token — filled by an external signer. */
-    timestamp: null;
-    /** Detached signature over `contentHash` — filled by an external signer. */
-    signature: null;
+    /**
+     * RFC-3161 / transparency-log token over `contentHash`, produced by an EXTERNAL
+     * timestamper (opaque string, e.g. base64). `null` until {@link signReadinessReport}
+     * runs one.
+     */
+    timestamp: string | null;
+    /**
+     * Detached signature over `contentHash`, produced by an EXTERNAL signer (opaque
+     * string, e.g. base64/PEM). `null` until {@link signReadinessReport} runs one.
+     */
+    signature: string | null;
+    /** Non-sensitive provenance label of the signer (e.g. "openssl", "cosign"). */
+    signedWith?: string;
+    /** Non-sensitive provenance label of the timestamper (e.g. "openssl-ts"). */
+    timestampedWith?: string;
   };
 }
 
@@ -132,4 +143,52 @@ export function buildReadinessReport(
     cbom: toCbom(result),
     attestation: { contentHash, timestamp: null, signature: null },
   } as ReadinessReport;
+}
+
+/**
+ * An EXTERNAL signer/timestamper the tool orchestrates. Per ADR-0004 the tool
+ * implements no cryptography: it hands the payload to an operator-provided signer
+ * (an `openssl`/`cosign` invocation, an RFC-3161 TSA client, …) and records what
+ * comes back. `label` is a short, non-sensitive provenance string (e.g. the signer
+ * program name) — NOT the full command, which may contain a key path.
+ */
+export interface EvidenceSigner {
+  label: string;
+  /** Produce a detached signature / timestamp token (opaque string) over `payload`. */
+  sign(payload: string): string;
+}
+
+/** Options for {@link signReadinessReport}: a detached-signature and/or a timestamp signer. */
+export interface SignEvidenceOptions {
+  signer?: EvidenceSigner;
+  timestamper?: EvidenceSigner;
+}
+
+/**
+ * Fill a readiness report's attestation with a detached signature and/or RFC-3161
+ * timestamp, produced by EXTERNAL signers over the report's `contentHash`. Pure
+ * orchestration: it invokes the injected signers and records their opaque output
+ * plus a provenance label — it performs no cryptography itself (ADR-0004). Returns a
+ * NEW report; the hashed body is untouched (attestation is excluded from the hash),
+ * so signing never changes `contentHash`.
+ */
+export function signReadinessReport(
+  report: ReadinessReport,
+  opts: SignEvidenceOptions,
+): ReadinessReport {
+  const payload = report.attestation.contentHash;
+  const signature = opts.signer ? opts.signer.sign(payload) : report.attestation.signature;
+  const timestamp = opts.timestamper
+    ? opts.timestamper.sign(payload)
+    : report.attestation.timestamp;
+  return {
+    ...report,
+    attestation: {
+      ...report.attestation,
+      signature,
+      timestamp,
+      ...(opts.signer ? { signedWith: opts.signer.label } : {}),
+      ...(opts.timestamper ? { timestampedWith: opts.timestamper.label } : {}),
+    },
+  };
 }

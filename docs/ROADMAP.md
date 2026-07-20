@@ -121,9 +121,13 @@ running against this list; findings will be folded in.
   (findings + inventory + CBOM + a deterministic content hash); Sieve records
   ACVP vector **provenance** (`provenanceDeclared`); and `--policy <file>` now adds
   the §4 **conformant / violation / transition-pending** verdicts against an org
-  crypto policy, folded into the attested hash. Only signing + RFC-3161 timestamping
-  remain, and those are **deliberately external** (ADR-0004 — the tool orchestrates
-  a signer, it does not implement one).
+  crypto policy, folded into the attested hash. **Signing + RFC-3161 timestamping are
+  now orchestrated (2026-07-20):** `qscan --format evidence --sign <cmd>` /
+  `--timestamp <cmd>` pipe the report's `contentHash` to an operator-provided external
+  signer (openssl / cosign / a TSA client) on stdin and record its detached signature
+  / token plus a non-sensitive provenance label — the tool still implements **no**
+  cryptography itself (ADR-0004). New `@quantakrypto/core` API: `signReadinessReport`,
+  `EvidenceSigner`.
 - ~~**Reproducible-build verification** for the published artifacts.~~ ✅
   **Done (2026-07-19).** The npm tarball for every published `@quantakrypto/*`
   version is now re-creatable **byte for byte** from source: `npm run repro:check`

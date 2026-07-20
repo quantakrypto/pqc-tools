@@ -155,3 +155,31 @@ test("--merge without --cbom is a loud error, not a silent no-op", async () => {
     "merging into a non-cbom format must fail rather than drop the merge files",
   );
 });
+
+test("--format evidence --sign orchestrates an external signer over the contentHash", async () => {
+  const { scanFn } = recordingScanner();
+  // `cat` echoes stdin (the contentHash) back on stdout — a portable stand-in for a
+  // real openssl/cosign signer, so the recorded signature equals the contentHash.
+  const run = await runQscan({ path: ".", format: "evidence", sign: "cat" }, { scanFn });
+  const report = JSON.parse(run.report ?? "");
+  assert.equal(report.attestation.signature, report.attestation.contentHash);
+  assert.equal(report.attestation.signedWith, "cat");
+  assert.equal(report.attestation.timestamp, null, "no --timestamp → stays null");
+});
+
+test("--sign without --format evidence is a loud error", async () => {
+  const { scanFn } = recordingScanner();
+  await assert.rejects(
+    () => runQscan({ path: ".", format: "json", sign: "cat" }, { scanFn }),
+    /--sign\/--timestamp require --format evidence/,
+  );
+});
+
+test("a signer command that fails is surfaced, not swallowed", async () => {
+  const { scanFn } = recordingScanner();
+  await assert.rejects(
+    () => runQscan({ path: ".", format: "evidence", sign: "false" }, { scanFn }),
+    /command "false" exited/,
+    "a non-zero signer exit must abort with a clear error",
+  );
+});

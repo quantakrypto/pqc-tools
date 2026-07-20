@@ -108,6 +108,14 @@ export interface QscanOptions {
   tier?: SecurityTier;
   /** Org cryptography policy file (`--policy`) for the evidence report's §4 verdicts. */
   policy?: string;
+  /**
+   * External signer command for the evidence attestation (`--sign`). The report's
+   * contentHash is piped to it on stdin; its stdout is recorded as the detached
+   * signature. Only valid with `--format evidence`.
+   */
+  sign?: string;
+  /** External RFC-3161 timestamper command for the evidence attestation (`--timestamp`). */
+  timestamp?: string;
   /** How much source context leaves the machine (`--context`). Default: snippet. */
   contextLevel?: ContextLevel;
   /** Print the exact triage payload and exit without calling the provider (`--dry-run`). */
@@ -393,6 +401,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--policy":
         options.policy = takeValue();
+        break;
+      case "--sign":
+        options.sign = takeValue();
+        break;
+      case "--timestamp":
+        options.timestamp = takeValue();
         break;
       case "--write-baseline":
         options.writeBaseline = takeValue();

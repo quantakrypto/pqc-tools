@@ -7,8 +7,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildReadinessReport, buildInventory } from "../src/index.js";
-import type { Finding, ScanResult } from "../src/index.js";
+import { buildReadinessReport, buildInventory, signReadinessReport } from "../src/index.js";
+import type { EvidenceSigner, Finding, ScanResult } from "../src/index.js";
 
 function resultWith(finishedAt: string): ScanResult {
   const finding: Finding = {
@@ -60,4 +60,45 @@ test("content hash is reproducible across scan time but changes with the commit"
   assert.notEqual(a.subject.scanTimeUtc, b.subject.scanTimeUtc);
   // Different commit → different hash.
   assert.notEqual(a.attestation.contentHash, c.attestation.contentHash);
+});
+
+/** A fake signer that records what it was asked to sign; no crypto, no I/O. */
+function fakeSigner(label: string, sink?: { payload?: string }): EvidenceSigner {
+  return {
+    label,
+    sign(payload) {
+      if (sink) sink.payload = payload;
+      return `SIG(${payload})`;
+    },
+  };
+}
+
+test("signReadinessReport fills the attestation from an external signer over the contentHash", () => {
+  const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
+  assert.equal(base.attestation.signature, null);
+  const seen = {};
+  const signed = signReadinessReport(base, { signer: fakeSigner("openssl", seen) });
+  // The signer receives EXACTLY the contentHash and its output is recorded verbatim.
+  assert.equal(seen.payload, base.attestation.contentHash);
+  assert.equal(signed.attestation.signature, `SIG(${base.attestation.contentHash})`);
+  assert.equal(signed.attestation.signedWith, "openssl");
+  // Signing never changes the hashed body → contentHash is stable.
+  assert.equal(signed.attestation.contentHash, base.attestation.contentHash);
+  // The input report is not mutated.
+  assert.equal(base.attestation.signature, null);
+});
+
+test("signReadinessReport can attach a timestamp independently of a signature", () => {
+  const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
+  const tsOnly = signReadinessReport(base, { timestamper: fakeSigner("openssl-ts") });
+  assert.equal(tsOnly.attestation.timestamp, `SIG(${base.attestation.contentHash})`);
+  assert.equal(tsOnly.attestation.timestampedWith, "openssl-ts");
+  assert.equal(tsOnly.attestation.signature, null, "no --sign → signature stays null");
+});
+
+test("signReadinessReport with no signers is a no-op", () => {
+  const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
+  const same = signReadinessReport(base, {});
+  assert.equal(same.attestation.signature, null);
+  assert.equal(same.attestation.timestamp, null);
 });

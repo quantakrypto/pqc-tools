@@ -29,6 +29,11 @@ OPTIONS
                                 (sign/timestamp it with an external signer)
   --policy <file>               Crypto-policy JSON; adds conformant/violation/
                                 transition verdicts to the evidence report
+  --sign <command>              Sign the evidence report: its contentHash is
+                                piped to <command> on stdin; stdout is recorded
+                                as the detached signature (needs --format evidence)
+  --timestamp <command>         Like --sign, but records an RFC-3161 timestamp
+                                token from <command> (needs --format evidence)
   -o, --output <file>           Write the report to a file instead of stdout
   --severity-threshold <level>  Fail (exit 1) on findings at/above this level;
                                 one of critical|high|medium|low|info
