@@ -188,6 +188,7 @@
     "renderReport",
     "renderSarif",
     "resolveConfig",
+    "runQscan",
     "runRemediate",
     "saveBaseline",
     "severityRank",
@@ -266,6 +267,7 @@
     "isParamSet",
     "loadVectors",
     "overallVerdict",
+    "runSieve",
     "sizesFor",
     "toB64"
   ],
@@ -323,6 +325,7 @@
     "parseTarget",
     "readServerHello",
     "resolveMode",
+    "runProbe",
     "smtpAdvertisesStartTls",
     "smtpReplyComplete",
     "sslRequestFrame",

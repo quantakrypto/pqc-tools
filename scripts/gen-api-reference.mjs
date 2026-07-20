@@ -85,7 +85,7 @@ function exportedName(clause) {
 /** Best-effort one-line doc summary for `name` declared in `src` (from its doc block). */
 function docFor(src, name) {
   const pattern =
-    String.raw`\/\*\*([\s\S]*?)\*\/\s*export\s+(?:declare\s+)?(?:abstract\s+)?` +
+    String.raw`\/\*\*([\s\S]*?)\*\/\s*export\s+(?:(?:declare|async|abstract)\s+)*` +
     String.raw`(?:const|function|class|interface|type|enum)\s+` +
     name +
     String.raw`\b`;
@@ -119,7 +119,7 @@ function collectExports(entryRel) {
     }
     const modSrc = stripComments(modRaw);
     for (const d of modSrc.matchAll(
-      /export\s+(?:declare\s+)?(?:abstract\s+)?(const|function|class|interface|type|enum)\s+([\w$]+)/g,
+      /export\s+(?:(?:declare|async|abstract)\s+)*(const|function|class|interface|type|enum)\s+([\w$]+)/g,
     )) {
       out.set(d[2], { kind: d[1] === "function" ? "function" : d[1], doc: docFor(modRaw, d[2]) });
     }
@@ -136,7 +136,7 @@ function collectExports(entryRel) {
 
   // Direct declarations: `export const|function|class|interface|type|enum NAME`.
   for (const d of src.matchAll(
-    /export\s+(?:declare\s+)?(?:abstract\s+)?(const|function|class|interface|type|enum)\s+([\w$]+)/g,
+    /export\s+(?:(?:declare|async|abstract)\s+)*(const|function|class|interface|type|enum)\s+([\w$]+)/g,
   )) {
     out.set(d[2], { kind: d[1] === "function" ? "function" : d[1], doc: docFor(raw, d[2]) });
   }

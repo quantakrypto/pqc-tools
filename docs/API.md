@@ -156,7 +156,7 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 
 ## @quantakrypto/qscan
 
-Public entry: `packages/qscan/src/index.ts` — 53 exported symbols.
+Public entry: `packages/qscan/src/index.ts` — 54 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -207,6 +207,7 @@ Public entry: `packages/qscan/src/index.ts` — 53 exported symbols.
 | `renderReport` | function | @quantakrypto/qscan — programmatic API. |
 | `renderSarif` | value |  |
 | `resolveConfig` | value |  |
+| `runQscan` | function | @quantakrypto/qscan — programmatic API. |
 | `runRemediate` | value |  |
 | `saveBaseline` | value |  |
 | `severityRank` | value |  |
@@ -248,7 +249,7 @@ Public entry: `packages/mcp/src/index.ts` — 25 exported symbols.
 
 ## @quantakrypto/sieve
 
-Public entry: `packages/sieve/src/index.ts` — 45 exported symbols.
+Public entry: `packages/sieve/src/index.ts` — 46 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -295,6 +296,7 @@ Public entry: `packages/sieve/src/index.ts` — 45 exported symbols.
 | `isParamSet` | value |  |
 | `loadVectors` | value |  |
 | `overallVerdict` | value |  |
+| `runSieve` | function | @quantakrypto/sieve — programmatic API. |
 | `sizesFor` | value |  |
 | `toB64` | value |  |
 
@@ -325,7 +327,7 @@ Public entry: `packages/agent/src/index.ts` — 18 exported symbols.
 
 ## @quantakrypto/qprobe
 
-Public entry: `packages/qprobe/src/index.ts` — 41 exported symbols.
+Public entry: `packages/qprobe/src/index.ts` — 42 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -362,6 +364,7 @@ Public entry: `packages/qprobe/src/index.ts` — 41 exported symbols.
 | `parseTarget` | value |  |
 | `readServerHello` | function | Minimal, hand-rolled TLS 1.3 ClientHello builder + ServerHello/HelloRetryRequest |
 | `resolveMode` | function | @quantakrypto/qprobe — active post-quantum readiness probing of live TLS/SSH |
+| `runProbe` | function | @quantakrypto/qprobe — active post-quantum readiness probing of live TLS/SSH |
 | `smtpAdvertisesStartTls` | value |  |
 | `smtpReplyComplete` | value |  |
 | `sslRequestFrame` | value |  |
