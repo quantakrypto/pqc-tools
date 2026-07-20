@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.4.4";
+    VERSION = "0.5.0";
   }
 });
 
@@ -43,26 +43,20 @@ function isConfidentialityFamily(algorithm) {
 function isSignatureFamily(algorithm) {
   return algorithm === "RSA" || algorithm === "ECDSA" || algorithm === "EdDSA" || algorithm === "DSA";
 }
-function remediationForTier(algorithm, tier = "category-3") {
+function remediationForProfile(algorithm, profile) {
   const base = REMEDIATIONS[algorithm];
-  const params = TIER_PARAMS[tier];
   const isConf = isConfidentialityFamily(algorithm);
-  const primary = isConf ? params.kem : params.signature;
-  if (tier === "category-5") {
-    const hybridNote = isConf ? " If a hybrid TLS group is required, use SecP384r1MLKEM1024 (draft-ietf-tls-ecdhe-mlkem) \u2014 not X25519MLKEM768, whose ML-KEM-768 component does not meet CNSA 2.0." : "";
-    return {
-      algorithm,
-      recommendation: `${primary} \u2014 CNSA 2.0 mandates this parameter set (hybrids optional)`,
-      detail: `${base.detail} ${params.note} For CNSA 2.0 / national-security systems use ${params.kem} (KEM) and ${params.signature} (signatures).${hybridNote}`
-    };
-  }
+  const primary = isConf ? profile.paramSets.kem : profile.paramSets.signature;
+  const stanceWord = profile.hybridStance === "required" ? "hybrid required" : profile.hybridStance === "recommended" ? "hybrid recommended" : "hybrids optional";
+  const recommendation = isConf ? `${primary} \u2014 ${profile.name}: ${stanceWord}` : `${primary} \u2014 ${profile.name}`;
+  const hybridClause = isConf ? ` ${profile.hybridGuidance}` : "";
   return {
     algorithm,
-    recommendation: `${base.recommendation} \u2014 ${tier}: ${primary}`,
-    detail: `${base.detail} ${params.note} For this tier use ${params.kem} (KEM) and ${params.signature} (signatures).`
+    recommendation,
+    detail: `${base.detail} Under ${profile.name} (${profile.citation}), use ${profile.paramSets.kem} for key establishment and ${profile.paramSets.signature} for signatures; classical public-key crypto is deprecated after ${profile.deprecateAfter} and disallowed after ${profile.disallowAfter}.` + hybridClause
   };
 }
-var REMEDIATIONS, TIER_PARAMS, STATEFUL_HBS_NOTE, PQC_TRANSITION_NOTE;
+var REMEDIATIONS, STATEFUL_HBS_NOTE, PQC_TRANSITION_NOTE;
 var init_remediation = __esm({
   "../core/dist/remediation.js"() {
     "use strict";
@@ -116,18 +110,6 @@ var init_remediation = __esm({
         algorithm: "unknown",
         recommendation: "review for post-quantum migration",
         detail: "This usage involves classical public-key cryptography. Audit it and plan a migration to NIST PQC standards (ML-KEM / FIPS 203, ML-DSA / FIPS 204)."
-      }
-    };
-    TIER_PARAMS = {
-      "category-3": {
-        kem: "ML-KEM-768 (FIPS 203)",
-        signature: "ML-DSA-65 (FIPS 204)",
-        note: "NIST Category 3 \u2014 default for general commercial use."
-      },
-      "category-5": {
-        kem: "ML-KEM-1024 (FIPS 203)",
-        signature: "ML-DSA-87 (FIPS 204)",
-        note: "NIST Category 5 \u2014 CNSA 2.0 for national-security systems and long-lived secrets (2030/2033 milestones)."
       }
     };
     STATEFUL_HBS_NOTE = "For firmware / secure-boot signing, the stateful hash-based signatures LMS, XMSS and HSS (NIST SP 800-208) are approved alternatives to ML-DSA, but they are STATEFUL: the signer must never reuse a one-time key index. Use only with rigorous state management; otherwise prefer stateless ML-DSA (FIPS 204) or SLH-DSA (FIPS 205).";
@@ -212,19 +194,19 @@ function makeFinding(spec) {
     finding.sensitive = true;
   return finding;
 }
-function findingFromRule(rule, at, overrides) {
+function findingFromRule(rule2, at, overrides) {
   return makeFinding({
-    ruleId: rule.id,
-    title: overrides?.title ?? rule.title,
-    category: overrides?.category ?? rule.category,
-    severity: overrides?.severity ?? rule.severity,
-    confidence: overrides?.confidence ?? rule.confidence,
-    algorithm: overrides?.algorithm ?? rule.algorithm,
-    hndl: overrides?.hndl ?? rule.hndl,
-    cwe: overrides?.cwe ?? rule.cwe,
-    remediation: overrides?.remediation ?? rule.remediation,
-    sensitive: rule.sensitive,
-    message: overrides?.message ?? rule.message,
+    ruleId: rule2.id,
+    title: overrides?.title ?? rule2.title,
+    category: overrides?.category ?? rule2.category,
+    severity: overrides?.severity ?? rule2.severity,
+    confidence: overrides?.confidence ?? rule2.confidence,
+    algorithm: overrides?.algorithm ?? rule2.algorithm,
+    hndl: overrides?.hndl ?? rule2.hndl,
+    cwe: overrides?.cwe ?? rule2.cwe,
+    remediation: overrides?.remediation ?? rule2.remediation,
+    sensitive: rule2.sensitive,
+    message: overrides?.message ?? rule2.message,
     file: at.file,
     content: at.content,
     index: at.index,
@@ -265,6 +247,40 @@ function eachMatch(re, content, onMatch) {
       g.lastIndex++;
   }
 }
+function enclosingObject(content, index, maxSpan = 4e3) {
+  const lo = Math.max(0, index - maxSpan);
+  const hi = Math.min(content.length, index + maxSpan);
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  let enclosingOpen = -1;
+  for (let i = lo; i < hi; i++) {
+    const c = content[i];
+    if (inStr) {
+      if (esc)
+        esc = false;
+      else if (c === "\\")
+        esc = true;
+      else if (c === '"')
+        inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    } else if (c === "{") {
+      stack.push(i);
+    } else if (c === "}") {
+      const open = stack.pop();
+      if (open !== void 0 && open === enclosingOpen) {
+        return content.slice(enclosingOpen, i + 1);
+      }
+    }
+    if (i === index && enclosingOpen < 0 && stack.length > 0) {
+      enclosingOpen = stack[stack.length - 1];
+    }
+  }
+  if (enclosingOpen >= 0)
+    return content.slice(enclosingOpen, hi);
+  return content.slice(Math.max(0, index - 250), Math.min(content.length, index + 250));
+}
 function maskCommentLines(content, markers) {
   if (markers.length === 0)
     return content;
@@ -278,7 +294,27 @@ function maskCommentLines(content, markers) {
   }
   return lines.join("\n");
 }
-var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, ELIXIR_EXTENSIONS, PHP_EXTENSIONS, C_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
+function maskBlockComments(content) {
+  if (!content.includes("/*"))
+    return content;
+  const out = [];
+  let i = 0;
+  const n = content.length;
+  while (i < n) {
+    if (content[i] === "/" && content[i + 1] === "*") {
+      const end = content.indexOf("*/", i + 2);
+      const stop = end === -1 ? n : end + 2;
+      for (let j = i; j < stop; j++)
+        out.push(content[j] === "\n" ? "\n" : " ");
+      i = stop;
+    } else {
+      out.push(content[i]);
+      i++;
+    }
+  }
+  return out.join("");
+}
+var cachedContent, cachedLineStarts, JS_TS_EXTENSIONS, PYTHON_EXTENSIONS, GO_EXTENSIONS, JAVA_EXTENSIONS, CSHARP_EXTENSIONS, RUST_EXTENSIONS, RUBY_EXTENSIONS, ELIXIR_EXTENSIONS, PHP_EXTENSIONS, C_EXTENSIONS, SWIFT_EXTENSIONS, OBJC_EXTENSIONS, DART_EXTENSIONS, SMART_CONTRACT_EXTENSIONS, DOC_EXTENSIONS, JWT_HOST_EXTENSIONS, ANALYZABLE_SOURCE_EXTENSIONS, ANALYZABLE_LANGUAGES_LABEL;
 var init_detect_utils = __esm({
   "../core/dist/detect-utils.js"() {
     "use strict";
@@ -304,6 +340,10 @@ var init_detect_utils = __esm({
     ELIXIR_EXTENSIONS = [".ex", ".exs"];
     PHP_EXTENSIONS = [".php", ".phtml", ".php3", ".php4", ".php5"];
     C_EXTENSIONS = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
+    SWIFT_EXTENSIONS = [".swift"];
+    OBJC_EXTENSIONS = [".m", ".mm"];
+    DART_EXTENSIONS = [".dart"];
+    SMART_CONTRACT_EXTENSIONS = [".sol", ".move", ".cairo"];
     DOC_EXTENSIONS = [
       ".md",
       ".markdown",
@@ -321,7 +361,10 @@ var init_detect_utils = __esm({
       ...JS_TS_EXTENSIONS,
       ...PYTHON_EXTENSIONS,
       ...GO_EXTENSIONS,
-      ...RUBY_EXTENSIONS
+      ...RUBY_EXTENSIONS,
+      // PHP's firebase/php-jwt passes the alg as a quoted token (`'RS256'`, `'ES256'`),
+      // the same shape RE_JWT_ALG matches — so PHP files are in scope for it too.
+      ...PHP_EXTENSIONS
     ];
     ANALYZABLE_SOURCE_EXTENSIONS = [
       ...JS_TS_EXTENSIONS,
@@ -333,9 +376,13 @@ var init_detect_utils = __esm({
       ...RUBY_EXTENSIONS,
       ...PHP_EXTENSIONS,
       ...ELIXIR_EXTENSIONS,
-      ...C_EXTENSIONS
+      ...C_EXTENSIONS,
+      ...SWIFT_EXTENSIONS,
+      ...OBJC_EXTENSIONS,
+      ...DART_EXTENSIONS,
+      ...SMART_CONTRACT_EXTENSIONS
     ];
-    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++";
+    ANALYZABLE_LANGUAGES_LABEL = "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo";
   }
 });
 
@@ -1287,6 +1334,13 @@ function isBinaryPath(rel) {
   const ext = path.posix.extname(lower);
   return BINARY_EXTENSIONS.has(ext);
 }
+function isKeystorePath(rel) {
+  const lower = rel.toLowerCase();
+  for (const ext of KEYSTORE_EXTENSIONS)
+    if (lower.endsWith(ext))
+      return true;
+  return false;
+}
 function isGeneratedPath(rel) {
   return GENERATED_PATH_RE.test(rel.toLowerCase());
 }
@@ -1377,7 +1431,7 @@ async function* walkDir(absDir, relDir, ctx) {
     yield rel;
   }
 }
-var DEFAULT_IGNORES, DEFAULT_MAX_FILE_SIZE, BINARY_EXTENSIONS, GLOB_CACHE, GENERATED_PATH_RE;
+var DEFAULT_IGNORES, DEFAULT_MAX_FILE_SIZE, BINARY_EXTENSIONS, GLOB_CACHE, KEYSTORE_EXTENSIONS, GENERATED_PATH_RE;
 var init_walk = __esm({
   "../core/dist/walk.js"() {
     "use strict";
@@ -1462,6 +1516,18 @@ var init_walk = __esm({
       ".node"
     ]);
     GLOB_CACHE = /* @__PURE__ */ new Map();
+    KEYSTORE_EXTENSIONS = /* @__PURE__ */ new Set([
+      ".jks",
+      ".keystore",
+      ".jceks",
+      ".bks",
+      ".p12",
+      ".pfx",
+      // Binary OpenPGP keyrings / messages (armored .asc is text; handled elsewhere).
+      ".gpg",
+      ".pgp",
+      ".kbx"
+    ]);
     GENERATED_PATH_RE = /(?:\.min\.[mc]?js|[.-]min\.[mc]?js|\.bundle\.[mc]?js|\.chunk\.[mc]?js|\.generated\.[jt]sx?|_pb\.js|\.pb\.go)$/i;
   }
 });
@@ -1729,9 +1795,28 @@ var init_comments = __esm({
       ".cpp",
       ".cxx",
       ".hpp",
-      ".hh"
+      ".hh",
+      // PHP and Scala also use C-style `//` + `/* */` comments (PHP additionally uses
+      // `#`, handled by the hash lexer running first would miss `//`; C-style covers both
+      // since PHP `//` is the common form and `#` lines are rare in modern PHP).
+      ".php",
+      ".php3",
+      ".php4",
+      ".php5",
+      ".phtml",
+      ".scala",
+      ".sc",
+      ".swift",
+      // Objective-C (.m/.mm) and Dart (.dart) both use C-style `//` + `/* */`.
+      ".m",
+      ".mm",
+      ".dart",
+      // Smart-contract languages (Solidity/Move/Cairo) also use C-style comments.
+      ".sol",
+      ".move",
+      ".cairo"
     ];
-    HASH_LIKE = [".py", ".pyi", ".pyw", ".rb"];
+    HASH_LIKE = [".py", ".pyi", ".pyw", ".rb", ".ex", ".exs"];
   }
 });
 
@@ -1841,6 +1926,11 @@ function collectCryptoAliases(content) {
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+function inDocFieldValue(content, index) {
+  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const prefix = content.slice(lineStart, index);
+  return /\b(?:description|help|summary|doc|comment|note)\b\s*[:=]/i.test(prefix);
+}
 function isRealSshKeyOrAlgoList(content, index, matchLen) {
   if (/^\s+[A-Za-z0-9+/]{20,}/.test(content.slice(index + matchLen, index + matchLen + 80))) {
     return true;
@@ -1924,7 +2014,7 @@ var init_source = __esm({
     RE_JOSE_ECDH = /['"`](ECDH-ES(?:\+A(?:128|192|256)KW)?)['"`]/g;
     RE_TLS_LEGACY_VERSION = /(?:minVersion|maxVersion)\s*:\s*['"`]TLSv1(?:\.1)?['"`]|secureProtocol\s*:\s*['"`]TLSv1(?:_1)?_method['"`]/g;
     RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
-    RE_TLS_WEAK_CIPHER = /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![!-])(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+    RE_TLS_WEAK_CIPHER = /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![:'"`,\s]\s*[!-][\w-]{0,64})(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
     RULE_NODE_KEYGEN = {
       id: "node-crypto-keygen",
       title: "Classical key generation",
@@ -2166,7 +2256,7 @@ var init_source = __esm({
             algorithm = name === "X448" ? "X448" : "X25519";
             category = "key-exchange";
             hndl = true;
-            severity = "low";
+            severity = "medium";
           } else if (name === "ED25519" || name === "ED448") {
             algorithm = "EdDSA";
             category = "signature";
@@ -2298,7 +2388,7 @@ var init_source = __esm({
       appliesTo: (f) => hasExtension(f, JS_TS_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_FORGE_RSA, RULE_FORGE_RSA);
         add(RE_FORGE_ED25519, RULE_FORGE_ED25519);
         add(RE_ELLIPTIC_EC, RULE_ELLIPTIC_EC);
@@ -2370,7 +2460,12 @@ var init_source = __esm({
       appliesTo: (f) => hasExtension(f, JWT_HOST_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
+        const subtleCalls = [];
+        eachMatch(RE_SUBTLE_CALL, content, (m) => subtleCalls.push(m.index));
+        const inJwk = (index) => enclosingObject(content, index).includes('"kty"');
         eachMatch(RE_JWT_ALG, content, (m) => {
+          if (inJwk(m.index))
+            return;
           const alg = m[1];
           let algorithm;
           if (alg.startsWith("RS") || alg.startsWith("PS"))
@@ -2386,12 +2481,20 @@ var init_source = __esm({
           }));
         });
         eachMatch(RE_JOSE_ECDH, content, (m) => {
+          if (inJwk(m.index))
+            return;
+          if (nearSortedCall(subtleCalls, m.index, 400))
+            return;
           findings.push(findingFromRule(RULE_JOSE_ECDH, { file, content, index: m.index, matchLength: m[0].length }, {
             title: `JOSE key agreement ${m[1]}`,
             message: `JOSE "${m[1]}" performs classical ECDH key agreement \u2014 harvest-now-decrypt-later exposed.`
           }));
         });
         eachMatch(RE_JOSE_KEM, content, (m) => {
+          if (inJwk(m.index))
+            return;
+          if (m[1].startsWith("RSA-OAEP") && nearSortedCall(subtleCalls, m.index, 400))
+            return;
           findings.push(findingFromRule(RULE_JOSE_RSA_OAEP, { file, content, index: m.index, matchLength: m[0].length }, {
             title: `JOSE RSA key transport ${m[1]}`,
             message: `JOSE "${m[1]}" is classical RSA key transport \u2014 harvest-now-decrypt-later exposed.`
@@ -2544,6 +2647,8 @@ var init_source = __esm({
           }));
         });
         eachMatch(RE_SSH_KEX, content, (m) => {
+          if (inDocFieldValue(content, m.index))
+            return;
           const tok = m[1];
           const algorithm = tok.startsWith("diffie-hellman") ? "DH" : tok.startsWith("ecdh") ? "ECDH" : "X25519";
           findings.push(findingFromRule(RULE_SSH_KEX, { file, content, index: m.index, matchLength: m[0].length }, {
@@ -2579,6 +2684,8 @@ var init_source = __esm({
       detect({ file, content }) {
         const findings = [];
         eachMatch(RE_TLS_CLASSICAL_KEX, content, (m) => {
+          if (inDocFieldValue(content, m.index))
+            return;
           const tok = m[0];
           const algorithm = tok.includes("ECDH") ? "ECDH" : "DH";
           findings.push(findingFromRule(RULE_TLS_CLASSICAL_KEX, { file, content, index: m.index, matchLength: m[0].length }, {
@@ -2844,7 +2951,7 @@ var init_python = __esm({
       appliesTo: (f) => hasExtension(f, PYTHON_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_PY_RSA_KEYGEN, RULE_PY_RSA_KEYGEN);
         add(RE_PY_RSA_ENCRYPT, RULE_PY_RSA_ENCRYPT);
         add(RE_PY_EC_KEYGEN, RULE_PY_EC_KEYGEN);
@@ -2861,8 +2968,8 @@ var init_python = __esm({
         for (const [mod, aliasList] of collectPyModuleAliases(content)) {
           for (const alias of aliasList) {
             const a = escapePyRe(alias);
-            for (const { method, rule } of PY_MODULE_RULES[mod]) {
-              add(new RegExp(`\\b${a}\\.${method}\\s*\\(`, "g"), rule);
+            for (const { method, rule: rule2 } of PY_MODULE_RULES[mod]) {
+              add(new RegExp(`\\b${a}\\.${method}\\s*\\(`, "g"), rule2);
             }
           }
         }
@@ -3135,7 +3242,7 @@ var init_go = __esm({
       appliesTo: (f) => hasExtension(f, GO_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_GO_RSA_KEYGEN, RULE_GO_RSA_KEYGEN);
         add(RE_GO_RSA_ENCRYPT, RULE_GO_RSA_ENCRYPT);
         add(RE_GO_RSA_SIGN, RULE_GO_RSA_SIGN);
@@ -3168,6 +3275,8 @@ function classifyGetInstance(factory, rawAlg) {
   const isSignature = factory === "Signature";
   if (alg.includes("ECDSA"))
     return RULE_JAVA_ECDSA_SIGN;
+  if (alg.includes("ECIES"))
+    return RULE_JAVA_ECDH;
   if (alg.includes("ECDH"))
     return RULE_JAVA_ECDH;
   if (alg === "EC")
@@ -3193,10 +3302,10 @@ var init_java = __esm({
     init_detect_utils();
     init_cwe();
     RE_JAVA_GETINSTANCE = /\b(KeyPairGenerator|Signature|Cipher|KeyAgreement|KeyFactory)\s*\.\s*getInstance\s*\(\s*"([^"]+)"/g;
-    RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|Ed25519KeyPairGenerator|RSAEngine|OAEPEncoding)\s*\(/g;
+    RE_JAVA_BC = /\bnew\s+(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|Ed25519Signer|Ed448Signer|X25519Agreement|X448Agreement|ECDHBasicAgreement|DHBasicAgreement|X25519KeyPairGenerator|X448KeyPairGenerator|Ed25519KeyPairGenerator|Ed448KeyPairGenerator|X448PrivateKeyParameters|RSAEngine|OAEPEncoding)\s*\(/g;
     RE_JAVA_BC_CURVE = /(?<!\bnew\s+)\b(X448KeyPairGenerator|X448Agreement|X448PrivateKeyParameters|X25519KeyPairGenerator|X25519Agreement|Ed448KeyPairGenerator|Ed448Signer|Ed25519KeyPairGenerator|Ed25519Signer)\s*\(/g;
     RE_JAVA_BC_BARE = /(?<!\bnew\s+)\b(RSAKeyPairGenerator|DSAKeyPairGenerator|ECKeyPairGenerator|ECDSASigner|ECDHBasicAgreement|DHBasicAgreement|RSAEngine|OAEPEncoding)\s*\(/g;
-    RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv3|TLSv1)"/g;
+    RE_JAVA_TLS_LEGACY = /\bSSLContext\s*\.\s*getInstance\s*\(\s*"(SSL|SSLv2|SSLv3|TLSv1(?:\.1)?)"/g;
     RE_JAVA_TLS_NOVERIFY = /\bNoopHostnameVerifier\s*[.(]|\.\s*ALLOW_ALL_HOSTNAME_VERIFIER\b/g;
     RE_JAVA_JWT_ALG = /\bSignatureAlgorithm\.(?:RS|PS|ES)(?:256|384|512)\b|\bAlgorithm\.(?:RSA|ECDSA)(?:256|384|512)\b/g;
     RULE_JAVA_RSA = {
@@ -3396,7 +3505,10 @@ var init_java = __esm({
       ECDHBasicAgreement: RULE_JAVA_ECDH,
       DHBasicAgreement: RULE_JAVA_DH,
       X25519KeyPairGenerator: RULE_JAVA_XDH,
+      X448KeyPairGenerator: RULE_JAVA_XDH,
+      X448PrivateKeyParameters: RULE_JAVA_XDH,
       Ed25519KeyPairGenerator: RULE_JAVA_EDDSA,
+      Ed448KeyPairGenerator: RULE_JAVA_EDDSA,
       RSAEngine: RULE_JAVA_RSA,
       OAEPEncoding: RULE_JAVA_RSA
     };
@@ -3437,28 +3549,28 @@ var init_java = __esm({
       detect({ file, content }) {
         const findings = [];
         eachMatch(RE_JAVA_GETINSTANCE, content, (m) => {
-          const rule = classifyGetInstance(m[1], m[2]);
-          if (!rule)
+          const rule2 = classifyGetInstance(m[1], m[2]);
+          if (!rule2)
             return;
-          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+          findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length }));
         });
         eachMatch(RE_JAVA_BC, content, (m) => {
-          const rule = BC_CLASS_RULES[m[1]];
-          if (!rule)
+          const rule2 = BC_CLASS_RULES[m[1]];
+          if (!rule2)
             return;
-          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+          findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length }));
         });
         eachMatch(RE_JAVA_BC_CURVE, content, (m) => {
-          const rule = BC_CURVE_CLASS_RULES[m[1]];
-          if (!rule)
+          const rule2 = BC_CURVE_CLASS_RULES[m[1]];
+          if (!rule2)
             return;
-          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+          findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length }));
         });
         eachMatch(RE_JAVA_BC_BARE, content, (m) => {
-          const rule = BC_CLASS_RULES[m[1]];
-          if (!rule)
+          const rule2 = BC_CLASS_RULES[m[1]];
+          if (!rule2)
             return;
-          findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }));
+          findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length }));
         });
         eachMatch(RE_JAVA_TLS_LEGACY, content, (m) => {
           findings.push(findingFromRule(RULE_JAVA_TLS_LEGACY, {
@@ -3501,9 +3613,9 @@ var init_csharp = __esm({
     RE_CS_ECDSA = /\bECDsa\.Create\s*\(|\bnew\s+ECDsaCng\s*\(|\bnew\s+ECDsaOpenSsl\s*\(/g;
     RE_CS_ECDH = /\bECDiffieHellman\.Create\s*\(|\bnew\s+ECDiffieHellmanCng\s*\(|\bnew\s+ECDiffieHellmanOpenSsl\s*\(/g;
     RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bnew\s+DSACng\s*\(/g;
-    RE_CS_TLS_CERT_VALIDATION = /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
+    RE_CS_TLS_CERT_VALIDATION = /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=\s*(?:[^;\n]{0,80}=>\s*(?:true\b|\{\s*return\s+true\b)|delegate\s*(?:\([^)]{0,80}\))?\s*\{\s*return\s+true\b)/g;
     RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
-    RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)\b/g;
+    RE_CS_JWT_ALG = /\bSecurityAlgorithms\.(?:Rsa|Ecdsa)Sha(?:256|384|512)(?:Signature)?\b/g;
     RE_CS_BC_EDDSA = /\bEd25519(?:KeyPairGenerator|Signer|PrivateKeyParameters)\b/g;
     RE_CS_BC_X25519 = /\bX25519(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
     RE_CS_BC_X448 = /\bX448(?:KeyPairGenerator|Agreement|PrivateKeyParameters)\b/g;
@@ -3665,7 +3777,7 @@ var init_csharp = __esm({
       appliesTo: (f) => hasExtension(f, CSHARP_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_CS_ECDSA, RULE_CS_ECDSA);
         add(RE_CS_ECDH, RULE_CS_ECDH);
         add(RE_CS_RSA, RULE_CS_RSA);
@@ -3692,9 +3804,9 @@ function collectRustTypeAliases(content) {
   const push = (crate, orig, alias) => {
     if (!alias || alias === orig)
       return;
-    const rule = RUST_ALIASABLE[`${crate}::${orig}`];
-    if (rule)
-      out.push({ alias, rule });
+    const rule2 = RUST_ALIASABLE[`${crate}::${orig}`];
+    if (rule2)
+      out.push({ alias, rule: rule2 });
   };
   const braced = /\buse\s+([\w:]+)::\{([^}]*)\}/g;
   for (let m = braced.exec(content); m; m = braced.exec(content)) {
@@ -3707,7 +3819,7 @@ function collectRustTypeAliases(content) {
     push(m[1], m[2], m[3]);
   return out;
 }
-var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_JWT_ALG, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_X448, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_JWT_ALGORITHM, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, RUST_ALIASABLE, rustDetector;
+var RE_RUST_RSA, RE_RUST_ECDSA, RE_RUST_ECDH, RE_RUST_ED25519, RE_RUST_X25519, RE_RUST_X448, RE_RUST_OPENSSL_RSA, RE_RUST_OPENSSL_EC, RE_RUST_OPENSSL_DSA, RE_RUST_OPENSSL_DH, RE_RUST_RING_X25519, RE_RUST_BARE_X25519, RE_RUST_BARE_SIGNINGKEY, RE_RUST_JWT_ALG, RE_RUST_TLS_ACCEPT_INVALID, RE_RUST_TLS_DANGEROUS, RULE_RUST_RSA, RULE_RUST_ECDSA, RULE_RUST_ECDH, RULE_RUST_ED25519, RULE_RUST_X25519, RULE_RUST_X448, RULE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DH, RULE_RUST_RING_X25519, RULE_RUST_BARE_X25519, RULE_RUST_BARE_SIGNINGKEY, RULE_RUST_JWT_ALGORITHM, RULE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_DANGEROUS, RUST_ALIASABLE, rustDetector;
 var init_rust = __esm({
   "../core/dist/detectors/rust.js"() {
     "use strict";
@@ -3718,6 +3830,7 @@ var init_rust = __esm({
     RE_RUST_ECDH = /\becdh::EphemeralSecret\b|\bagreement::ECDH_P(?:256|384)\b/g;
     RE_RUST_ED25519 = /\bed25519_dalek::(?:SigningKey|Keypair|SecretKey)\b|\bEd25519KeyPair::/g;
     RE_RUST_X25519 = /\bx25519_dalek::(?:EphemeralSecret|StaticSecret)\b/g;
+    RE_RUST_X448 = /\bx448::Secret\b/g;
     RE_RUST_OPENSSL_RSA = /\bRsa::generate\s*\(/g;
     RE_RUST_OPENSSL_EC = /\bEcKey::generate\s*\(/g;
     RE_RUST_OPENSSL_DSA = /\bDsa::generate\s*\(/g;
@@ -3960,12 +4073,13 @@ var init_rust = __esm({
       appliesTo: (f) => hasExtension(f, RUST_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_RUST_RSA, RULE_RUST_RSA);
         add(RE_RUST_ECDSA, RULE_RUST_ECDSA);
         add(RE_RUST_ECDH, RULE_RUST_ECDH);
         add(RE_RUST_ED25519, RULE_RUST_ED25519);
         add(RE_RUST_X25519, RULE_RUST_X25519);
+        add(RE_RUST_X448, RULE_RUST_X448);
         add(RE_RUST_OPENSSL_RSA, RULE_RUST_OPENSSL_RSA);
         add(RE_RUST_OPENSSL_EC, RULE_RUST_OPENSSL_EC);
         add(RE_RUST_OPENSSL_DSA, RULE_RUST_OPENSSL_DSA);
@@ -3980,9 +4094,9 @@ var init_rust = __esm({
         });
         add(RE_RUST_TLS_ACCEPT_INVALID, RULE_RUST_TLS_ACCEPT_INVALID);
         add(RE_RUST_TLS_DANGEROUS, RULE_RUST_TLS_DANGEROUS);
-        for (const { alias, rule } of collectRustTypeAliases(content)) {
+        for (const { alias, rule: rule2 } of collectRustTypeAliases(content)) {
           const a = escapeRustRe(alias);
-          add(new RegExp(`\\b${a}::(?:new|random|random_from_rng|generate|from_bytes)\\s*\\(`, "g"), rule);
+          add(new RegExp(`\\b${a}::(?:new|random|random_from_rng|generate|from_bytes)\\s*\\(`, "g"), rule2);
         }
         return findings;
       }
@@ -4166,7 +4280,7 @@ var init_ruby = __esm({
       appliesTo: (f) => hasExtension(f, RUBY_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_RB_RSA, RULE_RB_RSA);
         add(RE_RB_EC, RULE_RB_EC);
         add(RE_RB_DSA, RULE_RB_DSA);
@@ -4312,7 +4426,7 @@ var init_php = __esm({
       appliesTo: (f) => hasExtension(f, PHP_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         eachMatch(RE_PHP_PKEY_NEW, content, (m) => {
           const info2 = classifyPkeyNew(content, m.index);
           findings.push(findingFromRule(RULE_PHP_KEYGEN, { file, content, index: m.index, matchLength: m[0].length }, {
@@ -4378,13 +4492,14 @@ function classifySign(type) {
     return "DSA";
   return null;
 }
-var RE_EX_GEN, RE_EX_SIGN, RE_EX_X509_RSA, RE_EX_X509_EC, RE_EX_JOSE, SIG_REM, KEX_REM, RULE_EX_KEYGEN, RULE_EX_SIGN, RULE_EX_X509, RULE_EX_JOSE, RSA_CLS, DH_CLS, ECDH_CLS, X25519_CLS, X448_CLS, EDDSA_CLS, EC_CLS, elixirDetector;
+var RE_EX_GEN, RE_EX_COMPUTE, RE_EX_SIGN, RE_EX_X509_RSA, RE_EX_X509_EC, RE_EX_JOSE, SIG_REM, KEX_REM, RULE_EX_KEYGEN, RULE_EX_SIGN, RULE_EX_X509, RULE_EX_JOSE, RSA_CLS, DH_CLS, ECDH_CLS, X25519_CLS, X448_CLS, EDDSA_CLS, EC_CLS, elixirDetector;
 var init_elixir = __esm({
   "../core/dist/detectors/elixir.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
     RE_EX_GEN = /:crypto\.generate_key\s*\(\s*:(\w+)/g;
+    RE_EX_COMPUTE = /:crypto\.compute_key\s*\(\s*:(\w+)/g;
     RE_EX_SIGN = /:crypto\.(?:sign|verify)\s*\(\s*:(\w+)/g;
     RE_EX_X509_RSA = /\bX509\.PrivateKey\.new_rsa\s*\(/g;
     RE_EX_X509_EC = /\bX509\.PrivateKey\.new_ec\s*\(/g;
@@ -4504,13 +4619,27 @@ var init_elixir = __esm({
             ...cls.remediation ? { remediation: cls.remediation } : {}
           }));
         });
+        eachMatch(RE_EX_COMPUTE, content, (m) => {
+          const cls = classifyGen(m[1], content.slice(m.index, m.index + 120));
+          if (!cls)
+            return;
+          findings.push(findingFromRule(RULE_EX_KEYGEN, at(m), {
+            title: `Elixir :crypto ${cls.label} key agreement`,
+            category: cls.cat,
+            severity: cls.sev,
+            algorithm: cls.algo,
+            hndl: cls.hndl,
+            message: `Performs classical ${cls.label} key agreement via Erlang :crypto (Elixir) \u2014 harvest-now-decrypt-later exposed.`,
+            ...cls.remediation ? { remediation: cls.remediation } : {}
+          }));
+        });
         eachMatch(RE_EX_SIGN, content, (m) => {
-          const algo = classifySign(m[1]);
-          if (!algo)
+          const algo2 = classifySign(m[1]);
+          if (!algo2)
             return;
           findings.push(findingFromRule(RULE_EX_SIGN, at(m), {
-            algorithm: algo,
-            message: `Classical ${algo} signature via Erlang :crypto (Elixir) is forgeable by a quantum attacker.`
+            algorithm: algo2,
+            message: `Classical ${algo2} signature via Erlang :crypto (Elixir) is forgeable by a quantum attacker.`
           }));
         });
         eachMatch(RE_EX_X509_RSA, content, (m) => findings.push(findingFromRule(RULE_EX_X509, at(m), { algorithm: "RSA" })));
@@ -4524,7 +4653,15 @@ var init_elixir = __esm({
         })));
         eachMatch(RE_EX_JOSE, content, (m) => {
           const kind = m[1];
-          const cls = kind === "rsa" ? RSA_CLS : kind === "ec" ? EC_CLS : kind === "okp" ? EDDSA_CLS : null;
+          let okpCls = EDDSA_CLS;
+          if (kind === "okp") {
+            const window = content.slice(m.index, m.index + 80);
+            if (/:x25519\b/i.test(window))
+              okpCls = X25519_CLS;
+            else if (/:x448\b/i.test(window))
+              okpCls = X448_CLS;
+          }
+          const cls = kind === "rsa" ? RSA_CLS : kind === "ec" ? EC_CLS : kind === "okp" ? okpCls : null;
           if (!cls)
             return;
           findings.push(findingFromRule(RULE_EX_JOSE, at(m), {
@@ -4565,7 +4702,7 @@ var init_c = __esm({
     RE_C_ECDSA_VERIFY = /\bECDSA_verify\s*\(/g;
     RE_C_RSA_VERIFY = /\bRSA_verify\s*\(/g;
     RE_C_RSA_CRYPT = /\bRSA_public_encrypt\s*\(|\bRSA_private_decrypt\s*\(/g;
-    RE_C_TLS_VERSION = /\bTLSv1_method\b|\bSSLv3_method\b/g;
+    RE_C_TLS_VERSION = /\b(?:TLSv1(?:_1)?|SSLv2|SSLv3)(?:_client|_server)?_method\b/g;
     RE_C_TLS_VERIFY_NONE = /\bSSL_VERIFY_NONE\b/g;
     RE_C_MBEDTLS_RSA = /\bmbedtls_rsa_gen_key\s*\(/g;
     RE_C_MBEDTLS_EC = /\bmbedtls_ecp_gen_key(?:pair)?\s*\(/g;
@@ -4978,7 +5115,7 @@ var init_c = __esm({
       appliesTo: (f) => hasExtension(f, C_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_C_RSA, RULE_C_RSA);
         add(RE_C_EC, RULE_C_EC);
         add(RE_C_ECDSA, RULE_C_ECDSA);
@@ -4986,9 +5123,25 @@ var init_c = __esm({
         add(RE_C_DSA, RULE_C_DSA);
         add(RE_C_DH, RULE_C_DH);
         add(RE_C_EVP_KEYGEN, RULE_C_EVP_KEYGEN);
-        add(RE_C_EVP_DERIVE, RULE_C_EVP_DERIVE);
+        const hasKdfCtx = /\bEVP_PKEY_(?:HKDF|SCRYPT|TLS1_PRF)\b/.test(content);
+        if (content.includes("EVP_PKEY_derive_set_peer") || !hasKdfCtx) {
+          add(RE_C_EVP_DERIVE, RULE_C_EVP_DERIVE);
+        }
         add(RE_C_EVP_CRYPT, RULE_C_EVP_CRYPT);
-        add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
+        eachMatch(RE_C_EVP_SIGN, content, (m) => {
+          const isSign = m[0].includes("DigestSign");
+          if (isSign) {
+            const back = content.slice(Math.max(0, m.index - 300), m.index);
+            if (/EVP_PKEY_new_mac_key|EVP_PKEY_(?:HMAC|CMAC)\b/.test(back))
+              return;
+          }
+          findings.push(findingFromRule(RULE_C_EVP_SIGN, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          }));
+        });
         add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
         add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
         add(RE_C_ECDSA_VERIFY, RULE_C_ECDSA_VERIFY);
@@ -5014,7 +5167,526 @@ var init_c = __esm({
   }
 });
 
+// ../core/dist/detectors/swift.js
+var RE_SWIFT_P_SIGN, RE_SWIFT_P_KEX, RE_SWIFT_ED25519, RE_SWIFT_X25519, RE_SWIFT_SEC_RSA, RE_SWIFT_SEC_EC, RULE_SWIFT_ECDSA, RULE_SWIFT_ECDH, RULE_SWIFT_ED25519, RULE_SWIFT_X25519, RULE_SWIFT_RSA, RULE_SWIFT_SEC_EC, swiftDetector;
+var init_swift = __esm({
+  "../core/dist/detectors/swift.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_SWIFT_P_SIGN = /\b(?:SecureEnclave\.)?P(?:256|384|521)\.Signing\.PrivateKey\b/g;
+    RE_SWIFT_P_KEX = /\b(?:SecureEnclave\.)?P(?:256|384|521)\.KeyAgreement\.PrivateKey\b/g;
+    RE_SWIFT_ED25519 = /\bCurve25519\.Signing\.PrivateKey\b/g;
+    RE_SWIFT_X25519 = /\bCurve25519\.KeyAgreement\.PrivateKey\b/g;
+    RE_SWIFT_SEC_RSA = /\bkSecAttrKeyTypeRSA\b/g;
+    RE_SWIFT_SEC_EC = /\bkSecAttrKeyType(?:EC|ECSECPrimeRandom)\b/g;
+    RULE_SWIFT_ECDSA = {
+      id: "swift-ecdsa",
+      title: "Swift CryptoKit ECDSA signing key",
+      description: "CryptoKit P256/P384/P521 Signing.PrivateKey",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CryptoKit P-curve ECDSA signing (Swift) is forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_SWIFT_ECDH = {
+      id: "swift-ecdh",
+      title: "Swift CryptoKit ECDH key agreement",
+      description: "CryptoKit P256/P384/P521 KeyAgreement.PrivateKey",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CryptoKit P-curve ECDH key agreement (Swift) is harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
+    };
+    RULE_SWIFT_ED25519 = {
+      id: "swift-ed25519",
+      title: "Swift CryptoKit Ed25519 signing key",
+      description: "CryptoKit Curve25519.Signing.PrivateKey (Ed25519)",
+      category: "signature",
+      // `low`, aligned with Ed25519 in every other source pack (go/rust/ruby/python/node)
+      // — the same primitive must not flip CI exit codes based on which language wrote it.
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CryptoKit Ed25519 signing (Swift) is classical and forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_SWIFT_X25519 = {
+      id: "swift-x25519",
+      title: "Swift CryptoKit X25519 key agreement",
+      description: "CryptoKit Curve25519.KeyAgreement.PrivateKey (X25519)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "CryptoKit X25519 key agreement (Swift) is classical and harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
+    };
+    RULE_SWIFT_RSA = {
+      id: "swift-rsa",
+      title: "Swift Security-framework RSA key",
+      description: "SecKeyCreateRandomKey with kSecAttrKeyTypeRSA",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Security-framework RSA key (Swift) is classical and not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_SWIFT_SEC_EC = {
+      id: "swift-sec-ec",
+      title: "Swift Security-framework EC key",
+      description: "SecKeyCreateRandomKey with kSecAttrKeyTypeEC",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Security-framework EC key (Swift); EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    swiftDetector = {
+      id: "swift-crypto",
+      description: "Classical asymmetric crypto in Swift (CryptoKit, Security framework)",
+      scope: "source",
+      language: "swift",
+      rules: [
+        RULE_SWIFT_ECDSA,
+        RULE_SWIFT_ECDH,
+        RULE_SWIFT_ED25519,
+        RULE_SWIFT_X25519,
+        RULE_SWIFT_RSA,
+        RULE_SWIFT_SEC_EC
+      ],
+      appliesTo: (f) => hasExtension(f, SWIFT_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_SWIFT_P_SIGN, RULE_SWIFT_ECDSA);
+        add(RE_SWIFT_P_KEX, RULE_SWIFT_ECDH);
+        add(RE_SWIFT_ED25519, RULE_SWIFT_ED25519);
+        add(RE_SWIFT_X25519, RULE_SWIFT_X25519);
+        add(RE_SWIFT_SEC_RSA, RULE_SWIFT_RSA);
+        add(RE_SWIFT_SEC_EC, RULE_SWIFT_SEC_EC);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/objc.js
+var RE_OBJC_SEC_RSA, RE_OBJC_SEC_EC, RE_OBJC_RSA_SIGN, RE_OBJC_RSA_ENCRYPT, RE_OBJC_ECDSA_SIGN, RE_OBJC_ECDH, RULE_OBJC_SEC_RSA, RULE_OBJC_SEC_EC, RULE_OBJC_RSA_SIGN, RULE_OBJC_RSA_ENCRYPT, RULE_OBJC_ECDSA_SIGN, RULE_OBJC_ECDH, objcDetector;
+var init_objc = __esm({
+  "../core/dist/detectors/objc.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_OBJC_SEC_RSA = /\bkSecAttrKeyTypeRSA\b/g;
+    RE_OBJC_SEC_EC = /\bkSecAttrKeyType(?:ECSECPrimeRandom|EC)\b/g;
+    RE_OBJC_RSA_SIGN = /\bkSecKeyAlgorithmRSASignature\w*/g;
+    RE_OBJC_RSA_ENCRYPT = /\bkSecKeyAlgorithmRSAEncryption\w*/g;
+    RE_OBJC_ECDSA_SIGN = /\bkSecKeyAlgorithmECDSASignature\w*/g;
+    RE_OBJC_ECDH = /\bkSecKeyAlgorithmECDHKeyExchange\w*/g;
+    RULE_OBJC_SEC_RSA = {
+      id: "objc-seckey-rsa",
+      title: "Objective-C Security-framework RSA key",
+      description: "SecKeyCreateRandomKey / SecKeyGeneratePair with kSecAttrKeyTypeRSA",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Security-framework RSA key (Objective-C) is classical and not quantum-safe.",
+      remediation: "Migrate to PQC as Apple's CryptoKit / Security add support: ML-KEM for encryption/key-agreement, ML-DSA for signatures."
+    };
+    RULE_OBJC_SEC_EC = {
+      id: "objc-seckey-ec",
+      title: "Objective-C Security-framework EC key",
+      description: "SecKeyCreateRandomKey / SecKeyGeneratePair with kSecAttrKeyTypeECSECPrimeRandom",
+      // An EC key at generation is AMBIGUOUS (it can feed ECDSA signing OR ECDH key
+      // agreement). The fleet convention (java-ec-keygen, python-ec-keygen, swift-sec-ec,
+      // cloud-kms-ec, …) classifies ambiguous EC keygen as key-exchange/ECDH/hndl:true —
+      // the HNDL-SAFE choice, so a possible key-agreement use is never under-reported.
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Security-framework EC key (Objective-C); EC keys feed ECDH key agreement (harvest-now-decrypt-later exposed) as well as ECDSA signatures, and are not quantum-safe.",
+      remediation: "Migrate to PQC as Apple's CryptoKit / Security add support: ML-KEM for the ECDH key-agreement path, ML-DSA for signatures."
+    };
+    RULE_OBJC_RSA_SIGN = {
+      id: "objc-rsa-sign",
+      title: "Objective-C RSA signature",
+      description: "SecKeyCreateSignature / SecKeyVerifySignature with kSecKeyAlgorithmRSASignature*",
+      category: "signature",
+      // `high`, consistent with every sibling pack's signature severity (swift-rsa,
+      // go-rsa-sign, java-rsa-sign) — the same primitive must not flip CI exit codes
+      // based on which language wrote it.
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical RSA signing (Objective-C, Security framework) is forgeable by a quantum attacker.",
+      remediation: "Migrate to ML-DSA (FIPS 204) as Apple's CryptoKit / Security add PQC support."
+    };
+    RULE_OBJC_RSA_ENCRYPT = {
+      id: "objc-rsa-encrypt",
+      title: "Objective-C RSA encryption",
+      description: "SecKeyCreateEncryptedData with kSecKeyAlgorithmRSAEncryption*",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical RSA encryption (Objective-C, Security framework) is harvest-now-decrypt-later exposed.",
+      remediation: "Migrate to ML-KEM (FIPS 203) as Apple's CryptoKit / Security add PQC support."
+    };
+    RULE_OBJC_ECDSA_SIGN = {
+      id: "objc-ecdsa-sign",
+      title: "Objective-C ECDSA signature",
+      description: "SecKeyCreateSignature / SecKeyVerifySignature with kSecKeyAlgorithmECDSASignature*",
+      category: "signature",
+      // `high`, consistent with swift-ecdsa / go-ecdsa / java-ecdsa-sign / dart-ecdsa.
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical ECDSA signing (Objective-C, Security framework) is forgeable by a quantum attacker.",
+      remediation: "Migrate to ML-DSA (FIPS 204) as Apple's CryptoKit / Security add PQC support."
+    };
+    RULE_OBJC_ECDH = {
+      id: "objc-ecdh",
+      title: "Objective-C ECDH key agreement",
+      description: "SecKeyCopyKeyExchangeResult with kSecKeyAlgorithmECDHKeyExchange*",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Elliptic-curve Diffie-Hellman (Objective-C, Security framework) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+      remediation: "Migrate key agreement to ML-KEM (FIPS 203) as Apple's CryptoKit / Security add PQC support."
+    };
+    objcDetector = {
+      id: "objc-crypto",
+      description: "Classical asymmetric crypto in Objective-C (Apple Security framework / SecKey)",
+      scope: "source",
+      language: "objc",
+      rules: [
+        RULE_OBJC_SEC_RSA,
+        RULE_OBJC_SEC_EC,
+        RULE_OBJC_RSA_SIGN,
+        RULE_OBJC_RSA_ENCRYPT,
+        RULE_OBJC_ECDSA_SIGN,
+        RULE_OBJC_ECDH
+      ],
+      appliesTo: (f) => hasExtension(f, OBJC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes("SecKey") && !content.includes("kSecAttrKeyType") && !content.includes("kSecKeyAlgorithm")) {
+          return [];
+        }
+        const masked = maskCommentLines(maskBlockComments(content), ["//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, masked, (m) => findings.push(findingFromRule(rule2, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length
+        })));
+        add(RE_OBJC_SEC_RSA, RULE_OBJC_SEC_RSA);
+        add(RE_OBJC_SEC_EC, RULE_OBJC_SEC_EC);
+        add(RE_OBJC_RSA_SIGN, RULE_OBJC_RSA_SIGN);
+        add(RE_OBJC_RSA_ENCRYPT, RULE_OBJC_RSA_ENCRYPT);
+        add(RE_OBJC_ECDSA_SIGN, RULE_OBJC_ECDSA_SIGN);
+        add(RE_OBJC_ECDH, RULE_OBJC_ECDH);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/dart.js
+var RE_DART_RSA_KEYGEN, RE_DART_RSA_SIGN, RE_DART_ECDSA, RE_DART_EC_KEYGEN, RE_DART_ECDH, RE_DART_ED25519, RE_DART_X25519, DART_FAST_REJECT, RULE_DART_RSA_KEYGEN, RULE_DART_RSA_SIGN, RULE_DART_ECDSA, RULE_DART_EC_KEYGEN, RULE_DART_ECDH, RULE_DART_ED25519, RULE_DART_X25519, dartDetector;
+var init_dart = __esm({
+  "../core/dist/detectors/dart.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_DART_RSA_KEYGEN = /\b(?:RSAKeyGenerator|RSAEngine)\b/g;
+    RE_DART_RSA_SIGN = /\b(?:RSASigner|PSSSigner|RsaPss|RsaSsaPkcs1v15)\b/g;
+    RE_DART_ECDSA = /\b(?:ECDSASigner|Ecdsa)\b/g;
+    RE_DART_EC_KEYGEN = /\bECKeyGenerator\b/g;
+    RE_DART_ECDH = /\b(?:ECDHBasicAgreement|Ecdh)\b/g;
+    RE_DART_ED25519 = /\bEd25519\b/g;
+    RE_DART_X25519 = /\bX25519\b/g;
+    DART_FAST_REJECT = [
+      "RSA",
+      "Rsa",
+      "ECDSA",
+      "Ecdsa",
+      "ECDH",
+      "Ecdh",
+      "ECKeyGenerator",
+      "PSSSigner",
+      "Ed25519",
+      "X25519"
+    ];
+    RULE_DART_RSA_KEYGEN = {
+      id: "dart-rsa-keygen",
+      title: "Dart RSA key generation / encryption",
+      description: "pointycastle RSAKeyGenerator / RSAEngine",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical RSA key generation / encryption (Dart, pointycastle) is not quantum-safe and RSA encryption is harvest-now-decrypt-later exposed.",
+      remediation: "Migrate to PQC (ML-KEM-768 for encryption / key transport) as Dart crypto packages add support."
+    };
+    RULE_DART_RSA_SIGN = {
+      id: "dart-rsa-sign",
+      title: "Dart RSA signature",
+      description: "pointycastle RSASigner/PSSSigner, cryptography RsaPss/RsaSsaPkcs1v15",
+      category: "signature",
+      // `high`, consistent with every sibling pack's signature severity (go/java/php/
+      // objc/elixir RSA-sign) — the same primitive must not flip CI exit codes by language.
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical RSA signature (Dart) is forgeable by a quantum attacker.",
+      remediation: "Migrate to PQC signatures (ML-DSA-65, FIPS 204) as Dart crypto packages add support."
+    };
+    RULE_DART_ECDSA = {
+      id: "dart-ecdsa",
+      title: "Dart ECDSA signature",
+      description: "pointycastle ECDSASigner, cryptography Ecdsa",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Classical ECDSA signing (Dart) is forgeable by a quantum attacker.",
+      remediation: "Migrate to PQC signatures (ML-DSA-65, FIPS 204) as Dart crypto packages add support."
+    };
+    RULE_DART_EC_KEYGEN = {
+      id: "dart-ec-keygen",
+      title: "Dart EC key generation",
+      description: "pointycastle ECKeyGenerator (ambiguous EC key: ECDSA or ECDH)",
+      // Ambiguous EC keygen → key-exchange/ECDH/hndl:true (fleet HNDL-safe convention),
+      // since the key may feed ECDH agreement (harvest-now-decrypt-later exposed).
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "EC key generation (Dart, pointycastle); an EC key can feed ECDH key agreement (harvest-now-decrypt-later exposed) as well as ECDSA signing, and is not quantum-safe.",
+      remediation: "For key agreement migrate to hybrid X25519MLKEM768 (ML-KEM-768); for signatures ML-DSA-65 \u2014 as Dart crypto packages add support."
+    };
+    RULE_DART_ECDH = {
+      id: "dart-ecdh",
+      title: "Dart ECDH key agreement",
+      description: "pointycastle ECDHBasicAgreement, cryptography Ecdh",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Elliptic-curve Diffie-Hellman key agreement (Dart) is broken by Shor's algorithm (harvest-now-decrypt-later).",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768) as Dart crypto packages add support."
+    };
+    RULE_DART_ED25519 = {
+      id: "dart-ed25519",
+      title: "Dart Ed25519 signature",
+      description: "pointycastle / cryptography Ed25519 signer",
+      category: "signature",
+      // `low`, aligned with Ed25519 across the other source packs (swift/rust/go/…) —
+      // the same primitive must not flip CI exit codes based on which language wrote it.
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ed25519 (Dart) is a modern but still classical signature scheme, forgeable by a quantum attacker.",
+      remediation: "Migrate to PQC signatures (ML-DSA-65, FIPS 204) as Dart crypto packages add support."
+    };
+    RULE_DART_X25519 = {
+      id: "dart-x25519",
+      title: "Dart X25519 key agreement",
+      description: "cryptography X25519 key agreement",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "X25519 (Dart) is modern but still classical key agreement \u2014 harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768) as Dart crypto packages add support."
+    };
+    dartDetector = {
+      id: "dart-crypto",
+      description: "Classical asymmetric crypto in Dart / Flutter (pointycastle, cryptography)",
+      scope: "source",
+      language: "dart",
+      rules: [
+        RULE_DART_RSA_KEYGEN,
+        RULE_DART_RSA_SIGN,
+        RULE_DART_ECDSA,
+        RULE_DART_EC_KEYGEN,
+        RULE_DART_ECDH,
+        RULE_DART_ED25519,
+        RULE_DART_X25519
+      ],
+      appliesTo: (f) => hasExtension(f, DART_EXTENSIONS),
+      detect({ file, content }) {
+        if (!DART_FAST_REJECT.some((t) => content.includes(t)))
+          return [];
+        const masked = maskCommentLines(maskBlockComments(content), ["//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, masked, (m) => findings.push(findingFromRule(rule2, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length
+        })));
+        add(RE_DART_RSA_KEYGEN, RULE_DART_RSA_KEYGEN);
+        add(RE_DART_RSA_SIGN, RULE_DART_RSA_SIGN);
+        add(RE_DART_ECDSA, RULE_DART_ECDSA);
+        add(RE_DART_EC_KEYGEN, RULE_DART_EC_KEYGEN);
+        add(RE_DART_ECDH, RULE_DART_ECDH);
+        add(RE_DART_ED25519, RULE_DART_ED25519);
+        add(RE_DART_X25519, RULE_DART_X25519);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/solidity.js
+var REMEDIATION_ONCHAIN, RE_SOL_ECRECOVER, RE_SOL_ECDSA_LIB, RE_SOL_ECDSA_IMPORT, RE_MOVE_ED25519, RE_MOVE_SECP256K1, RE_CAIRO_ECDSA, RULE_SOL_ECRECOVER, RULE_MOVE_ED25519, RULE_MOVE_SECP256K1, RULE_CAIRO_ECDSA, solidityDetector;
+var init_solidity = __esm({
+  "../core/dist/detectors/solidity.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    REMEDIATION_ONCHAIN = "No PQC on-chain signature scheme is standardized on these chains yet; inventory this on-chain signature verification now and track chain roadmaps (e.g. account abstraction enabling alternative signature schemes) for a quantum-safe migration path.";
+    RE_SOL_ECRECOVER = /\becrecover\s*\(/g;
+    RE_SOL_ECDSA_LIB = /\bECDSA\.(?:recover|tryRecover)\s*\(|\bSignatureChecker\.isValidSignatureNow\s*\(/g;
+    RE_SOL_ECDSA_IMPORT = /(?:cryptography|utils)\/(?:ECDSA|SignatureChecker)\.sol\b/g;
+    RE_MOVE_ED25519 = /\bed25519::signature_verify_strict\s*\(|\bed25519_verify\s*\(/g;
+    RE_MOVE_SECP256K1 = /\becdsa_k1::secp256k1_(?:verify|ecrecover)\s*\(/g;
+    RE_CAIRO_ECDSA = /\bcheck_ecdsa_signature\s*\(/g;
+    RULE_SOL_ECRECOVER = {
+      id: "sol-ecrecover",
+      title: "EVM on-chain ECDSA signature verification (secp256k1)",
+      description: "Solidity ecrecover / OpenZeppelin-Solady ECDSA.recover / SignatureChecker (secp256k1)",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "On-chain ECDSA over secp256k1 (Solidity/EVM: ecrecover, OpenZeppelin/Solady ECDSA / SignatureChecker) is forgeable by a quantum attacker; on-chain keys often ARE asset custody.",
+      remediation: REMEDIATION_ONCHAIN
+    };
+    RULE_MOVE_ED25519 = {
+      id: "sol-ed25519",
+      title: "Move on-chain Ed25519 signature verification",
+      description: "Move (Sui/Aptos) ed25519::signature_verify_strict / ed25519_verify",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "On-chain Ed25519 signature verification (Move / Sui / Aptos) is classical and forgeable by a quantum attacker; on-chain keys often ARE asset custody.",
+      remediation: REMEDIATION_ONCHAIN
+    };
+    RULE_MOVE_SECP256K1 = {
+      id: "sol-secp256k1-verify",
+      title: "Move on-chain ECDSA signature verification (secp256k1)",
+      description: "Move (Sui) ecdsa_k1::secp256k1_verify / secp256k1_ecrecover",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "On-chain ECDSA over secp256k1 (Move / Sui ecdsa_k1) is forgeable by a quantum attacker; on-chain keys often ARE asset custody.",
+      remediation: REMEDIATION_ONCHAIN
+    };
+    RULE_CAIRO_ECDSA = {
+      id: "cairo-ecdsa",
+      title: "Cairo/Starknet on-chain ECDSA signature verification (STARK curve)",
+      description: "Cairo check_ecdsa_signature (STARK-curve ECDSA)",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "On-chain ECDSA over the STARK curve (Cairo/Starknet check_ecdsa_signature) is forgeable by a quantum attacker; on-chain keys often ARE asset custody.",
+      remediation: REMEDIATION_ONCHAIN
+    };
+    solidityDetector = {
+      id: "solidity-crypto",
+      description: "Classical on-chain signature verification in smart-contract source (Solidity, Move, Cairo)",
+      scope: "source",
+      language: "solidity",
+      rules: [RULE_SOL_ECRECOVER, RULE_MOVE_ED25519, RULE_MOVE_SECP256K1, RULE_CAIRO_ECDSA],
+      appliesTo: (f) => hasExtension(f, SMART_CONTRACT_EXTENSIONS),
+      detect({ file, content }) {
+        const scan2 = maskCommentLines(maskBlockComments(content), ["//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_SOL_ECRECOVER, RULE_SOL_ECRECOVER);
+        add(RE_SOL_ECDSA_LIB, RULE_SOL_ECRECOVER);
+        add(RE_SOL_ECDSA_IMPORT, RULE_SOL_ECRECOVER);
+        add(RE_MOVE_ED25519, RULE_MOVE_ED25519);
+        add(RE_MOVE_SECP256K1, RULE_MOVE_SECP256K1);
+        add(RE_CAIRO_ECDSA, RULE_CAIRO_ECDSA);
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/pem.js
+function hasBase64Body(content, from) {
+  const window = content.slice(from, from + 800);
+  if (/^[ \t]*[A-Za-z0-9+/]{24,}={0,2}[ \t]*$/m.test(window))
+    return true;
+  if (/\\n[A-Za-z0-9+/]{24,}/.test(window))
+    return true;
+  const end = window.search(/-----END [A-Z0-9 ]+-----/);
+  return end >= 0 && !window.slice(0, end).includes('"');
+}
 var PEM_RULES, pemDetector;
 var init_pem = __esm({
   "../core/dist/detectors/pem.js"() {
@@ -5217,800 +5889,17 @@ var init_pem = __esm({
         if (!content.includes("-----BEGIN "))
           return [];
         const findings = [];
-        for (const rule of PEM_RULES) {
-          eachMatch(rule.re, content, (m) => {
-            findings.push(findingFromRule(rule.meta, {
+        for (const rule2 of PEM_RULES) {
+          eachMatch(rule2.re, content, (m) => {
+            if (!hasBase64Body(content, m.index + m[0].length))
+              return;
+            findings.push(findingFromRule(rule2.meta, {
               file,
               content,
               index: m.index,
               matchLength: m[0].length
             }));
           });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/jwk.js
-var JWK_RULES, jwkDetector;
-var init_jwk = __esm({
-  "../core/dist/detectors/jwk.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    JWK_RULES = [
-      {
-        re: /"kty"\s*:\s*"RSA"/g,
-        meta: {
-          id: "jwk-rsa",
-          title: "RSA JSON Web Key (JWK)",
-          description: 'JWK with "kty":"RSA" (RFC 7518)',
-          category: "certificate",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "RSA JSON Web Key (JWK); classical RSA, not quantum-safe.",
-          remediation: "Re-issue with PQC keys (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
-        }
-      },
-      {
-        re: /"crv"\s*:\s*"(?:P-256K?|P-384|P-521|secp256k1)"/g,
-        meta: {
-          id: "jwk-ec",
-          title: "EC JSON Web Key (JWK)",
-          description: 'JWK with an "crv" naming a NIST/secp curve (RFC 7518)',
-          category: "key-exchange",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "Elliptic-curve JSON Web Key (JWK); a classical EC key feeds BOTH ECDSA signatures and ECDH key agreement \u2014 the ECDH path is harvest-now-decrypt-later exposed.",
-          remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
-        }
-      },
-      {
-        re: /"crv"\s*:\s*"Ed(?:25519|448)"/g,
-        meta: {
-          id: "jwk-eddsa",
-          title: "EdDSA JSON Web Key (JWK)",
-          description: 'JWK OKP key with "crv":"Ed25519"/"Ed448" (RFC 8037)',
-          category: "signature",
-          severity: "low",
-          confidence: "high",
-          algorithm: "EdDSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "EdDSA (Ed25519/Ed448) JSON Web Key (JWK); classical and forgeable by a quantum attacker.",
-          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
-        }
-      },
-      {
-        re: /"crv"\s*:\s*"X(?:25519|448)"/g,
-        meta: {
-          id: "jwk-xdh",
-          title: "X25519/X448 JSON Web Key (JWK)",
-          description: 'JWK OKP key with "crv":"X25519"/"X448" (RFC 8037)',
-          category: "key-exchange",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "X25519",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "X25519/X448 JSON Web Key (JWK); modern but classical key agreement, and harvest-now-decrypt-later exposed.",
-          remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
-        }
-      }
-    ];
-    jwkDetector = {
-      id: "jwk-material",
-      description: "Classical key material in JSON Web Keys (JWK / JWKS)",
-      scope: "config",
-      language: "any",
-      rules: JWK_RULES.map((r) => r.meta),
-      appliesTo: () => true,
-      detect({ file, content }) {
-        if (!content.includes('"kty"') && !content.includes('"crv"'))
-          return [];
-        const findings = [];
-        for (const rule of JWK_RULES) {
-          eachMatch(rule.re, content, (m) => {
-            findings.push(findingFromRule(rule.meta, {
-              file,
-              content,
-              index: m.index,
-              matchLength: m[0].length
-            }));
-          });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/terraform.js
-var TF_EXTENSIONS, RE_TF_RSA, RE_TF_ECDSA, RE_TF_KMS_RSA, RE_TF_KMS_EC, RE_TF_AZ_RSA, RE_TF_AZ_EC, RULE_TF_RSA, RULE_TF_ECDSA, RULE_TF_KMS_RSA, RULE_TF_KMS_EC, RULE_TF_AZ_RSA, RULE_TF_AZ_EC, terraformDetector;
-var init_terraform = __esm({
-  "../core/dist/detectors/terraform.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    TF_EXTENSIONS = [".tf", ".tf.json"];
-    RE_TF_RSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"RSA(?:_[A-Z0-9_]+)?"/g;
-    RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9_]+)"/g;
-    RE_TF_KMS_RSA = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"RSA_\d+"/g;
-    RE_TF_KMS_EC = /(?<![\w"-])"?customer_master_key_spec"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
-    RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/gi;
-    RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/gi;
-    RULE_TF_RSA = {
-      id: "tf-rsa-key",
-      title: "Terraform RSA key",
-      description: "Terraform tls_private_key / KMS RSA key material",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical RSA key, which is not quantum-safe.",
-      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
-    };
-    RULE_TF_ECDSA = {
-      id: "tf-ecdsa-key",
-      title: "Terraform ECDSA key",
-      description: "Terraform tls_private_key / KMS EC signing key",
-      category: "signature",
-      severity: "high",
-      confidence: "high",
-      algorithm: "ECDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical ECDSA key, forgeable by a quantum attacker.",
-      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
-    };
-    RULE_TF_KMS_RSA = {
-      id: "tf-kms-rsa",
-      title: "Terraform AWS KMS RSA CMK",
-      description: 'Terraform aws_kms_key customer_master_key_spec = "RSA_*"',
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical RSA KMS customer master key (harvest-now-decrypt-later exposed for encryption CMKs).",
-      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
-    };
-    RULE_TF_KMS_EC = {
-      id: "tf-kms-ec",
-      title: "Terraform AWS KMS EC CMK",
-      description: 'Terraform aws_kms_key customer_master_key_spec = "ECC_*"',
-      category: "key-exchange",
-      severity: "high",
-      confidence: "high",
-      algorithm: "ECDH",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical EC KMS customer master key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
-      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
-    };
-    RULE_TF_AZ_RSA = {
-      id: "tf-keyvault-rsa",
-      title: "Terraform Azure Key Vault RSA key",
-      description: 'Terraform azurerm_key_vault_key key_type = "RSA"',
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical RSA Azure Key Vault key, which is not quantum-safe.",
-      remediation: "Plan migration to PQC (ML-KEM-768 / ML-DSA-65)."
-    };
-    RULE_TF_AZ_EC = {
-      id: "tf-keyvault-ec",
-      title: "Terraform Azure Key Vault EC key",
-      description: 'Terraform azurerm_key_vault_key key_type = "EC"',
-      category: "key-exchange",
-      severity: "high",
-      confidence: "high",
-      algorithm: "ECDH",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Terraform provisions a classical EC Azure Key Vault key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
-      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
-    };
-    terraformDetector = {
-      id: "terraform-crypto",
-      description: "Classical asymmetric crypto provisioned by Terraform / OpenTofu (IaC)",
-      scope: "config",
-      language: "any",
-      rules: [
-        RULE_TF_RSA,
-        RULE_TF_ECDSA,
-        RULE_TF_KMS_RSA,
-        RULE_TF_KMS_EC,
-        RULE_TF_AZ_RSA,
-        RULE_TF_AZ_EC
-      ],
-      appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
-      detect({ file, content }) {
-        const findings = [];
-        const scan2 = maskCommentLines(content, ["#", "//"]);
-        const add = (re, rule) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
-        add(RE_TF_RSA, RULE_TF_RSA);
-        add(RE_TF_ECDSA, RULE_TF_ECDSA);
-        add(RE_TF_KMS_RSA, RULE_TF_KMS_RSA);
-        add(RE_TF_KMS_EC, RULE_TF_KMS_EC);
-        add(RE_TF_AZ_RSA, RULE_TF_AZ_RSA);
-        add(RE_TF_AZ_EC, RULE_TF_AZ_EC);
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/cloud-kms.js
-var SPEC_KEYS, RE_KMS_RSA, RE_KMS_EC, RULE_KMS_RSA, RULE_KMS_EC, cloudKmsDetector;
-var init_cloud_kms = __esm({
-  "../core/dist/detectors/cloud-kms.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    SPEC_KEYS = "KeySpec|KeyPairSpec|CustomerMasterKeySpec";
-    RE_KMS_RSA = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"]RSA_\\d+['"]`, "g");
-    RE_KMS_EC = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"]ECC_[A-Z0-9_]+['"]`, "g");
-    RULE_KMS_RSA = {
-      id: "cloud-kms-rsa",
-      title: "AWS KMS RSA key",
-      description: "AWS KMS CreateKey / GenerateDataKeyPair with an RSA_* key spec",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Mints a classical RSA key via the AWS KMS SDK (harvest-now-decrypt-later exposed for encryption).",
-      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
-    };
-    RULE_KMS_EC = {
-      id: "cloud-kms-ec",
-      title: "AWS KMS EC key",
-      description: "AWS KMS CreateKey / GenerateDataKeyPair with an ECC_* key spec",
-      category: "key-exchange",
-      severity: "high",
-      confidence: "high",
-      algorithm: "ECDH",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Mints a classical EC key via the AWS KMS SDK; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
-      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
-    };
-    cloudKmsDetector = {
-      id: "cloud-kms",
-      description: "Classical asymmetric keys minted via a cloud KMS SDK (AWS KMS)",
-      scope: "config",
-      language: "any",
-      rules: [RULE_KMS_RSA, RULE_KMS_EC],
-      // Skip prose/docs: a README or tutorial showing `KeySpec: "RSA_2048"` to describe
-      // the KMS API is not a live key-minting call.
-      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
-      detect({ file, content }) {
-        if (!content.includes("KeySpec") && !content.includes("KeyPairSpec") && !content.includes("CustomerMasterKeySpec")) {
-          return [];
-        }
-        const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
-        add(RE_KMS_RSA, RULE_KMS_RSA);
-        add(RE_KMS_EC, RULE_KMS_EC);
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/cicd.js
-function isCiPipelineFile(filePath) {
-  const lower = filePath.toLowerCase();
-  const base = lower.split("/").pop() ?? lower;
-  return lower.includes(".github/workflows/") && (lower.endsWith(".yml") || lower.endsWith(".yaml")) || base === ".gitlab-ci.yml" || lower.endsWith(".gitlab-ci.yml") || base === "jenkinsfile" || lower.endsWith(".jenkinsfile") || base === "azure-pipelines.yml" || base === "azure-pipelines.yaml" || lower.includes(".circleci/") && (lower.endsWith(".yml") || lower.endsWith(".yaml"));
-}
-var CI_RULES, cicdDetector;
-var init_cicd = __esm({
-  "../core/dist/detectors/cicd.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    CI_RULES = [
-      {
-        re: /\bcosign\s+(?:sign|attest|sign-blob|generate-key-pair)\b/g,
-        meta: {
-          id: "ci-cosign-ecdsa",
-          title: "cosign artifact signing (ECDSA)",
-          description: "sigstore/cosign signing in a CI pipeline",
-          category: "signature",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "ECDSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "CI pipeline signs artifacts with cosign (ECDSA P-256, key-based or keyless/Fulcio); classical signatures are forgeable once a CRQC exists.",
-          remediation: "Track sigstore's post-quantum signing roadmap (ML-DSA); plan hybrid signing for long-lived release artifacts."
-        }
-      },
-      {
-        // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
-        // into another command's flag), and `(?![\w-])` stops `--sign` matching the
-        // `--sign` prefix of an unrelated flag like `--sign-artifacts`. The short forms
-        // `-s` (sign) / `-b` (detach-sign) are safe inside the bounded gpg span.
-        re: /\bgpg\b[^\n&|;]*?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
-        meta: {
-          id: "ci-gpg-sign",
-          title: "GPG signing (RSA)",
-          description: "GnuPG detached/clear signing in a CI pipeline",
-          category: "signature",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "CI pipeline signs with GPG, classically an RSA signing key; forgeable once a CRQC exists.",
-          remediation: "Plan migration to ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205) signatures."
-        }
-      },
-      {
-        re: /\bjarsigner\b/g,
-        meta: {
-          id: "ci-jarsigner",
-          title: "Java jarsigner (classical)",
-          description: "JDK jarsigner code signing in a CI pipeline",
-          category: "signature",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "CI pipeline signs JARs with jarsigner (classical RSA/DSA/EC signing key); forgeable once a CRQC exists.",
-          remediation: "Plan migration to a PQC signature scheme (ML-DSA-65 / SLH-DSA) as the JDK adds support."
-        }
-      },
-      {
-        // Allow intervening flags (the common `codesign --force --options runtime --sign`
-        // form), bounded to the codesign invocation so it can't latch onto a later
-        // command's `--sign` across `&&`/`|`/`;`.
-        re: /\bcodesign\b[^\n&|;]*?\s(?:-s\b|--sign\b)/g,
-        meta: {
-          id: "ci-codesign",
-          title: "Apple codesign (RSA)",
-          description: "Apple codesign in a CI pipeline",
-          category: "signature",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "CI pipeline signs with Apple codesign (classical RSA signing identity); forgeable once a CRQC exists.",
-          remediation: "Classical only today; track Apple's PQC signing support and plan migration."
-        }
-      },
-      {
-        re: /\bminisign\b/g,
-        meta: {
-          id: "ci-minisign",
-          title: "minisign (Ed25519)",
-          description: "minisign signing in a CI pipeline",
-          category: "signature",
-          severity: "low",
-          confidence: "high",
-          algorithm: "EdDSA",
-          hndl: false,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "CI pipeline signs with minisign (Ed25519); modern but classical and forgeable once a CRQC exists.",
-          remediation: "Plan migration to ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
-        }
-      }
-    ];
-    cicdDetector = {
-      id: "cicd-signing",
-      description: "Classical artifact / code signing in CI/CD pipelines",
-      scope: "config",
-      language: "any",
-      rules: CI_RULES.map((r) => r.meta),
-      appliesTo: isCiPipelineFile,
-      detect({ file, content }) {
-        const findings = [];
-        const scan2 = maskCommentLines(content, ["#", "//"]);
-        for (const rule of CI_RULES) {
-          eachMatch(rule.re, scan2, (m) => {
-            findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
-          });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/secrets.js
-var SECRET_RULES, secretsDetector;
-var init_secrets = __esm({
-  "../core/dist/detectors/secrets.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    SECRET_RULES = [
-      {
-        // age/SOPS recipient: `age1` + 58 bech32 chars. Distinctive enough for any file.
-        re: /\bage1[0-9a-z]{58}\b/g,
-        meta: {
-          id: "secrets-age-recipient",
-          title: "age / SOPS recipient (X25519)",
-          description: "An age (SOPS) recipient public key wraps secrets with classical X25519",
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "X25519",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "Secrets are wrapped to an age/SOPS X25519 recipient (classical key agreement); harvest-now-decrypt-later exposed, and if committed to git the ciphertext is retroactively un-fixable.",
-          remediation: "Track a post-quantum age recipient / KMS (ML-KEM) and re-encrypt; rotate any secret whose ciphertext has left your control."
-        }
-      },
-      {
-        re: /-----BEGIN PGP MESSAGE-----/g,
-        meta: {
-          id: "secrets-pgp-message",
-          title: "PGP-encrypted secret (RSA/ElGamal)",
-          description: "A PGP MESSAGE block: the session key is wrapped with classical RSA/ElGamal",
-          category: "kem",
-          severity: "high",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "A PGP-encrypted secret whose session key is wrapped with classical RSA/ElGamal; harvest-now-decrypt-later exposed.",
-          remediation: "Re-encrypt with a post-quantum KEM (ML-KEM-768) once available; rotate the underlying secret."
-        }
-      },
-      {
-        re: /\bkind:\s*["']?SealedSecret\b/g,
-        meta: {
-          id: "secrets-sealed-secret",
-          title: "Bitnami Sealed Secret (RSA-OAEP)",
-          description: "A SealedSecret is wrapped by the controller's classical RSA-OAEP key",
-          category: "kem",
-          severity: "high",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "A Bitnami SealedSecret is wrapped with the controller's classical RSA-OAEP key; harvest-now-decrypt-later exposed, and typically committed to git.",
-          remediation: "Plan migration as sealed-secrets adds PQC support; rotate the sealing key and secrets when it does."
-        }
-      }
-    ];
-    secretsDetector = {
-      id: "secrets-at-rest",
-      description: "Secrets wrapped at rest with classical asymmetric crypto (SOPS/age, PGP, Sealed Secrets)",
-      scope: "config",
-      language: "any",
-      rules: SECRET_RULES.map((r) => r.meta),
-      // Skip prose/docs: a tutorial showing an example age recipient is not a secret store.
-      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
-      detect({ file, content }) {
-        if (!content.includes("age1") && !content.includes("BEGIN PGP MESSAGE") && !content.includes("SealedSecret")) {
-          return [];
-        }
-        const findings = [];
-        for (const rule of SECRET_RULES) {
-          eachMatch(rule.re, content, (m) => {
-            findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
-          });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/jose.js
-var JOSE_RULES, joseDetector;
-var init_jose = __esm({
-  "../core/dist/detectors/jose.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    JOSE_RULES = [
-      {
-        re: /"alg"\s*:\s*"RSA(?:-OAEP(?:-256)?|1_5)"/g,
-        meta: {
-          id: "jose-jwe-rsa",
-          title: "JWE RSA key wrapping",
-          description: 'JWE "alg" of RSA-OAEP / RSA-OAEP-256 / RSA1_5 (RFC 7518)',
-          category: "kem",
-          severity: "high",
-          confidence: "high",
-          algorithm: "RSA",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "JWE wraps the content-encryption key with classical RSA (RSA-OAEP/RSA1_5); the encrypted payload is harvest-now-decrypt-later exposed.",
-          remediation: "Plan migration to a post-quantum KEM (ML-KEM-768) for key wrapping as JOSE/COSE PQ algorithms are standardised."
-        }
-      },
-      {
-        re: /"alg"\s*:\s*"ECDH-ES(?:\+A\d{3}KW)?"/g,
-        meta: {
-          id: "jose-jwe-ecdh",
-          title: "JWE ECDH-ES key agreement",
-          description: 'JWE "alg" of ECDH-ES / ECDH-ES+A*KW (RFC 7518)',
-          category: "key-exchange",
-          severity: "high",
-          confidence: "high",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "JWE derives the content-encryption key via classical ECDH-ES; the encrypted payload is harvest-now-decrypt-later exposed.",
-          remediation: "Plan migration to hybrid post-quantum key agreement (X25519MLKEM768) as JOSE PQ algorithms are standardised."
-        }
-      }
-    ];
-    joseDetector = {
-      id: "jose-jwe-keymgmt",
-      description: "Classical JWE key-management algorithms (RSA-OAEP, ECDH-ES) \u2014 confidentiality, HNDL",
-      scope: "config",
-      language: "any",
-      rules: JOSE_RULES.map((r) => r.meta),
-      // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config.
-      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
-      detect({ file, content }) {
-        if (!content.includes("RSA-OAEP") && !content.includes("RSA1_5") && !content.includes("ECDH-ES")) {
-          return [];
-        }
-        const findings = [];
-        for (const rule of JOSE_RULES) {
-          eachMatch(rule.re, content, (m) => {
-            findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
-          });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/k8s.js
-var K8S_EXTENSIONS, RE_CM_RSA, RE_CM_ECDSA, RE_CM_ED25519, RE_ISTIO_LEGACY_TLS, RULE_CM_RSA, RULE_CM_ECDSA, RULE_CM_ED25519, RULE_ISTIO_LEGACY_TLS, k8sDetector;
-var init_k8s = __esm({
-  "../core/dist/detectors/k8s.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    K8S_EXTENSIONS = [".yaml", ".yml", ".json"];
-    RE_CM_RSA = /(?:algorithm|keyAlgorithm):\s*["']?RSA\b/g;
-    RE_CM_ECDSA = /(?:algorithm|keyAlgorithm):\s*["']?ECDSA\b/g;
-    RE_CM_ED25519 = /(?:algorithm|keyAlgorithm):\s*["']?Ed25519\b/g;
-    RE_ISTIO_LEGACY_TLS = /minProtocolVersion:\s*["']?TLSV1_[01]\b/g;
-    RULE_CM_RSA = {
-      id: "k8s-certmanager-rsa",
-      title: "cert-manager RSA key",
-      description: "cert-manager Certificate/Issuer privateKey.algorithm = RSA",
-      category: "certificate",
-      severity: "medium",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "cert-manager mints certificates with a classical RSA key, which is not quantum-safe.",
-      remediation: "Plan migration to PQC certificate keys (ML-DSA-65) as the CA/issuer chain adds support."
-    };
-    RULE_CM_ECDSA = {
-      id: "k8s-certmanager-ecdsa",
-      title: "cert-manager ECDSA key",
-      description: "cert-manager Certificate/Issuer privateKey.algorithm = ECDSA",
-      category: "certificate",
-      severity: "medium",
-      confidence: "high",
-      algorithm: "ECDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "cert-manager mints certificates with a classical ECDSA key, forgeable by a quantum attacker.",
-      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys."
-    };
-    RULE_CM_ED25519 = {
-      id: "k8s-certmanager-ed25519",
-      title: "cert-manager Ed25519 key",
-      description: "cert-manager Certificate/Issuer privateKey.algorithm = Ed25519",
-      category: "certificate",
-      severity: "low",
-      confidence: "high",
-      algorithm: "EdDSA",
-      hndl: false,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "cert-manager mints certificates with a classical Ed25519 key, forgeable by a quantum attacker.",
-      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys."
-    };
-    RULE_ISTIO_LEGACY_TLS = {
-      id: "k8s-istio-legacy-tls",
-      title: "Istio legacy TLS floor",
-      description: "Istio minProtocolVersion allows TLS 1.0 / 1.1 on mesh traffic",
-      category: "tls",
-      severity: "medium",
-      confidence: "high",
-      hndl: false,
-      cwe: CWE_RISKY_PRIMITIVE,
-      message: "Istio mesh TLS floor allows TLS 1.0/1.1; its classical (EC)DHE key exchange is weak and harvestable.",
-      remediation: "Raise minProtocolVersion to TLSV1_3 and track PQC-hybrid mesh KEX (X25519MLKEM768)."
-    };
-    k8sDetector = {
-      id: "k8s-crypto",
-      description: "Classical crypto in Kubernetes manifests (cert-manager keys, Istio TLS floors)",
-      scope: "config",
-      language: "any",
-      rules: [RULE_CM_RSA, RULE_CM_ECDSA, RULE_CM_ED25519, RULE_ISTIO_LEGACY_TLS],
-      appliesTo: (f) => hasExtension(f, K8S_EXTENSIONS),
-      detect({ file, content }) {
-        const isCertManager = content.includes("cert-manager.io") || /kind:\s*["']?(?:Certificate|Issuer|ClusterIssuer)\b/.test(content);
-        const isIstio = content.includes("minProtocolVersion");
-        if (!isCertManager && !isIstio)
-          return [];
-        const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
-        if (isCertManager) {
-          add(RE_CM_RSA, RULE_CM_RSA);
-          add(RE_CM_ECDSA, RULE_CM_ECDSA);
-          add(RE_CM_ED25519, RULE_CM_ED25519);
-        }
-        if (isIstio)
-          add(RE_ISTIO_LEGACY_TLS, RULE_ISTIO_LEGACY_TLS);
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/messaging.js
-var MQ_EXTENSIONS, MQ_RULES, messagingDetector;
-var init_messaging = __esm({
-  "../core/dist/detectors/messaging.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    MQ_EXTENSIONS = [".properties", ".conf", ".cfg", ".ini"];
-    MQ_RULES = [
-      {
-        // Match TLSv1 (=1.0) and TLSv1.1 but never TLSv1.2 / TLSv1.3: the negative
-        // lookahead stops "TLSv1" from matching the "TLSv1" inside "TLSv1.3".
-        re: /\bssl\.(?:enabled\.)?protocols?\s*=\s*[^\n]*\bTLSv1(?:\.1)?(?![.\d])/gi,
-        meta: {
-          id: "mq-kafka-legacy-tls",
-          title: "Kafka legacy TLS protocol",
-          description: "Kafka ssl.protocol / ssl.enabled.protocols permits TLS 1.0 / 1.1",
-          category: "tls",
-          severity: "medium",
-          confidence: "high",
-          hndl: false,
-          cwe: CWE_RISKY_PRIMITIVE,
-          message: "Kafka broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
-          remediation: "Require TLS 1.3 and track PQC-hybrid KEX (X25519MLKEM768)."
-        }
-      },
-      {
-        re: /\btls_version\s+tlsv1(?:\.1)?(?![.\d])/gi,
-        meta: {
-          id: "mq-mqtt-legacy-tls",
-          title: "MQTT legacy TLS version",
-          description: "Mosquitto/MQTT tls_version permits TLS 1.0 / 1.1",
-          category: "tls",
-          severity: "medium",
-          confidence: "high",
-          hndl: false,
-          cwe: CWE_RISKY_PRIMITIVE,
-          message: "MQTT broker permits legacy TLS 1.0/1.1; its classical key exchange is weak and harvestable.",
-          remediation: "Require TLS 1.3 and track PQC-hybrid KEX for device fleets."
-        }
-      },
-      {
-        re: /\bssl\.cipher\.suites\s*=\s*[^\n]*(?:ECDHE_RSA|ECDHE_ECDSA|TLS_RSA|_DHE_RSA)/g,
-        meta: {
-          id: "mq-classical-cipher",
-          title: "Broker classical (EC)DHE cipher suite",
-          description: "Kafka ssl.cipher.suites names a classical ECDHE/DHE/RSA suite",
-          category: "tls",
-          severity: "medium",
-          confidence: "high",
-          algorithm: "ECDH",
-          hndl: true,
-          cwe: CWE_BROKEN_CRYPTO,
-          message: "Broker TLS is pinned to a classical (EC)DHE/RSA cipher suite; the key exchange is harvest-now-decrypt-later exposed.",
-          remediation: "Move to TLS 1.3 with a PQC-hybrid group (X25519MLKEM768) once the broker/runtime supports it."
-        }
-      }
-    ];
-    messagingDetector = {
-      id: "messaging-transport",
-      description: "Classical transport crypto in message brokers (Kafka, MQTT, RabbitMQ, NATS)",
-      scope: "config",
-      language: "any",
-      rules: MQ_RULES.map((r) => r.meta),
-      appliesTo: (f) => hasExtension(f, MQ_EXTENSIONS),
-      detect({ file, content }) {
-        const findings = [];
-        const scan2 = maskCommentLines(content, ["#", "!", ";"]);
-        for (const rule of MQ_RULES) {
-          eachMatch(rule.re, scan2, (m) => {
-            findings.push(findingFromRule(rule.meta, { file, content, index: m.index, matchLength: m[0].length }));
-          });
-        }
-        return findings;
-      }
-    };
-  }
-});
-
-// ../core/dist/detectors/database.js
-var RE_PGCRYPTO, RE_WEAK_SSLMODE, RULE_PGCRYPTO, RULE_WEAK_SSLMODE, databaseDetector;
-var init_database = __esm({
-  "../core/dist/detectors/database.js"() {
-    "use strict";
-    init_detect_utils();
-    init_cwe();
-    RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
-    RE_WEAK_SSLMODE = /\bsslmode\s*=\s*["']?(?:allow|prefer|require)\b/gi;
-    RULE_PGCRYPTO = {
-      id: "db-pgcrypto-pubkey",
-      title: "pgcrypto public-key encryption",
-      description: "Postgres pgcrypto pgp_pub_encrypt / pgp_pub_decrypt (RSA/ElGamal) on stored data",
-      category: "kem",
-      severity: "high",
-      confidence: "high",
-      algorithm: "RSA",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "Column data is encrypted with pgcrypto public-key crypto (classical RSA/ElGamal); stored ciphertext is harvest-now-decrypt-later exposed.",
-      remediation: "Plan migration to a post-quantum KEM (ML-KEM-768) envelope for at-rest data; re-encrypt long-lived rows."
-    };
-    RULE_WEAK_SSLMODE = {
-      id: "db-weak-sslmode",
-      title: "Database sslmode without verification",
-      description: "libpq sslmode is allow/prefer/require (no certificate verification)",
-      category: "tls",
-      severity: "medium",
-      confidence: "high",
-      hndl: false,
-      cwe: CWE_CERT_VALIDATION,
-      message: "Database sslmode does not verify the server certificate; the classical TLS session is MITM-able and its key exchange is harvestable.",
-      remediation: "Use sslmode=verify-full and TLS 1.3; track PQC-hybrid KEX (X25519MLKEM768) for database transport."
-    };
-    databaseDetector = {
-      id: "database-crypto",
-      description: "Classical crypto in database usage (pgcrypto public-key, weak client sslmode)",
-      scope: "config",
-      language: "any",
-      rules: [RULE_PGCRYPTO, RULE_WEAK_SSLMODE],
-      // Skip prose/docs: a README showing `sslmode=require` is not a live connection string.
-      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
-      detect({ file, content }) {
-        const findings = [];
-        if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {
-          eachMatch(RE_PGCRYPTO, content, (m) => findings.push(findingFromRule(RULE_PGCRYPTO, {
-            file,
-            content,
-            index: m.index,
-            matchLength: m[0].length
-          })));
-        }
-        if (content.includes("sslmode")) {
-          eachMatch(RE_WEAK_SSLMODE, content, (m) => findings.push(findingFromRule(RULE_WEAK_SSLMODE, {
-            file,
-            content,
-            index: m.index,
-            matchLength: m[0].length
-          })));
         }
         return findings;
       }
@@ -6019,6 +5908,12 @@ var init_database = __esm({
 });
 
 // ../core/dist/detectors/cloudformation.js
+function isCloudTemplate(content) {
+  return CFN_MARKERS.some((marker) => content.includes(marker));
+}
+function isCloudTemplateFile(file, content) {
+  return hasExtension(file, CFN_EXTENSIONS) && isCloudTemplate(content);
+}
 var CFN_EXTENSIONS, CFN_MARKERS, RE_CFN_KMS_RSA, RE_CFN_KMS_EC, RE_CFN_ACM_RSA, RE_CFN_ACM_EC, RE_CFN_CLOUDFRONT_TLS, RE_CFN_ELB_TLS, RE_CFN_ARM_KV_RSA, RE_CFN_ARM_KV_EC, RULE_CFN_KMS_RSA, RULE_CFN_KMS_EC, RULE_CFN_ACM_RSA, RULE_CFN_ACM_EC, RULE_CFN_CLOUDFRONT_TLS, RULE_CFN_ELB_TLS, RULE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_EC, cloudformationDetector;
 var init_cloudformation = __esm({
   "../core/dist/detectors/cloudformation.js"() {
@@ -6035,11 +5930,11 @@ var init_cloudformation = __esm({
       "SslPolicy"
       // unquoted so a YAML `SslPolicy:` key also gates the file in, not just JSON
     ];
-    RE_CFN_KMS_RSA = /(?<![\w"-])"?KeySpec"?\s*:\s*"?RSA_\d+"?/g;
-    RE_CFN_KMS_EC = /(?<![\w"-])"?KeySpec"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
+    RE_CFN_KMS_RSA = /(?<![\w"-])"?(?:KeySpec|KeyPairSpec|CustomerMasterKeySpec)"?\s*:\s*"?RSA_\d+"?/g;
+    RE_CFN_KMS_EC = /(?<![\w"-])"?(?:KeySpec|KeyPairSpec|CustomerMasterKeySpec)"?\s*:\s*"?ECC_[A-Z0-9_]+"?/g;
     RE_CFN_ACM_RSA = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?RSA_\d+"?/g;
     RE_CFN_ACM_EC = /(?<![\w"-])"?KeyAlgorithm"?\s*:\s*"?EC_[A-Za-z0-9]+"?/g;
-    RE_CFN_CLOUDFRONT_TLS = /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1)(?=["'\s,}]|$)/gm;
+    RE_CFN_CLOUDFRONT_TLS = /(?<![\w"-])"?MinimumProtocolVersion"?\s*:\s*"?(?:TLSv1(?:\.1)?_2016|TLSv1|SSLv3)(?=["'\s,}]|$)/gm;
     RE_CFN_ELB_TLS = /(?<![\w"-])"?SslPolicy"?\s*:\s*"?ELBSecurityPolicy-(?:2016-08|TLS-1-0-\d{4}-\d{2}|TLS-1-1-\d{4}-\d{2})(?=["'\s,}]|$)/g;
     RE_CFN_ARM_KV_RSA = /(?<![\w"-])"?kty"?\s*:\s*"?RSA"?(?!\w)/g;
     RE_CFN_ARM_KV_EC = /(?<![\w"-])"?kty"?\s*:\s*"?EC"?(?!\w)/g;
@@ -6164,16 +6059,1886 @@ var init_cloudformation = __esm({
       detect({ file, content }) {
         if (!CFN_MARKERS.some((marker) => content.includes(marker)))
           return [];
+        const scan2 = maskCommentLines(content, ["#"]);
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         add(RE_CFN_KMS_RSA, RULE_CFN_KMS_RSA);
         add(RE_CFN_KMS_EC, RULE_CFN_KMS_EC);
         add(RE_CFN_ACM_RSA, RULE_CFN_ACM_RSA);
         add(RE_CFN_ACM_EC, RULE_CFN_ACM_EC);
         add(RE_CFN_CLOUDFRONT_TLS, RULE_CFN_CLOUDFRONT_TLS);
         add(RE_CFN_ELB_TLS, RULE_CFN_ELB_TLS);
-        add(RE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_RSA);
-        add(RE_CFN_ARM_KV_EC, RULE_CFN_ARM_KV_EC);
+        if (content.includes("Microsoft.KeyVault")) {
+          add(RE_CFN_ARM_KV_RSA, RULE_CFN_ARM_KV_RSA);
+          add(RE_CFN_ARM_KV_EC, RULE_CFN_ARM_KV_EC);
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/jwk.js
+function isSigningUse(objectText, sigAlg) {
+  if (/"use"\s*:\s*"enc"/.test(objectText))
+    return false;
+  return /"use"\s*:\s*"sig"/.test(objectText) || sigAlg.test(objectText);
+}
+var JWK_RULES, RSA_SIG_ALG, EC_SIG_ALG, jwkDetector;
+var init_jwk = __esm({
+  "../core/dist/detectors/jwk.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cloudformation();
+    init_cwe();
+    JWK_RULES = [
+      {
+        re: /"kty"\s*:\s*"RSA"/g,
+        meta: {
+          id: "jwk-rsa",
+          title: "RSA JSON Web Key (JWK)",
+          description: 'JWK with "kty":"RSA" (RFC 7518)',
+          category: "certificate",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "RSA JSON Web Key (JWK); classical RSA, not quantum-safe.",
+          remediation: "Re-issue with PQC keys (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+        }
+      },
+      {
+        re: /"crv"\s*:\s*"(?:P-256K?|P-384|P-521|secp256k1)"/g,
+        meta: {
+          id: "jwk-ec",
+          title: "EC JSON Web Key (JWK)",
+          description: 'JWK with an "crv" naming a NIST/secp curve (RFC 7518)',
+          category: "key-exchange",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "ECDH",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Elliptic-curve JSON Web Key (JWK); a classical EC key feeds BOTH ECDSA signatures and ECDH key agreement \u2014 the ECDH path is harvest-now-decrypt-later exposed.",
+          remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+        }
+      },
+      {
+        re: /"crv"\s*:\s*"Ed(?:25519|448)"/g,
+        meta: {
+          id: "jwk-eddsa",
+          title: "EdDSA JSON Web Key (JWK)",
+          description: 'JWK OKP key with "crv":"Ed25519"/"Ed448" (RFC 8037)',
+          category: "signature",
+          severity: "low",
+          confidence: "high",
+          algorithm: "EdDSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "EdDSA (Ed25519/Ed448) JSON Web Key (JWK); classical and forgeable by a quantum attacker.",
+          remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+        }
+      },
+      {
+        re: /"crv"\s*:\s*"X(?:25519|448)"/g,
+        meta: {
+          id: "jwk-xdh",
+          title: "X25519/X448 JSON Web Key (JWK)",
+          description: 'JWK OKP key with "crv":"X25519"/"X448" (RFC 8037)',
+          category: "key-exchange",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "X25519",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "X25519/X448 JSON Web Key (JWK); modern but classical key agreement, and harvest-now-decrypt-later exposed.",
+          remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
+        }
+      }
+    ];
+    RSA_SIG_ALG = /"alg"\s*:\s*"(?:RS|PS)(?:256|384|512)"/;
+    EC_SIG_ALG = /"alg"\s*:\s*"ES(?:256K?|384|512)"/;
+    jwkDetector = {
+      id: "jwk-material",
+      description: "Classical key material in JSON Web Keys (JWK / JWKS)",
+      scope: "config",
+      language: "any",
+      rules: JWK_RULES.map((r) => r.meta),
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes('"kty"') && !content.includes('"crv"'))
+          return [];
+        const isArm = isCloudTemplateFile(file, content) && content.includes("Microsoft.KeyVault");
+        const findings = [];
+        for (const rule2 of JWK_RULES) {
+          eachMatch(rule2.re, content, (m) => {
+            if (rule2.meta.id === "jwk-rsa" && isArm)
+              return;
+            const at = { file, content, index: m.index, matchLength: m[0].length };
+            const obj = enclosingObject(content, m.index);
+            let overrides;
+            if (rule2.meta.id === "jwk-rsa" && isSigningUse(obj, RSA_SIG_ALG)) {
+              overrides = {
+                category: "signature",
+                hndl: false,
+                message: "RSA JSON Web Key (JWK) used for signing (RS*/PS*); forgeable by a quantum attacker."
+              };
+            } else if (rule2.meta.id === "jwk-ec" && isSigningUse(obj, EC_SIG_ALG)) {
+              overrides = {
+                category: "signature",
+                algorithm: "ECDSA",
+                hndl: false,
+                message: "Elliptic-curve JSON Web Key (JWK) used for ECDSA signing; forgeable by a quantum attacker."
+              };
+            }
+            findings.push(findingFromRule(rule2.meta, at, overrides));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/terraform.js
+var TF_EXTENSIONS, RE_TF_RSA, RE_TF_ECDSA, RE_TF_ED25519, RE_TF_KMS_RSA, RE_TF_KMS_EC, RE_TF_AZ_RSA, RE_TF_AZ_EC, RULE_TF_RSA, RULE_TF_ECDSA, RULE_TF_ED25519, RULE_TF_KMS_RSA, RULE_TF_KMS_EC, RULE_TF_AZ_RSA, RULE_TF_AZ_EC, terraformDetector;
+var init_terraform = __esm({
+  "../core/dist/detectors/terraform.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    TF_EXTENSIONS = [".tf", ".tf.json"];
+    RE_TF_RSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"RSA(?:_[A-Z0-9_]+)?"/g;
+    RE_TF_ECDSA = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"(?:ECDSA|EC_SIGN_[A-Z0-9_]+)"/g;
+    RE_TF_ED25519 = /(?<![\w"-])"?algorithm"?\s*[:=]\s*"ED25519"/g;
+    RE_TF_KMS_RSA = /(?<![\w"-])"?(?:customer_master_key_spec|key_spec)"?\s*[:=]\s*"RSA_\d+"/g;
+    RE_TF_KMS_EC = /(?<![\w"-])"?(?:customer_master_key_spec|key_spec)"?\s*[:=]\s*"ECC_[A-Z0-9_]+"/g;
+    RE_TF_AZ_RSA = /(?<![\w"-])"?key_type"?\s*[:=]\s*"RSA(?:-HSM)?"/gi;
+    RE_TF_AZ_EC = /(?<![\w"-])"?key_type"?\s*[:=]\s*"EC(?:-HSM)?"/gi;
+    RULE_TF_RSA = {
+      id: "tf-rsa-key",
+      title: "Terraform RSA key",
+      description: "Terraform tls_private_key / KMS RSA key material",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_TF_ECDSA = {
+      id: "tf-ecdsa-key",
+      title: "Terraform ECDSA key",
+      description: "Terraform tls_private_key / KMS EC signing key",
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical ECDSA key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_TF_ED25519 = {
+      id: "tf-ed25519-key",
+      title: "Terraform Ed25519 key",
+      description: 'Terraform tls_private_key algorithm = "ED25519"',
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical Ed25519 key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_TF_KMS_RSA = {
+      id: "tf-kms-rsa",
+      title: "Terraform AWS KMS RSA CMK",
+      description: 'Terraform aws_kms_key customer_master_key_spec = "RSA_*"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA KMS customer master key (harvest-now-decrypt-later exposed for encryption CMKs).",
+      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
+    };
+    RULE_TF_KMS_EC = {
+      id: "tf-kms-ec",
+      title: "Terraform AWS KMS EC CMK",
+      description: 'Terraform aws_kms_key customer_master_key_spec = "ECC_*"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical EC KMS customer master key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_TF_AZ_RSA = {
+      id: "tf-keyvault-rsa",
+      title: "Terraform Azure Key Vault RSA key",
+      description: 'Terraform azurerm_key_vault_key key_type = "RSA"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical RSA Azure Key Vault key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 / ML-DSA-65)."
+    };
+    RULE_TF_AZ_EC = {
+      id: "tf-keyvault-ec",
+      title: "Terraform Azure Key Vault EC key",
+      description: 'Terraform azurerm_key_vault_key key_type = "EC"',
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Terraform provisions a classical EC Azure Key Vault key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    terraformDetector = {
+      id: "terraform-crypto",
+      description: "Classical asymmetric crypto provisioned by Terraform / OpenTofu (IaC)",
+      scope: "config",
+      language: "any",
+      rules: [
+        RULE_TF_RSA,
+        RULE_TF_ECDSA,
+        RULE_TF_ED25519,
+        RULE_TF_KMS_RSA,
+        RULE_TF_KMS_EC,
+        RULE_TF_AZ_RSA,
+        RULE_TF_AZ_EC
+      ],
+      appliesTo: (f) => hasExtension(f, TF_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const scan2 = maskCommentLines(maskBlockComments(content), ["#", "//"]);
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_TF_RSA, RULE_TF_RSA);
+        add(RE_TF_ECDSA, RULE_TF_ECDSA);
+        add(RE_TF_ED25519, RULE_TF_ED25519);
+        add(RE_TF_KMS_RSA, RULE_TF_KMS_RSA);
+        add(RE_TF_KMS_EC, RULE_TF_KMS_EC);
+        add(RE_TF_AZ_RSA, RULE_TF_AZ_RSA);
+        add(RE_TF_AZ_EC, RULE_TF_AZ_EC);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/cloud-kms.js
+var SPEC_KEYS, RE_KMS_RSA, RE_KMS_EC, RE_KMS_RSA_ENUM, RE_KMS_EC_ENUM, RE_GCP_KMS_RSA, RE_GCP_KMS_EC, RE_AZURE_KV_RSA, RE_AZURE_KV_EC, RULE_KMS_RSA, RULE_KMS_EC, cloudKmsDetector;
+var init_cloud_kms = __esm({
+  "../core/dist/detectors/cloud-kms.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cloudformation();
+    init_cwe();
+    SPEC_KEYS = "[Kk]eySpec|[Kk]eyPairSpec|[Cc]ustomerMasterKeySpec|[Kk]eyAlgorithm";
+    RE_KMS_RSA = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"](?:RSA_\\d+)['"]`, "g");
+    RE_KMS_EC = new RegExp(`\\b(?:${SPEC_KEYS})"?\\s*[:=]\\s*['"](?:ECC_[A-Z0-9_]+|EC_[A-Za-z0-9]+)['"]`, "g");
+    RE_KMS_RSA_ENUM = /\b(?:KeySpec|KeyAlgorithm)\.RSA_\d+\b/g;
+    RE_KMS_EC_ENUM = /\b(?:KeySpec|KeyAlgorithm)\.(?:ECC_[A-Z0-9_]+|EC_[A-Za-z0-9]+)\b/g;
+    RE_GCP_KMS_RSA = /\bRSA_(?:SIGN|DECRYPT)_[A-Z0-9_]+/g;
+    RE_GCP_KMS_EC = /\bEC_SIGN_[A-Z0-9_]+/g;
+    RE_AZURE_KV_RSA = /\b[Cc]reateRsaKey(?:Options)?\b|\bKeyType\.Rsa\b/g;
+    RE_AZURE_KV_EC = /\b[Cc]reateEcKey(?:Options)?\b|\bKeyType\.Ec\b/g;
+    RULE_KMS_RSA = {
+      id: "cloud-kms-rsa",
+      title: "Cloud KMS RSA key",
+      description: "AWS/GCP/Azure KMS RSA key spec (KeySpec / RSA_SIGN_* / createRsaKey)",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Mints a classical RSA key via a cloud KMS SDK (AWS/GCP/Azure); harvest-now-decrypt-later exposed for encryption.",
+      remediation: "Plan migration to PQC as cloud KMS adds ML-KEM / ML-DSA key specs."
+    };
+    RULE_KMS_EC = {
+      id: "cloud-kms-ec",
+      title: "Cloud KMS EC key",
+      description: "AWS/GCP/Azure KMS EC key spec (ECC_* / EC_SIGN_* / createEcKey)",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Mints a classical EC key via a cloud KMS SDK (AWS/GCP/Azure); EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    cloudKmsDetector = {
+      id: "cloud-kms",
+      description: "Classical asymmetric keys minted via a cloud KMS/ACM SDK, AWS CDK, or Pulumi",
+      scope: "config",
+      language: "any",
+      rules: [RULE_KMS_RSA, RULE_KMS_EC],
+      // Skip prose/docs: a README or tutorial showing `KeySpec: "RSA_2048"` to describe
+      // the KMS API is not a live key-minting call.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        const lc = content.toLowerCase();
+        if (!lc.includes("keyspec") && !lc.includes("keypairspec") && !lc.includes("keyalgorithm") && !lc.includes("rsa_sign") && !lc.includes("rsa_decrypt") && !lc.includes("ec_sign") && !lc.includes("creatersakey") && !lc.includes("createeckey") && !lc.includes("keytype.")) {
+          return [];
+        }
+        if (isCloudTemplateFile(file, content))
+          return [];
+        const scan2 = maskCommentLines(maskBlockComments(content), ["#", "//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_KMS_RSA, RULE_KMS_RSA);
+        add(RE_KMS_EC, RULE_KMS_EC);
+        add(RE_KMS_RSA_ENUM, RULE_KMS_RSA);
+        add(RE_KMS_EC_ENUM, RULE_KMS_EC);
+        add(RE_GCP_KMS_RSA, RULE_KMS_RSA);
+        add(RE_GCP_KMS_EC, RULE_KMS_EC);
+        add(RE_AZURE_KV_RSA, RULE_KMS_RSA);
+        add(RE_AZURE_KV_EC, RULE_KMS_EC);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/cicd.js
+function isCiPipelineFile(filePath) {
+  const lower = filePath.toLowerCase();
+  const base = lower.split("/").pop() ?? lower;
+  return lower.includes(".github/workflows/") && (lower.endsWith(".yml") || lower.endsWith(".yaml")) || base === ".gitlab-ci.yml" || lower.endsWith(".gitlab-ci.yml") || base === "jenkinsfile" || lower.endsWith(".jenkinsfile") || base === "azure-pipelines.yml" || base === "azure-pipelines.yaml" || lower.includes(".circleci/") && (lower.endsWith(".yml") || lower.endsWith(".yaml"));
+}
+var CI_RULES, cicdDetector;
+var init_cicd = __esm({
+  "../core/dist/detectors/cicd.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    CI_RULES = [
+      {
+        // `sign-blob` precedes `sign` so the longer subcommand wins — otherwise `sign`
+        // matches first and the trailing `\b` succeeds at the `-`, never reaching `sign-blob`.
+        re: /\bcosign\s+(?:sign-blob|sign|attest|generate-key-pair)\b/g,
+        meta: {
+          id: "ci-cosign-ecdsa",
+          title: "cosign artifact signing (ECDSA)",
+          description: "sigstore/cosign signing in a CI pipeline",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "ECDSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "CI pipeline signs artifacts with cosign (ECDSA P-256, key-based or keyless/Fulcio); classical signatures are forgeable once a CRQC exists.",
+          remediation: "Track sigstore's post-quantum signing roadmap (ML-DSA); plan hybrid signing for long-lived release artifacts."
+        }
+      },
+      {
+        // Bound the span to the gpg invocation ([^\n&|;] stops it crossing `&&`/`|`/`;`
+        // into another command's flag), and `(?![\w-])` stops `--sign` matching the
+        // `--sign` prefix of an unrelated flag like `--sign-artifacts`. The short forms
+        // `-s` (sign) / `-b` (detach-sign) are safe inside the bounded gpg span.
+        re: /\bgpg\b[^\n&|;]{0,120}?\s(?:-[sb]\b|--(?:detach-sign|clearsign|sign)(?![\w-]))/g,
+        meta: {
+          id: "ci-gpg-sign",
+          title: "GPG signing (RSA)",
+          description: "GnuPG detached/clear signing in a CI pipeline",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "CI pipeline signs with GPG, classically an RSA signing key; forgeable once a CRQC exists.",
+          remediation: "Plan migration to ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205) signatures."
+        }
+      },
+      {
+        re: /\bjarsigner\b/g,
+        meta: {
+          id: "ci-jarsigner",
+          title: "Java jarsigner (classical)",
+          description: "JDK jarsigner code signing in a CI pipeline",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "CI pipeline signs JARs with jarsigner (classical RSA/DSA/EC signing key); forgeable once a CRQC exists.",
+          remediation: "Plan migration to a PQC signature scheme (ML-DSA-65 / SLH-DSA) as the JDK adds support."
+        }
+      },
+      {
+        // Allow intervening flags (the common `codesign --force --options runtime --sign`
+        // form), bounded to the codesign invocation so it can't latch onto a later
+        // command's `--sign` across `&&`/`|`/`;`.
+        re: /\bcodesign\b[^\n&|;]{0,120}?\s(?:-s\b|--sign\b)/g,
+        meta: {
+          id: "ci-codesign",
+          title: "Apple codesign (RSA)",
+          description: "Apple codesign in a CI pipeline",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "CI pipeline signs with Apple codesign (classical RSA signing identity); forgeable once a CRQC exists.",
+          remediation: "Classical only today; track Apple's PQC signing support and plan migration."
+        }
+      },
+      {
+        re: /\bminisign\b/g,
+        meta: {
+          id: "ci-minisign",
+          title: "minisign (Ed25519)",
+          description: "minisign signing in a CI pipeline",
+          category: "signature",
+          severity: "low",
+          confidence: "high",
+          algorithm: "EdDSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "CI pipeline signs with minisign (Ed25519); modern but classical and forgeable once a CRQC exists.",
+          remediation: "Plan migration to ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+        }
+      }
+    ];
+    cicdDetector = {
+      id: "cicd-signing",
+      description: "Classical artifact / code signing in CI/CD pipelines",
+      scope: "config",
+      language: "any",
+      rules: CI_RULES.map((r) => r.meta),
+      appliesTo: isCiPipelineFile,
+      detect({ file, content }) {
+        const findings = [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        for (const rule2 of CI_RULES) {
+          eachMatch(rule2.re, scan2, (m) => {
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/secrets.js
+var SECRET_RULES, secretsDetector;
+var init_secrets = __esm({
+  "../core/dist/detectors/secrets.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    SECRET_RULES = [
+      {
+        // age/SOPS recipient: `age1` + 58 bech32 chars. Distinctive enough for any file.
+        re: /\bage1[0-9a-z]{58}\b/g,
+        meta: {
+          id: "secrets-age-recipient",
+          title: "age / SOPS recipient (X25519)",
+          description: "An age (SOPS) recipient public key wraps secrets with classical X25519",
+          category: "key-exchange",
+          severity: "high",
+          confidence: "high",
+          algorithm: "X25519",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Secrets are wrapped to an age/SOPS X25519 recipient (classical key agreement); harvest-now-decrypt-later exposed, and if committed to git the ciphertext is retroactively un-fixable.",
+          remediation: "Track a post-quantum age recipient / KMS (ML-KEM) and re-encrypt; rotate any secret whose ciphertext has left your control."
+        }
+      },
+      {
+        re: /\bkind:\s*["']?SealedSecret\b/g,
+        meta: {
+          id: "secrets-sealed-secret",
+          title: "Bitnami Sealed Secret (RSA-OAEP)",
+          description: "A SealedSecret is wrapped by the controller's classical RSA-OAEP key",
+          category: "kem",
+          severity: "high",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "A Bitnami SealedSecret is wrapped with the controller's classical RSA-OAEP key; harvest-now-decrypt-later exposed, and typically committed to git.",
+          remediation: "Plan migration as sealed-secrets adds PQC support; rotate the sealing key and secrets when it does."
+        }
+      }
+    ];
+    secretsDetector = {
+      id: "secrets-at-rest",
+      description: "Secrets wrapped at rest with classical asymmetric crypto (SOPS/age, PGP, Sealed Secrets)",
+      scope: "config",
+      language: "any",
+      rules: SECRET_RULES.map((r) => r.meta),
+      // Skip prose/docs: a tutorial showing an example age recipient is not a secret store.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes("age1") && !content.includes("SealedSecret")) {
+          return [];
+        }
+        const scan2 = maskCommentLines(content, ["#"]);
+        const findings = [];
+        for (const rule2 of SECRET_RULES) {
+          eachMatch(rule2.re, scan2, (m) => {
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/jose.js
+var JOSE_RULES, joseDetector;
+var init_jose = __esm({
+  "../core/dist/detectors/jose.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    JOSE_RULES = [
+      {
+        re: /"alg"\s*:\s*"RSA(?:-OAEP(?:-256)?|1_5)"/g,
+        meta: {
+          id: "jose-jwe-rsa",
+          title: "JWE RSA key wrapping",
+          description: 'JWE "alg" of RSA-OAEP / RSA-OAEP-256 / RSA1_5 (RFC 7518)',
+          category: "kem",
+          severity: "high",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "JWE wraps the content-encryption key with classical RSA (RSA-OAEP/RSA1_5); the encrypted payload is harvest-now-decrypt-later exposed.",
+          remediation: "Plan migration to a post-quantum KEM (ML-KEM-768) for key wrapping as JOSE/COSE PQ algorithms are standardised."
+        }
+      },
+      {
+        re: /"alg"\s*:\s*"ECDH-ES(?:\+A\d{3}KW)?"/g,
+        meta: {
+          id: "jose-jwe-ecdh",
+          title: "JWE ECDH-ES key agreement",
+          description: 'JWE "alg" of ECDH-ES / ECDH-ES+A*KW (RFC 7518)',
+          category: "key-exchange",
+          severity: "high",
+          confidence: "high",
+          algorithm: "ECDH",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "JWE derives the content-encryption key via classical ECDH-ES; the encrypted payload is harvest-now-decrypt-later exposed.",
+          remediation: "Plan migration to hybrid post-quantum key agreement (X25519MLKEM768) as JOSE PQ algorithms are standardised."
+        }
+      }
+    ];
+    joseDetector = {
+      id: "jose-jwe-keymgmt",
+      description: "Classical JWE key-management algorithms (RSA-OAEP, ECDH-ES) \u2014 confidentiality, HNDL",
+      scope: "config",
+      language: "any",
+      rules: JOSE_RULES.map((r) => r.meta),
+      // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config. In the
+      // JS/TS/Python/Go/Ruby source files that source.ts's `jose-rsa-oaep`/`jose-ecdh-es`
+      // token rules actually cover (JWT_HOST_EXTENSIONS), defer to them to avoid a
+      // double-count — but STILL run on other source languages (Java/C#/Rust/PHP/Elixir/
+      // C/C++), which source.ts does not cover for these tokens.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, JWT_HOST_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes("RSA-OAEP") && !content.includes("RSA1_5") && !content.includes("ECDH-ES")) {
+          return [];
+        }
+        const findings = [];
+        for (const rule2 of JOSE_RULES) {
+          eachMatch(rule2.re, content, (m) => {
+            if (enclosingObject(content, m.index).includes('"kty"'))
+              return;
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/k8s.js
+var K8S_EXTENSIONS, RE_CM_RSA, RE_CM_ECDSA, RE_CM_ED25519, RE_ISTIO_LEGACY_TLS, RULE_CM_RSA, RULE_CM_ECDSA, RULE_CM_ED25519, RULE_ISTIO_LEGACY_TLS, k8sDetector;
+var init_k8s = __esm({
+  "../core/dist/detectors/k8s.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    K8S_EXTENSIONS = [".yaml", ".yml", ".json"];
+    RE_CM_RSA = /(?:algorithm|keyAlgorithm):\s*["']?RSA\b/g;
+    RE_CM_ECDSA = /(?:algorithm|keyAlgorithm):\s*["']?ECDSA\b/g;
+    RE_CM_ED25519 = /(?:algorithm|keyAlgorithm):\s*["']?Ed25519\b/g;
+    RE_ISTIO_LEGACY_TLS = /minProtocolVersion:\s*["']?TLSV1_[01]\b/g;
+    RULE_CM_RSA = {
+      id: "k8s-certmanager-rsa",
+      title: "cert-manager RSA key",
+      description: "cert-manager Certificate/Issuer privateKey.algorithm = RSA",
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "cert-manager mints certificates with a classical RSA key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC certificate keys (ML-DSA-65) as the CA/issuer chain adds support."
+    };
+    RULE_CM_ECDSA = {
+      id: "k8s-certmanager-ecdsa",
+      title: "cert-manager ECDSA key",
+      description: "cert-manager Certificate/Issuer privateKey.algorithm = ECDSA",
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "cert-manager mints certificates with a classical ECDSA key, forgeable by a quantum attacker.",
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys."
+    };
+    RULE_CM_ED25519 = {
+      id: "k8s-certmanager-ed25519",
+      title: "cert-manager Ed25519 key",
+      description: "cert-manager Certificate/Issuer privateKey.algorithm = Ed25519",
+      category: "certificate",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "cert-manager mints certificates with a classical Ed25519 key, forgeable by a quantum attacker.",
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys."
+    };
+    RULE_ISTIO_LEGACY_TLS = {
+      id: "k8s-istio-legacy-tls",
+      title: "Istio legacy TLS floor",
+      description: "Istio minProtocolVersion allows TLS 1.0 / 1.1 on mesh traffic",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_RISKY_PRIMITIVE,
+      message: "Istio mesh TLS floor allows TLS 1.0/1.1; its classical (EC)DHE key exchange is weak and harvestable.",
+      remediation: "Raise minProtocolVersion to TLSV1_3 and track PQC-hybrid mesh KEX (X25519MLKEM768)."
+    };
+    k8sDetector = {
+      id: "k8s-crypto",
+      description: "Classical crypto in Kubernetes manifests (cert-manager keys, Istio TLS floors)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_CM_RSA, RULE_CM_ECDSA, RULE_CM_ED25519, RULE_ISTIO_LEGACY_TLS],
+      appliesTo: (f) => hasExtension(f, K8S_EXTENSIONS),
+      detect({ file, content }) {
+        const isCertManager = content.includes("cert-manager.io") || /kind:\s*["']?(?:Certificate|Issuer|ClusterIssuer)\b/.test(content);
+        const isIstio = content.includes("minProtocolVersion");
+        if (!isCertManager && !isIstio)
+          return [];
+        const scan2 = maskCommentLines(content, ["#"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        if (isCertManager) {
+          add(RE_CM_RSA, RULE_CM_RSA);
+          add(RE_CM_ECDSA, RULE_CM_ECDSA);
+          add(RE_CM_ED25519, RULE_CM_ED25519);
+        }
+        if (isIstio)
+          add(RE_ISTIO_LEGACY_TLS, RULE_ISTIO_LEGACY_TLS);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/messaging.js
+var MQ_EXTENSIONS, MQ_RULES, messagingDetector;
+var init_messaging = __esm({
+  "../core/dist/detectors/messaging.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    MQ_EXTENSIONS = [".properties", ".conf", ".cfg", ".ini"];
+    MQ_RULES = [
+      {
+        // Match TLSv1 (=1.0) and TLSv1.1 but never TLSv1.2 / TLSv1.3: the negative
+        // lookahead stops "TLSv1" from matching the "TLSv1" inside "TLSv1.3".
+        re: /\bssl\.(?:enabled\.)?protocols?\s*=\s*[^\n]{0,80}?\bTLSv1(?:\.1)?(?![.\d])/gi,
+        meta: {
+          id: "mq-kafka-legacy-tls",
+          title: "Kafka legacy TLS protocol",
+          description: "Kafka ssl.protocol / ssl.enabled.protocols permits TLS 1.0 / 1.1",
+          category: "tls",
+          severity: "medium",
+          confidence: "high",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "Kafka broker permits legacy TLS 1.0/1.1, an obsolete protocol; require TLS 1.3 (the harvestable classical key exchange is reported separately by the cipher-suite rule).",
+          remediation: "Require TLS 1.3 and track PQC-hybrid KEX (X25519MLKEM768)."
+        }
+      },
+      {
+        re: /\btls_version\s+tlsv1(?:\.1)?(?![.\d])/gi,
+        meta: {
+          id: "mq-mqtt-legacy-tls",
+          title: "MQTT legacy TLS version",
+          description: "Mosquitto/MQTT tls_version permits TLS 1.0 / 1.1",
+          category: "tls",
+          severity: "medium",
+          confidence: "high",
+          hndl: false,
+          cwe: CWE_RISKY_PRIMITIVE,
+          message: "MQTT broker permits legacy TLS 1.0/1.1, an obsolete protocol; require TLS 1.3 (the harvestable classical key exchange is reported separately).",
+          remediation: "Require TLS 1.3 and track PQC-hybrid KEX for device fleets."
+        }
+      },
+      {
+        // Only static-RSA key transport (`TLS_RSA_WITH_…`) is flagged here: the ECDHE /
+        // DHE suites are owned by source.ts's language-agnostic `tls-classical-kex` token
+        // rule (which fires on `.properties` too), so flagging them here would double-count.
+        re: /\bssl\.cipher\.suites\s*=\s*[^\n]{0,200}?\bTLS_RSA_WITH_/g,
+        meta: {
+          id: "mq-rsa-key-transport",
+          title: "Broker static-RSA key transport cipher",
+          description: "Kafka ssl.cipher.suites names a static-RSA (TLS_RSA_WITH_*) key-transport suite",
+          category: "kem",
+          algorithm: "RSA",
+          severity: "medium",
+          confidence: "high",
+          hndl: true,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Broker TLS is pinned to a static-RSA (TLS_RSA_WITH_*) key-transport suite; the wrapped session key is harvest-now-decrypt-later exposed (and it has no forward secrecy).",
+          remediation: "Move to TLS 1.3 with a PQC-hybrid group (X25519MLKEM768) once the broker/runtime supports it."
+        }
+      }
+    ];
+    messagingDetector = {
+      id: "messaging-transport",
+      description: "Classical transport crypto in message brokers (Kafka, MQTT, RabbitMQ, NATS)",
+      scope: "config",
+      language: "any",
+      rules: MQ_RULES.map((r) => r.meta),
+      appliesTo: (f) => hasExtension(f, MQ_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const scan2 = maskCommentLines(content, ["#", "!", ";"]);
+        for (const rule2 of MQ_RULES) {
+          eachMatch(rule2.re, scan2, (m) => {
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/database.js
+var RE_PGCRYPTO, RE_WEAK_SSLMODE, RE_MSSQL_TDE_RSA, RULE_PGCRYPTO, RULE_MSSQL_TDE_RSA, RULE_WEAK_SSLMODE, databaseDetector;
+var init_database = __esm({
+  "../core/dist/detectors/database.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_PGCRYPTO = /\bpgp_pub_(?:encrypt|decrypt)\b/g;
+    RE_WEAK_SSLMODE = /\b(?:pg)?ssl[-_]?mode\s*[:=]\s*["']?(?:allow|prefer(?:red)?|require[d]?)\b/gi;
+    RE_MSSQL_TDE_RSA = /\bCREATE\s+ASYMMETRIC\s+KEY\b[\s\S]{0,300}?\bALGORITHM\s*=\s*RSA_\d+/gi;
+    RULE_PGCRYPTO = {
+      id: "db-pgcrypto-pubkey",
+      title: "pgcrypto public-key encryption",
+      description: "Postgres pgcrypto pgp_pub_encrypt / pgp_pub_decrypt (RSA/ElGamal) on stored data",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Column data is encrypted with pgcrypto public-key crypto (classical RSA/ElGamal); stored ciphertext is harvest-now-decrypt-later exposed.",
+      remediation: "Plan migration to a post-quantum KEM (ML-KEM-768) envelope for at-rest data; re-encrypt long-lived rows."
+    };
+    RULE_MSSQL_TDE_RSA = {
+      id: "db-tde-rsa",
+      title: "SQL Server TDE RSA key",
+      description: "SQL Server CREATE ASYMMETRIC KEY ... WITH ALGORITHM = RSA_* (TDE key protection)",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Transparent Data Encryption protects the database encryption key with a classical RSA asymmetric key; the at-rest data is harvest-now-decrypt-later exposed once the RSA key falls.",
+      remediation: "Plan migration to a PQC KEM (ML-KEM-768) for TDE key protection as the database engine adds support; re-key long-lived encrypted databases."
+    };
+    RULE_WEAK_SSLMODE = {
+      id: "db-weak-sslmode",
+      title: "Database sslmode without verification",
+      description: "libpq sslmode is allow/prefer/require (no certificate verification)",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_CERT_VALIDATION,
+      message: "Database sslmode does not verify the server certificate; the classical TLS session is MITM-able and its key exchange is harvestable.",
+      remediation: "Use sslmode=verify-full and TLS 1.3; track PQC-hybrid KEX (X25519MLKEM768) for database transport."
+    };
+    databaseDetector = {
+      id: "database-crypto",
+      description: "Classical crypto in database usage (pgcrypto public-key, SQL Server TDE, weak client sslmode)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_PGCRYPTO, RULE_MSSQL_TDE_RSA, RULE_WEAK_SSLMODE],
+      // Skip prose/docs: a README showing `sslmode=require` is not a live connection string.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        const findings = [];
+        const scan2 = maskCommentLines(content, ["#", "--", ";", "/*"]);
+        if (file.toLowerCase().endsWith(".sql") && content.includes("pgp_pub_")) {
+          eachMatch(RE_PGCRYPTO, scan2, (m) => findings.push(findingFromRule(RULE_PGCRYPTO, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          })));
+        }
+        const lc = content.toLowerCase();
+        if (lc.includes("sslmode") || lc.includes("ssl-mode") || lc.includes("ssl_mode")) {
+          eachMatch(RE_WEAK_SSLMODE, scan2, (m) => findings.push(findingFromRule(RULE_WEAK_SSLMODE, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          })));
+        }
+        if (lc.includes("asymmetric key")) {
+          eachMatch(RE_MSSQL_TDE_RSA, scan2, (m) => findings.push(findingFromRule(RULE_MSSQL_TDE_RSA, {
+            file,
+            content,
+            index: m.index,
+            matchLength: m[0].length
+          })));
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/xmldsig.js
+var RE_XMLDSIG_RSA, RE_XMLDSIG_DSA, RE_XMLDSIG_ECDSA, RE_XMLENC_RSA, RULE_XMLDSIG_RSA, RULE_XMLDSIG_DSA, RULE_XMLDSIG_ECDSA, RULE_XMLENC_RSA, xmldsigDetector;
+var init_xmldsig = __esm({
+  "../core/dist/detectors/xmldsig.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_XMLDSIG_RSA = /\bxmldsig(?:-more|11)?#rsa-sha(?:1|224|256|384|512)\b/g;
+    RE_XMLDSIG_DSA = /\bxmldsig(?:11)?#dsa-sha(?:1|256)\b/g;
+    RE_XMLDSIG_ECDSA = /\bxmldsig-more#ecdsa-sha(?:1|224|256|384|512)\b/g;
+    RE_XMLENC_RSA = /\bxmlenc#rsa-(?:oaep(?:-mgf1p)?|1_5)\b/g;
+    RULE_XMLDSIG_RSA = {
+      id: "xmldsig-rsa-sign",
+      title: "XML-DSig RSA signature",
+      description: "XML Digital Signature with an RSA-SHA* algorithm (SAML/WS-Security)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "XML signatures (SAML / WS-Security) use classical RSA (rsa-sha*); a quantum attacker could forge assertions signed with this key.",
+      remediation: "Track PQC XML-DSig / SAML profiles (ML-DSA); rotate to a PQC signing key as tooling and IdPs add support."
+    };
+    RULE_XMLDSIG_DSA = {
+      id: "xmldsig-dsa-sign",
+      title: "XML-DSig DSA signature",
+      description: "XML Digital Signature with a DSA-SHA* algorithm",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "XML signatures use classical DSA (dsa-sha*) \u2014 deprecated and quantum-forgeable.",
+      remediation: "Migrate off DSA now; track PQC XML-DSig profiles (ML-DSA)."
+    };
+    RULE_XMLDSIG_ECDSA = {
+      id: "xmldsig-ecdsa-sign",
+      title: "XML-DSig ECDSA signature",
+      description: "XML Digital Signature with an ECDSA-SHA* algorithm",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "XML signatures use classical ECDSA (ecdsa-sha*); forgeable by a quantum attacker.",
+      remediation: "Track PQC XML-DSig / SAML profiles (ML-DSA); rotate the signing key when supported."
+    };
+    RULE_XMLENC_RSA = {
+      id: "xmlenc-rsa-keytransport",
+      title: "XML-Enc RSA key transport",
+      description: "XML Encryption with RSA-OAEP / RSA-1_5 key transport (encrypted SAML assertions)",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "XML Encryption wraps the content key with classical RSA (rsa-oaep / rsa-1_5); encrypted XML (e.g. SAML assertions) is harvest-now-decrypt-later exposed.",
+      remediation: "Plan migration to a post-quantum KEM (ML-KEM-768) for key transport as XML-Enc / SAML PQC profiles mature."
+    };
+    xmldsigDetector = {
+      id: "xmldsig-crypto",
+      description: "Classical XML-DSig / XML-Enc algorithms (SAML, WS-Security, signed XML)",
+      scope: "config",
+      language: "any",
+      // Skip prose/docs: a page explaining the SAML algorithm URIs is not live config.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      rules: [RULE_XMLDSIG_RSA, RULE_XMLDSIG_DSA, RULE_XMLDSIG_ECDSA, RULE_XMLENC_RSA],
+      detect({ file, content }) {
+        if (!content.includes("xmldsig") && !content.includes("xmlenc"))
+          return [];
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_XMLDSIG_RSA, RULE_XMLDSIG_RSA);
+        add(RE_XMLDSIG_DSA, RULE_XMLDSIG_DSA);
+        add(RE_XMLDSIG_ECDSA, RULE_XMLDSIG_ECDSA);
+        add(RE_XMLENC_RSA, RULE_XMLENC_RSA);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/pkcs11.js
+var RE_PKCS11_TOOL_RSA, RE_PKCS11_TOOL_EC, RE_CKM_RSA, RE_CKM_EC, RE_CKM_DSA, RE_CKM_DH, RULE_PKCS11_RSA, RULE_PKCS11_EC, RULE_PKCS11_DSA, RULE_PKCS11_DH, pkcs11Detector;
+var init_pkcs11 = __esm({
+  "../core/dist/detectors/pkcs11.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_PKCS11_TOOL_RSA = /--key-type\s+rsa:\d+/gi;
+    RE_PKCS11_TOOL_EC = /--key-type\s+EC:[A-Za-z0-9]+/gi;
+    RE_CKM_RSA = /\bCKM_RSA_(?:PKCS(?:_KEY_PAIR_GEN|_OAEP|_PSS)?|X_509|9796)\b/g;
+    RE_CKM_EC = /\bCKM_EC(?:DSA(?:_SHA\d+)?|DH1?_DERIVE|_KEY_PAIR_GEN)\b/g;
+    RE_CKM_DSA = /\bCKM_DSA(?:_SHA\d+|_KEY_PAIR_GEN)?\b/g;
+    RE_CKM_DH = /\bCKM_DH_PKCS_(?:KEY_PAIR_GEN|DERIVE)\b/g;
+    RULE_PKCS11_RSA = {
+      id: "pkcs11-rsa",
+      title: "PKCS#11 (HSM) RSA key",
+      description: "PKCS#11 RSA key generation / mechanism (pkcs11-tool, CKM_RSA_*)",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical RSA key in a PKCS#11 HSM / token \u2014 likely a long-lived root (CA / code-signing), and not quantum-safe.",
+      remediation: "Inventory HSM-held RSA keys first (longest-lived); plan re-keying to PQC (ML-KEM-768 / ML-DSA-65) as HSM firmware adds support."
+    };
+    RULE_PKCS11_EC = {
+      id: "pkcs11-ec",
+      title: "PKCS#11 (HSM) EC key",
+      description: "PKCS#11 EC key generation / mechanism (CKM_EC*, --key-type EC)",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical EC key in a PKCS#11 HSM / token; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204). Prioritise HSM-held keys."
+    };
+    RULE_PKCS11_DSA = {
+      id: "pkcs11-dsa",
+      title: "PKCS#11 (HSM) DSA key",
+      description: "PKCS#11 DSA key generation / mechanism (CKM_DSA*)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "A classical DSA key in a PKCS#11 HSM / token \u2014 deprecated and quantum-forgeable.",
+      remediation: "Rotate off DSA; migrate to ML-DSA-65 (FIPS 204)."
+    };
+    RULE_PKCS11_DH = {
+      id: "pkcs11-dh",
+      title: "PKCS#11 (HSM) Diffie-Hellman",
+      description: "PKCS#11 finite-field DH key generation / derive (CKM_DH_PKCS_*)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Finite-field Diffie-Hellman in a PKCS#11 HSM / token; classical key agreement, harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
+    };
+    pkcs11Detector = {
+      id: "pkcs11-crypto",
+      description: "Classical asymmetric keys in a PKCS#11 HSM / token",
+      scope: "config",
+      language: "any",
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      rules: [RULE_PKCS11_RSA, RULE_PKCS11_EC, RULE_PKCS11_DSA, RULE_PKCS11_DH],
+      detect({ file, content }) {
+        if (!content.includes("CKM_") && !content.includes("--key-type")) {
+          return [];
+        }
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_PKCS11_TOOL_RSA, RULE_PKCS11_RSA);
+        add(RE_PKCS11_TOOL_EC, RULE_PKCS11_EC);
+        add(RE_CKM_RSA, RULE_PKCS11_RSA);
+        add(RE_CKM_EC, RULE_PKCS11_EC);
+        add(RE_CKM_DSA, RULE_PKCS11_DSA);
+        add(RE_CKM_DH, RULE_PKCS11_DH);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/dkim.js
+function hasDkimMarker(content) {
+  return /\bDKIM1\b/i.test(content) || content.includes("_domainkey") || /DKIM-Signature/i.test(content) || /\bSigningAlgorithm\b/i.test(content);
+}
+var DKIM_EXTENSIONS, RE_RSA_KEYTAG, RE_RSA_ALGTAG, RE_RSA_OPENDKIM, RE_EDDSA_KEYTAG, RE_EDDSA_ALGTAG, RE_EDDSA_OPENDKIM, RULE_DKIM_RSA, RULE_DKIM_EDDSA, DKIM_RULES, dkimDetector;
+var init_dkim = __esm({
+  "../core/dist/detectors/dkim.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    DKIM_EXTENSIONS = [".zone", ".db", ".conf", ".txt"];
+    RE_RSA_KEYTAG = /\bk\s*=\s*rsa\b/gi;
+    RE_RSA_ALGTAG = /\ba\s*=\s*rsa-sha(?:256|1)\b/gi;
+    RE_RSA_OPENDKIM = /\bSigningAlgorithm\s+rsa-sha(?:256|1)\b/gi;
+    RE_EDDSA_KEYTAG = /\bk\s*=\s*ed25519\b/gi;
+    RE_EDDSA_ALGTAG = /\ba\s*=\s*ed25519-sha256\b/gi;
+    RE_EDDSA_OPENDKIM = /\bSigningAlgorithm\s+ed25519-sha256\b/gi;
+    RULE_DKIM_RSA = {
+      id: "dkim-rsa-key",
+      title: "DKIM RSA signing key/algorithm",
+      description: "DKIM email signing configured with a classical RSA key/algorithm (k=rsa, a=rsa-sha256/rsa-sha1)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DKIM email signing uses a classical RSA key/algorithm (k=rsa / rsa-sha256 / rsa-sha1); DKIM-Signature headers become forgeable once a CRQC exists, allowing DKIM/DMARC-passing spoofed mail.",
+      remediation: "There is no standardized post-quantum DKIM algorithm yet \u2014 track IETF work; note that rotating RSA to Ed25519 (RFC 8463) is good hygiene but NOT a PQC fix, since Ed25519 is still classical and equally forgeable under a CRQC."
+    };
+    RULE_DKIM_EDDSA = {
+      id: "dkim-ed25519-key",
+      title: "DKIM Ed25519 signing key/algorithm",
+      description: "DKIM email signing configured with a classical Ed25519 key/algorithm (k=ed25519, a=ed25519-sha256, RFC 8463)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "DKIM email signing uses an Ed25519 key/algorithm (k=ed25519 / ed25519-sha256, RFC 8463) \u2014 modern but still classical; DKIM-Signature headers become forgeable once a CRQC exists.",
+      remediation: "There is no standardized post-quantum DKIM algorithm yet \u2014 track IETF work. Ed25519 is already the smaller/modern DKIM choice but is NOT post-quantum: it stays forgeable under a CRQC, so no rotation today resolves the quantum exposure."
+    };
+    DKIM_RULES = [
+      { meta: RULE_DKIM_RSA, res: [RE_RSA_KEYTAG, RE_RSA_ALGTAG, RE_RSA_OPENDKIM] },
+      { meta: RULE_DKIM_EDDSA, res: [RE_EDDSA_KEYTAG, RE_EDDSA_ALGTAG, RE_EDDSA_OPENDKIM] }
+    ];
+    dkimDetector = {
+      id: "dkim-crypto",
+      description: "Classical DKIM email signing keys/algorithms in zone files / mail signer config",
+      scope: "config",
+      language: "any",
+      rules: DKIM_RULES.map((r) => r.meta),
+      appliesTo: (f) => hasExtension(f, DKIM_EXTENSIONS) && !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (hasExtension(file, DOC_EXTENSIONS))
+          return [];
+        if (!hasDkimMarker(content))
+          return [];
+        const scan2 = maskCommentLines(content, [";", "#", "//"]);
+        const findings = [];
+        for (const { meta, res } of DKIM_RULES) {
+          for (const re of res) {
+            eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+          }
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/ssh-ca.js
+function hasSshCaMarker(content) {
+  return content.includes("cert-v01@openssh.com") || content.includes("@cert-authority") || content.includes("TrustedUserCAKeys") || content.includes("HostCertificate") || content.includes("ssh-keygen -s");
+}
+var RE_CERT_RSA, RE_CERT_ECDSA, RE_CERT_EDDSA, RE_CA_DIRECTIVE, REMEDIATION, RULE_CA_RSA, RULE_CA_ECDSA, RULE_CA_EDDSA, RULE_CA_CONFIG, SSH_CA_RULES, sshCaDetector;
+var init_ssh_ca = __esm({
+  "../core/dist/detectors/ssh-ca.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_CERT_RSA = /\b(?:ssh-rsa|rsa-sha2-(?:256|512))-cert-v01@openssh\.com\b/g;
+    RE_CERT_ECDSA = /\becdsa-sha2-nistp(?:256|384|521)-cert-v01@openssh\.com\b/g;
+    RE_CERT_EDDSA = /\bssh-ed25519-cert-v01@openssh\.com\b/g;
+    RE_CA_DIRECTIVE = /\bTrustedUserCAKeys\b|\bHostCertificate\b|\bssh-keygen\s+-s\b/g;
+    REMEDIATION = "No post-quantum SSH certificate format is standardized yet \u2014 track OpenSSH release notes and IETF work on PQC signatures for SSH. SSH CA keys are long-lived trust roots, so plan for their rotation to a PQC signing algorithm (e.g. ML-DSA) as soon as a cert format lands, and keep validity periods short in the interim.";
+    RULE_CA_RSA = {
+      id: "ssh-ca-rsa-cert",
+      title: "SSH certificate authority \u2014 RSA signing",
+      description: "OpenSSH RSA certificate key type (ssh-rsa/rsa-sha2-*-cert-v01@openssh.com)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      sensitive: true,
+      message: "SSH certificate uses a classical RSA key type (ssh-rsa/rsa-sha2-*-cert-v01@openssh.com); the CA signature is forgeable once a CRQC can recover the RSA CA key.",
+      remediation: REMEDIATION
+    };
+    RULE_CA_ECDSA = {
+      id: "ssh-ca-ecdsa-cert",
+      title: "SSH certificate authority \u2014 ECDSA signing",
+      description: "OpenSSH ECDSA certificate key type (ecdsa-sha2-nistp*-cert-v01@openssh.com)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      sensitive: true,
+      message: "SSH certificate uses a classical ECDSA key type (ecdsa-sha2-nistp*-cert-v01@openssh.com); the CA signature is forgeable once a CRQC can recover the ECDSA CA key.",
+      remediation: REMEDIATION
+    };
+    RULE_CA_EDDSA = {
+      id: "ssh-ca-ed25519-cert",
+      title: "SSH certificate authority \u2014 EdDSA signing",
+      description: "OpenSSH Ed25519 certificate key type (ssh-ed25519-cert-v01@openssh.com)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      sensitive: true,
+      message: "SSH certificate uses a classical Ed25519 key type (ssh-ed25519-cert-v01@openssh.com); modern but still classical \u2014 the CA signature is forgeable once a CRQC can recover the Ed25519 CA key.",
+      remediation: REMEDIATION
+    };
+    RULE_CA_CONFIG = {
+      id: "ssh-ca-config",
+      title: "SSH certificate authority configured",
+      description: "OpenSSH CA deployment directive (TrustedUserCAKeys / HostCertificate / ssh-keygen -s)",
+      category: "signature",
+      severity: "medium",
+      // The directive names CA usage, not the algorithm — hence a lower confidence and
+      // an unknown family; the CA key file itself carries the specific algorithm.
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "SSH certificate authority is configured (TrustedUserCAKeys / HostCertificate / ssh-keygen -s); the CA signing key is a long-lived classical trust root whose signatures become forgeable once a CRQC exists \u2014 verify the CA key's algorithm.",
+      remediation: REMEDIATION
+    };
+    SSH_CA_RULES = [
+      { meta: RULE_CA_RSA, re: RE_CERT_RSA },
+      { meta: RULE_CA_ECDSA, re: RE_CERT_ECDSA },
+      { meta: RULE_CA_EDDSA, re: RE_CERT_EDDSA },
+      { meta: RULE_CA_CONFIG, re: RE_CA_DIRECTIVE }
+    ];
+    sshCaDetector = {
+      id: "ssh-ca",
+      description: "Classical SSH certificate-authority signing (OpenSSH *-cert-v01@openssh.com)",
+      scope: "config",
+      language: "any",
+      rules: SSH_CA_RULES.map((r) => r.meta),
+      // Apply broadly (SSH CA config lives in many differently-named / extensionless
+      // files: sshd_config, known_hosts, *.pub) but never on prose/docs OR on program
+      // SOURCE files — a vendored SSH library or a constants table that spells out
+      // `ssh-ed25519-cert-v01@openssh.com` as a string literal is not a live CA config.
+      // The strict fast-reject in detect() is the remaining gate.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, ANALYZABLE_SOURCE_EXTENSIONS),
+      detect({ file, content }) {
+        if (!hasSshCaMarker(content))
+          return [];
+        const scan2 = maskCommentLines(content, ["#"]);
+        const findings = [];
+        for (const { meta, re } of SSH_CA_RULES) {
+          eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/spire.js
+function hasSpireMarker(content) {
+  return /\b(?:spiffe|spire|svid)\b/i.test(content) || content.includes("ca_key_type");
+}
+var SPIRE_EXTENSIONS, KEY_ATTR, RE_SPIRE_RSA, RE_SPIRE_ECDSA, RULE_SPIRE_RSA, RULE_SPIRE_ECDSA, spireDetector;
+var init_spire = __esm({
+  "../core/dist/detectors/spire.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    SPIRE_EXTENSIONS = [".conf", ".hcl", ".yaml", ".yml", ".json"];
+    KEY_ATTR = "(?:ca_|svid_)?key_type";
+    RE_SPIRE_RSA = new RegExp(`\\b${KEY_ATTR}"?\\s*[:=]\\s*"?rsa-\\d+`, "gi");
+    RE_SPIRE_ECDSA = new RegExp(`\\b${KEY_ATTR}"?\\s*[:=]\\s*"?(?:ec-p\\d+|ecdsa)\\b`, "gi");
+    RULE_SPIRE_RSA = {
+      id: "spire-rsa-key",
+      title: "SPIRE/SPIFFE RSA SVID key type",
+      description: 'SPIRE ca_key_type/svid_key_type/key_type = "rsa-*" (classical X.509-SVID key)',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "SPIRE issues SPIFFE X.509-SVIDs with a classical RSA key; the SVID (and CA) signatures become forgeable once a CRQC exists, letting an attacker mint identities for the trust domain.",
+      remediation: "SPIFFE/SPIRE has no PQC SVID key type yet \u2014 track the SPIFFE roadmap for PQC signature support. Prioritise the SPIRE server ca_key_type: the classical CA is the identity root, so its forgeability compromises every workload SVID."
+    };
+    RULE_SPIRE_ECDSA = {
+      id: "spire-ec-key",
+      title: "SPIRE/SPIFFE ECDSA SVID key type",
+      description: 'SPIRE ca_key_type/svid_key_type/key_type = "ec-p256|ec-p384|ecdsa" (classical X.509-SVID key)',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "SPIRE issues SPIFFE X.509-SVIDs with a classical ECDSA (P-256/P-384) key; the SVID (and CA) signatures become forgeable once a CRQC exists, letting an attacker mint identities for the trust domain.",
+      remediation: "SPIFFE/SPIRE has no PQC SVID key type yet \u2014 track the SPIFFE roadmap for PQC signature support. Prioritise the SPIRE server ca_key_type: the classical CA is the identity root, so its forgeability compromises every workload SVID."
+    };
+    spireDetector = {
+      id: "spire-crypto",
+      description: "Classical key types for SPIFFE X.509 SVIDs in SPIRE server/agent config",
+      scope: "config",
+      language: "any",
+      rules: [RULE_SPIRE_RSA, RULE_SPIRE_ECDSA],
+      // Gate to SPIRE's config extensions, and never run on prose (a README that
+      // describes `ca_key_type = "rsa-2048"` is documentation, not live config).
+      appliesTo: (f) => hasExtension(f, SPIRE_EXTENSIONS) && !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!hasSpireMarker(content))
+          return [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_SPIRE_RSA, RULE_SPIRE_RSA);
+        add(RE_SPIRE_ECDSA, RULE_SPIRE_ECDSA);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/proxy.js
+var RE_ENVOY_TLS, RE_NGINX_TLS, RE_HAPROXY_TLS, RE_TRAEFIK_TLS, RE_GRPC_TLS, MESSAGE, REMEDIATION2, RULE_ENVOY, RULE_NGINX, RULE_HAPROXY, RULE_TRAEFIK, RULE_GRPC, PROXY_FAST_REJECT, PROXY_RULES, proxyDetector;
+var init_proxy = __esm({
+  "../core/dist/detectors/proxy.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_ENVOY_TLS = /\b(?:DownstreamTlsContext|UpstreamTlsContext|common_tls_context\s*:|tls_certificates\s*:|envoy\.transport_sockets\.tls)/g;
+    RE_NGINX_TLS = /\bssl_certificate(?:_key)?\s+\S/g;
+    RE_HAPROXY_TLS = /\bcrt-store\b|\bbind\b[^\n]*\bssl\b[^\n]*\bcrt\b|\bbind\b[^\n]*\bcrt\b[^\n]*\bssl\b/g;
+    RE_TRAEFIK_TLS = /\bcertResolver\b|\b(?:certFile|keyFile)\s*:/g;
+    RE_GRPC_TLS = /grpc\.ssl_channel_credentials\s*\(|grpc\.credentials\.createSsl\s*\(|\bTlsChannelCredentials\b|\bcredentials\.NewTLS\s*\(/g;
+    MESSAGE = (proxy) => `${proxy} terminates TLS with a classical certificate + ECDHE key exchange; the recorded handshake is harvest-now-decrypt-later exposed \u2014 verify the cert key algorithm and plan a PQC-hybrid (X25519MLKEM768) TLS migration.`;
+    REMEDIATION2 = "Enable hybrid PQC key exchange (X25519MLKEM768) once the proxy/gRPC stack supports it; re-key certificates to PQC signatures (ML-DSA) when available.";
+    RULE_ENVOY = {
+      id: "proxy-envoy-tls",
+      title: "Envoy classical TLS termination",
+      description: "Envoy TLS context terminates TLS with a classical certificate + ECDHE key exchange",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: MESSAGE("Envoy"),
+      remediation: REMEDIATION2
+    };
+    RULE_NGINX = {
+      id: "proxy-nginx-tls",
+      title: "Nginx classical TLS termination",
+      description: "Nginx ssl_certificate/ssl_certificate_key terminates TLS with a classical cert + ECDHE",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: MESSAGE("Nginx"),
+      remediation: REMEDIATION2
+    };
+    RULE_HAPROXY = {
+      id: "proxy-haproxy-tls",
+      title: "HAProxy classical TLS termination",
+      description: "HAProxy bind ssl crt / crt-store terminates TLS with a classical cert + ECDHE",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: MESSAGE("HAProxy"),
+      remediation: REMEDIATION2
+    };
+    RULE_TRAEFIK = {
+      id: "proxy-traefik-tls",
+      title: "Traefik classical TLS termination",
+      description: "Traefik tls certificates (certFile/keyFile) or certResolver terminate TLS with a classical cert + ECDHE",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: MESSAGE("Traefik"),
+      remediation: REMEDIATION2
+    };
+    RULE_GRPC = {
+      id: "grpc-tls-credentials",
+      title: "gRPC classical TLS channel credentials",
+      description: "gRPC channel established with classical TLS credentials (RSA/ECDSA cert + ECDHE)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "medium",
+      algorithm: "unknown",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: MESSAGE("gRPC"),
+      remediation: REMEDIATION2
+    };
+    PROXY_FAST_REJECT = [
+      // Envoy
+      "tls_context",
+      "TlsContext",
+      "tls_certificates",
+      "transport_sockets.tls",
+      // Nginx
+      "ssl_certificate",
+      // HAProxy (`crt-store` and `bind … ssl … crt` both contain "crt")
+      "crt",
+      // Traefik
+      "certResolver",
+      "certFile",
+      "keyFile",
+      // gRPC
+      "ssl_channel_credentials",
+      "createSsl",
+      "TlsChannelCredentials",
+      "credentials.NewTLS"
+    ];
+    PROXY_RULES = [
+      { meta: RULE_ENVOY, re: RE_ENVOY_TLS },
+      { meta: RULE_NGINX, re: RE_NGINX_TLS },
+      { meta: RULE_HAPROXY, re: RE_HAPROXY_TLS },
+      { meta: RULE_TRAEFIK, re: RE_TRAEFIK_TLS },
+      { meta: RULE_GRPC, re: RE_GRPC_TLS }
+    ];
+    proxyDetector = {
+      id: "proxy-tls-crypto",
+      description: "Classical-cert TLS termination in reverse-proxy / load-balancer config (Envoy, Nginx, HAProxy, Traefik) and gRPC channel credentials",
+      scope: "config",
+      language: "any",
+      rules: PROXY_RULES.map((r) => r.meta),
+      // Config + source files are all in scope (gRPC creds live in code); only prose
+      // documentation is excluded, so a README mentioning `ssl_certificate` in a
+      // sentence can't fire (the marker gate already handles most of this).
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        const scan2 = maskCommentLines(maskBlockComments(content), ["#", "//"]);
+        if (!PROXY_FAST_REJECT.some((mk) => scan2.includes(mk)))
+          return [];
+        const findings = [];
+        for (const { meta, re } of PROXY_RULES) {
+          eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/webauthn.js
+function hasWebauthnMarker(content) {
+  return content.includes("pubKeyCredParams") || content.includes("PublicKeyCredential") || content.includes("COSEAlgorithm") || content.includes("supportedAlgorithmIDs") || content.includes("navigator.credentials") || /webauthn/i.test(content);
+}
+var NUM_ECDSA, NUM_RSA, NUM_EDDSA, RE_NUM_ECDSA, RE_NUM_RSA, RE_NUM_EDDSA, RE_IDS_ECDSA, RE_IDS_RSA, RE_IDS_EDDSA, RE_ENUM_ECDSA, RE_ENUM_RSA, RE_ENUM_EDDSA, REMEDIATION3, RULE_WEBAUTHN_ECDSA, RULE_WEBAUTHN_RSA, RULE_WEBAUTHN_EDDSA, WEBAUTHN_RULES, webauthnDetector;
+var init_webauthn = __esm({
+  "../core/dist/detectors/webauthn.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    NUM_ECDSA = "7|35|36";
+    NUM_RSA = "257|258|259";
+    NUM_EDDSA = "8";
+    RE_NUM_ECDSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_ECDSA})\\b`, "g");
+    RE_NUM_RSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_RSA})\\b`, "g");
+    RE_NUM_EDDSA = new RegExp(`["']?\\balg\\b["']?\\s*[:=]\\s*-(?:${NUM_EDDSA})\\b`, "g");
+    RE_IDS_ECDSA = new RegExp(`supportedAlgorithmIDs\\s*[:=]\\s*\\[[^\\]]*-(?:${NUM_ECDSA})\\b`, "g");
+    RE_IDS_RSA = new RegExp(`supportedAlgorithmIDs\\s*[:=]\\s*\\[[^\\]]*-(?:${NUM_RSA})\\b`, "g");
+    RE_IDS_EDDSA = new RegExp(`supportedAlgorithmIDs\\s*[:=]\\s*\\[[^\\]]*-(?:${NUM_EDDSA})\\b`, "g");
+    RE_ENUM_ECDSA = /\bCOSEAlgorithmIdentifier\.(?:ES(?:256|384|512)|ECDSA_SHA_(?:256|384|512))\b|\bAlgES(?:256|384|512)\b/g;
+    RE_ENUM_RSA = /\bCOSEAlgorithmIdentifier\.(?:RS(?:256|384|512)|RSASSA_[A-Za-z0-9_]+)\b|\bAlgRS(?:256|384|512)\b/g;
+    RE_ENUM_EDDSA = /\bCOSEAlgorithmIdentifier\.(?:EdDSA|EDDSA)\b|\bAlgEdDSA\b/g;
+    REMEDIATION3 = "WebAuthn/FIDO2 is standardizing PQC COSE algorithms; inventory the classical attestation/assertion algs now and plan migration.";
+    RULE_WEBAUTHN_ECDSA = {
+      id: "webauthn-ecdsa",
+      title: "WebAuthn ECDSA COSE algorithm",
+      description: "WebAuthn/FIDO2 credential pins a classical ECDSA COSE algorithm (ES256/ES384/ES512)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "WebAuthn/FIDO2 relying party accepts a classical ECDSA COSE algorithm (ES256/ES384/ES512); attestation/assertion signatures become forgeable once a CRQC exists.",
+      remediation: REMEDIATION3
+    };
+    RULE_WEBAUTHN_RSA = {
+      id: "webauthn-rsa",
+      title: "WebAuthn RSA COSE algorithm",
+      description: "WebAuthn/FIDO2 credential pins a classical RSA COSE algorithm (RS256/RS384/RS512)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "WebAuthn/FIDO2 relying party accepts a classical RSA COSE algorithm (RS256/RS384/RS512); attestation/assertion signatures become forgeable once a CRQC exists.",
+      remediation: REMEDIATION3
+    };
+    RULE_WEBAUTHN_EDDSA = {
+      id: "webauthn-eddsa",
+      title: "WebAuthn EdDSA COSE algorithm",
+      description: "WebAuthn/FIDO2 credential pins the classical EdDSA COSE algorithm (COSE -8)",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "WebAuthn/FIDO2 relying party accepts the classical EdDSA COSE algorithm (Ed25519); modern but still classical \u2014 attestation/assertion signatures become forgeable once a CRQC exists.",
+      remediation: REMEDIATION3
+    };
+    WEBAUTHN_RULES = [
+      { meta: RULE_WEBAUTHN_ECDSA, res: [RE_NUM_ECDSA, RE_IDS_ECDSA, RE_ENUM_ECDSA] },
+      { meta: RULE_WEBAUTHN_RSA, res: [RE_NUM_RSA, RE_IDS_RSA, RE_ENUM_RSA] },
+      { meta: RULE_WEBAUTHN_EDDSA, res: [RE_NUM_EDDSA, RE_IDS_EDDSA, RE_ENUM_EDDSA] }
+    ];
+    webauthnDetector = {
+      id: "webauthn-crypto",
+      description: "Classical COSE signature algorithms in WebAuthn/FIDO2/passkey relying-party code",
+      scope: "config",
+      language: "any",
+      rules: WEBAUTHN_RULES.map((r) => r.meta),
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!hasWebauthnMarker(content))
+          return [];
+        const scan2 = maskCommentLines(maskBlockComments(content), ["//", "#"]);
+        const findings = [];
+        for (const { meta, res } of WEBAUTHN_RULES) {
+          for (const re of res) {
+            eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+          }
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/codesign.js
+function signMessage(tool) {
+  return `${tool} signs an artifact with a classical RSA/ECDSA key; the signature is forgeable once a CRQC can recover the signing key \u2014 inventory the signing identity and plan PQC migration.`;
+}
+var REMEDIATION4, MARKER_RE, CS_RULES, codesignDetector;
+var init_codesign = __esm({
+  "../core/dist/detectors/codesign.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    REMEDIATION4 = "No PQC code-signing format is broadly standardized yet; track platform roadmaps (e.g. Sigstore/PQC, Authenticode); keep signing-key rotation ready.";
+    MARKER_RE = /signtool|osslsigncode|AuthenticodeSignature|apksigner|signingConfigs|rpmsign|--addsign|%_gpg_name|dpkg-sig|nuget|notarytool|codesign/;
+    CS_RULES = [
+      {
+        // Windows Authenticode: `signtool sign …` (optionally `signtool.exe`),
+        // `osslsigncode sign …`, or the PowerShell `Set-AuthenticodeSignature` cmdlet.
+        re: /\bsigntool(?:\.exe)?\s+sign\b|\bosslsigncode\s+sign\b|\bSet-AuthenticodeSignature\b/g,
+        meta: {
+          id: "codesign-authenticode",
+          title: "Windows Authenticode code signing (RSA)",
+          description: "signtool / osslsigncode / Set-AuthenticodeSignature Authenticode signing",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: signMessage("Windows Authenticode (signtool/osslsigncode/Set-AuthenticodeSignature)"),
+          remediation: REMEDIATION4
+        }
+      },
+      {
+        // Android: `apksigner sign …` (covers `--ks` / `--ks-key-alias` forms), or a
+        // Gradle `signingConfigs { … }` block (which carries `storeFile`/`keyAlias`).
+        re: /\bapksigner\s+sign\b|\bsigningConfigs\s*\{/g,
+        meta: {
+          id: "codesign-apk",
+          title: "Android APK signing (RSA)",
+          description: "apksigner / Gradle signingConfigs APK signing",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: signMessage("Android APK signing (apksigner/Gradle signingConfigs)"),
+          remediation: REMEDIATION4
+        }
+      },
+      {
+        // RPM/deb: `rpmsign --addsign`, `rpm --addsign`, the `%_gpg_name` rpmmacro, or
+        // `dpkg-sig --sign`. All ultimately GPG (classically RSA) signatures.
+        re: /\brpmsign\s+--addsign\b|\brpm\s+--addsign\b|%_gpg_name\b|\bdpkg-sig\s+--sign\b/g,
+        meta: {
+          id: "codesign-rpm",
+          title: "RPM/deb package signing (RSA)",
+          description: "rpmsign / rpm --addsign / %_gpg_name / dpkg-sig package signing",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: signMessage("RPM/deb package signing (rpmsign/rpm --addsign/dpkg-sig, GPG)"),
+          remediation: REMEDIATION4
+        }
+      },
+      {
+        // NuGet: `nuget sign …` — also matches `dotnet nuget sign …` (the `nuget sign`
+        // token is a substring of it), typically paired with `--certificate-*` flags.
+        re: /\bnuget\s+sign\b/g,
+        meta: {
+          id: "codesign-nuget",
+          title: "NuGet package signing (RSA)",
+          description: "nuget sign / dotnet nuget sign package signing",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: signMessage("NuGet package signing (nuget sign/dotnet nuget sign)"),
+          remediation: REMEDIATION4
+        }
+      },
+      {
+        // Apple: `xcrun notarytool submit …`, or `codesign --sign` / `codesign -s`.
+        // Allow intervening flags before `--sign`/`-s`, bounded to the codesign
+        // invocation so it can't latch onto a later command's flag across `&&`/`|`/`;`
+        // (same shape as cicd.ts's codesign rule). Algorithm is "unknown": an Apple
+        // signing identity may be RSA or ECDSA.
+        re: /\bnotarytool\s+submit\b|\bcodesign\b[^\n&|;]{0,120}?\s(?:-s\b|--sign\b)/g,
+        meta: {
+          id: "codesign-apple",
+          title: "Apple code signing / notarization",
+          description: "codesign --sign / xcrun notarytool submit macOS signing",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "unknown",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: signMessage("Apple code signing (codesign/notarytool)"),
+          remediation: REMEDIATION4
+        }
+      }
+    ];
+    codesignDetector = {
+      id: "codesign-signing",
+      description: "Classical code-signing CLIs in build scripts (Authenticode, APK, RPM, NuGet, Apple)",
+      scope: "config",
+      language: "any",
+      rules: CS_RULES.map((r) => r.meta),
+      // Applies to build scripts of any extension EXCEPT documentation: a README that
+      // shows `signtool sign` in an example is prose, not a build step.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!MARKER_RE.test(content))
+          return [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        const findings = [];
+        for (const rule2 of CS_RULES) {
+          eachMatch(rule2.re, scan2, (m) => {
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/weak-hash.js
+function hasSignatureMarker(content) {
+  if (/with\s?RSA|with\s?DSA|with\s?ECDSA|WithRSAEncryption|ecdsa-with-SHA-?1|dsaWithSHA-?1/i.test(content)) {
+    return true;
+  }
+  if (/1\.2\.840\.113549\.1\.1\.[45]|1\.2\.840\.10045\.4\.1/.test(content))
+    return true;
+  if (/Signature\.getInstance|\.Sign(?:Data|Hash)\s*\(/.test(content))
+    return true;
+  if (/openssl/i.test(content) && /\b(?:req|x509|ca|-signkey|-sign|dgst)\b/i.test(content)) {
+    return true;
+  }
+  return false;
+}
+var RE_SHA1_JAVA, RE_SHA1_X509, RE_SHA1_OID, OPENSSL_SIGN, RE_SHA1_OPENSSL, RE_SHA1_DOTNET, RE_MD5_JAVA, RE_MD5_X509, RE_MD5_OID, RE_MD5_OPENSSL, RE_MD5_DOTNET, RULE_SHA1, RULE_MD5, WEAK_HASH_RULES, weakHashDetector;
+var init_weak_hash = __esm({
+  "../core/dist/detectors/weak-hash.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_SHA1_JAVA = /\bSHA-?1with(?:RSA|DSA|ECDSA)\b/gi;
+    RE_SHA1_X509 = /\b(?:sha-?1WithRSAEncryption|ecdsa-with-SHA-?1|dsaWithSHA-?1)\b/gi;
+    RE_SHA1_OID = /(?<![\d.])(?:1\.2\.840\.113549\.1\.1\.5|1\.2\.840\.10045\.4\.1)(?![\d.])/g;
+    OPENSSL_SIGN = String.raw`(?:\breq\b|\bca\b|-sign(?:key)?\b|-CA(?:key)?\b)`;
+    RE_SHA1_OPENSSL = new RegExp(`openssl\\b[^\\n]*?${OPENSSL_SIGN}[^\\n]*?-sha1\\b|openssl\\b[^\\n]*?-sha1\\b[^\\n]*?${OPENSSL_SIGN}`, "gi");
+    RE_SHA1_DOTNET = /\.Sign(?:Data|Hash)\s*\([^;]*?(?:HashAlgorithmName\.SHA-?1|["']SHA-?1["'])/gi;
+    RE_MD5_JAVA = /\bMD5with(?:RSA|DSA|ECDSA)\b/gi;
+    RE_MD5_X509 = /\bmd5WithRSAEncryption\b/gi;
+    RE_MD5_OID = /(?<![\d.])1\.2\.840\.113549\.1\.1\.4(?![\d.])/g;
+    RE_MD5_OPENSSL = new RegExp(`openssl\\b[^\\n]*?${OPENSSL_SIGN}[^\\n]*?-md5\\b|openssl\\b[^\\n]*?-md5\\b[^\\n]*?${OPENSSL_SIGN}`, "gi");
+    RE_MD5_DOTNET = /\.Sign(?:Data|Hash)\s*\([^;]*?(?:HashAlgorithmName\.MD5|["']MD5["'])/gi;
+    RULE_SHA1 = {
+      id: "weak-hash-sha1-signature",
+      title: "SHA-1 in a signature / certificate algorithm",
+      description: "SHA-1 used in a digital-signature or X.509 certificate algorithm (Java/.NET/X.509/OpenSSL)",
+      category: "hash",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "SHA-1 used in a digital-signature/certificate algorithm; SHA-1 is disallowed for signatures (NIST SP 800-131A Rev 3, fully retired 2030 \u2014 the same window as the PQC migration) and enables collision-based signature forgery. Quantum-adjacent: migrate the hash alongside the signature algorithm.",
+      remediation: "Move signature/certificate hashes to SHA-256 or stronger (SHA-384/512 for CNSA 2.0 targets) and re-issue affected certificates; fold the PQC signature migration (ML-DSA) into the same re-key/re-sign effort."
+    };
+    RULE_MD5 = {
+      id: "weak-hash-md5-signature",
+      title: "MD5 in a signature / certificate algorithm",
+      description: "MD5 used in a digital-signature or X.509 certificate algorithm (Java/.NET/X.509/OpenSSL)",
+      category: "hash",
+      severity: "high",
+      confidence: "high",
+      algorithm: "unknown",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "MD5 used in a digital-signature/certificate algorithm; MD5 signatures are catastrophically broken today (practical chosen-prefix collisions have forged CA certificates) and must be replaced immediately. Quantum-adjacent: migrate the hash alongside the signature algorithm in the PQC re-sign pass.",
+      remediation: "Replace MD5 signature/certificate hashes with SHA-256 or stronger (SHA-384/512 for CNSA 2.0 targets) and re-issue affected certificates immediately; fold the PQC signature migration (ML-DSA) into the same re-key/re-sign effort."
+    };
+    WEAK_HASH_RULES = [
+      {
+        meta: RULE_SHA1,
+        res: [RE_SHA1_JAVA, RE_SHA1_X509, RE_SHA1_OID, RE_SHA1_OPENSSL, RE_SHA1_DOTNET]
+      },
+      { meta: RULE_MD5, res: [RE_MD5_JAVA, RE_MD5_X509, RE_MD5_OID, RE_MD5_OPENSSL, RE_MD5_DOTNET] }
+    ];
+    weakHashDetector = {
+      id: "weak-hash-signature",
+      description: "Weak hash (SHA-1/MD5) in a digital-signature or X.509 certificate algorithm",
+      scope: "config",
+      language: "any",
+      rules: WEAK_HASH_RULES.map((r) => r.meta),
+      // Skip prose/docs: a page explaining `SHA1withRSA` is not live config/code.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!hasSignatureMarker(content))
+          return [];
+        const scan2 = maskCommentLines(maskBlockComments(content), ["//", "#", ";"]);
+        const findings = [];
+        for (const { meta, res } of WEAK_HASH_RULES) {
+          for (const re of res) {
+            eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+          }
+        }
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/bicep.js
+var BICEP_EXTENSIONS, RE_BICEP_KTY_RSA, RE_BICEP_KTY_EC, RE_BICEP_MIN_TLS, RULE_BICEP_KTY_RSA, RULE_BICEP_KTY_EC, RULE_BICEP_MIN_TLS, bicepDetector;
+var init_bicep = __esm({
+  "../core/dist/detectors/bicep.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    BICEP_EXTENSIONS = [".bicep"];
+    RE_BICEP_KTY_RSA = /(?<![\w-])kty\s*:\s*'RSA(?:-HSM)?'/g;
+    RE_BICEP_KTY_EC = /(?<![\w-])kty\s*:\s*'EC(?:-HSM)?'/g;
+    RE_BICEP_MIN_TLS = /(?<![\w])minimumTlsVersion\s*:\s*'TLS1_[01]'/g;
+    RULE_BICEP_KTY_RSA = {
+      id: "bicep-keyvault-rsa",
+      title: "Bicep Azure Key Vault RSA key",
+      description: "Azure Bicep Microsoft.KeyVault key with kty: 'RSA'",
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Bicep provisions a classical RSA Azure Key Vault key, which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_BICEP_KTY_EC = {
+      id: "bicep-keyvault-ec",
+      title: "Bicep Azure Key Vault EC key",
+      description: "Azure Bicep Microsoft.KeyVault key with kty: 'EC'",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Bicep provisions a classical EC Azure Key Vault key; EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_BICEP_MIN_TLS = {
+      id: "bicep-min-tls-legacy",
+      title: "Bicep legacy minimum TLS version",
+      description: "Azure Bicep resource pins minimumTlsVersion to TLS 1.0/1.1",
+      category: "tls",
+      severity: "medium",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_WEAK_STRENGTH,
+      message: "Bicep resource pins a deprecated TLS floor (TLS 1.0/1.1); require TLS 1.2+ (1.3).",
+      remediation: "Set minimumTlsVersion: 'TLS1_2' and prefer PQC-hybrid key exchange as it lands."
+    };
+    bicepDetector = {
+      id: "bicep-crypto",
+      description: "Classical asymmetric crypto and legacy TLS declared in Azure Bicep (IaC)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_BICEP_KTY_RSA, RULE_BICEP_KTY_EC, RULE_BICEP_MIN_TLS],
+      appliesTo: (f) => hasExtension(f, BICEP_EXTENSIONS),
+      detect({ file, content }) {
+        const scan2 = maskCommentLines(maskBlockComments(content), ["//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        if (content.includes("Microsoft.KeyVault")) {
+          add(RE_BICEP_KTY_RSA, RULE_BICEP_KTY_RSA);
+          add(RE_BICEP_KTY_EC, RULE_BICEP_KTY_EC);
+        }
+        add(RE_BICEP_MIN_TLS, RULE_BICEP_MIN_TLS);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/pulumi.js
+function usesPulumiTls(content) {
+  return content.includes("@pulumi/tls") || content.includes("pulumi_tls") || content.includes("pulumi-tls") || content.includes("tls.PrivateKey") || content.includes("tls.NewPrivateKey");
+}
+var PULUMI_EXTENSIONS, RE_PULUMI_TLS_ALG, RULE_PULUMI_RSA, RULE_PULUMI_ECDSA, RULE_PULUMI_ED25519, RULE_BY_ALG, pulumiDetector;
+var init_pulumi = __esm({
+  "../core/dist/detectors/pulumi.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    PULUMI_EXTENSIONS = [".ts", ".js", ".mjs", ".cjs", ".py", ".go"];
+    RE_PULUMI_TLS_ALG = /\b[Aa]lgorithm\s*[:=]\s*(?:pulumi\.String\(\s*)?["'](RSA|ECDSA|ED25519)["']/g;
+    RULE_PULUMI_RSA = {
+      id: "pulumi-tls-rsa",
+      title: "Pulumi tls.PrivateKey RSA key",
+      description: 'Pulumi tls.PrivateKey with algorithm "RSA"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Pulumi provisions a classical RSA key (tls.PrivateKey), which is not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for encryption, ML-DSA-65 for signatures)."
+    };
+    RULE_PULUMI_ECDSA = {
+      id: "pulumi-tls-ecdsa",
+      title: "Pulumi tls.PrivateKey ECDSA key",
+      description: 'Pulumi tls.PrivateKey with algorithm "ECDSA"',
+      category: "signature",
+      severity: "high",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Pulumi provisions a classical ECDSA key (tls.PrivateKey), forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_PULUMI_ED25519 = {
+      id: "pulumi-tls-ed25519",
+      title: "Pulumi tls.PrivateKey Ed25519 key",
+      description: 'Pulumi tls.PrivateKey with algorithm "ED25519"',
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Pulumi provisions a classical Ed25519 key (tls.PrivateKey), forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_BY_ALG = {
+      RSA: RULE_PULUMI_RSA,
+      ECDSA: RULE_PULUMI_ECDSA,
+      ED25519: RULE_PULUMI_ED25519
+    };
+    pulumiDetector = {
+      id: "pulumi-crypto",
+      description: "Classical asymmetric keys provisioned by Pulumi's tls provider (IaC)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_PULUMI_RSA, RULE_PULUMI_ECDSA, RULE_PULUMI_ED25519],
+      appliesTo: (f) => hasExtension(f, PULUMI_EXTENSIONS),
+      detect({ file, content }) {
+        if (!usesPulumiTls(content))
+          return [];
+        const findings = [];
+        eachMatch(RE_PULUMI_TLS_ALG, content, (m) => {
+          const rule2 = RULE_BY_ALG[m[1]];
+          if (!rule2)
+            return;
+          findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length }));
+        });
         return findings;
       }
     };
@@ -6181,17 +7946,16 @@ var init_cloudformation = __esm({
 });
 
 // ../core/dist/detectors/mesh.js
-var MESH_EXTENSIONS, RE_MESH_LINKERD_ECDSA, RE_MESH_CONSUL_RSA, RE_MESH_CONSUL_EC, RE_MESH_ISTIO_CLASSICAL_CIPHER, RULE_MESH_LINKERD_ECDSA, RULE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_EC, RULE_MESH_ISTIO_CLASSICAL_CIPHER, meshDetector;
+var MESH_EXTENSIONS, RE_MESH_LINKERD_ECDSA, RE_MESH_CONSUL_RSA, RE_MESH_CONSUL_EC, RULE_MESH_LINKERD_ECDSA, RULE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_EC, meshDetector;
 var init_mesh = __esm({
   "../core/dist/detectors/mesh.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
-    MESH_EXTENSIONS = [".yaml", ".yml", ".hcl"];
+    MESH_EXTENSIONS = [".yaml", ".yml", ".hcl", ".json"];
     RE_MESH_LINKERD_ECDSA = /identityTrustAnchorsPEM\b|(?:identity\.issuer\.scheme|scheme)\s*[:=]\s*["']?linkerd\.io\/tls\b/g;
     RE_MESH_CONSUL_RSA = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"rsa"/gi;
     RE_MESH_CONSUL_EC = /(?<![\w"-])"?private_key_type"?\s*[:=]\s*"ec"/gi;
-    RE_MESH_ISTIO_CLASSICAL_CIPHER = /\bECDHE-(?:RSA|ECDSA)-[A-Z0-9_-]+\b/g;
     RULE_MESH_LINKERD_ECDSA = {
       id: "mesh-linkerd-identity-ecdsa",
       title: "Linkerd ECDSA identity issuer",
@@ -6231,47 +7995,27 @@ var init_mesh = __esm({
       message: "Consul Connect's mesh CA issues leaf certificates from a classical EC private key, forgeable by a quantum attacker.",
       remediation: "Plan migration to ML-DSA-65 (FIPS 204) as the Connect CA provider adds support."
     };
-    RULE_MESH_ISTIO_CLASSICAL_CIPHER = {
-      id: "mesh-istio-classical-cipher",
-      title: "Istio classical ECDHE cipher suite",
-      description: "Istio DestinationRule/Gateway tls.cipherSuites lists a classical ECDHE-RSA/ECDHE-ECDSA suite",
-      category: "tls",
-      severity: "medium",
-      confidence: "high",
-      algorithm: "ECDH",
-      hndl: true,
-      cwe: CWE_RISKY_PRIMITIVE,
-      message: "Istio mesh TLS cipher suite allows classical ECDHE key exchange, which is harvest-now-decrypt-later exposed.",
-      remediation: "Prefer TLS 1.3 AEAD suites and track PQC-hybrid mesh key exchange (X25519MLKEM768) as Envoy/BoringSSL adds support."
-    };
     meshDetector = {
       id: "service-mesh-crypto",
-      description: "Classical crypto in service-mesh config (Linkerd identity, Consul Connect CA, Istio cipher suites)",
+      description: "Classical crypto in service-mesh config (Linkerd identity, Consul Connect CA)",
       scope: "config",
       language: "any",
-      rules: [
-        RULE_MESH_LINKERD_ECDSA,
-        RULE_MESH_CONSUL_RSA,
-        RULE_MESH_CONSUL_EC,
-        RULE_MESH_ISTIO_CLASSICAL_CIPHER
-      ],
+      rules: [RULE_MESH_LINKERD_ECDSA, RULE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_EC],
       appliesTo: (f) => hasExtension(f, MESH_EXTENSIONS),
       detect({ file, content }) {
         const isLinkerd = content.includes("linkerd") || content.includes("identityTrustAnchors");
         const isConsulConnect = content.includes("consul") && content.includes("connect");
-        const isIstioCipher = content.includes("DestinationRule") || content.includes("cipherSuites");
-        if (!isLinkerd && !isConsulConnect && !isIstioCipher)
+        if (!isLinkerd && !isConsulConnect)
           return [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
         const findings = [];
-        const add = (re, rule) => eachMatch(re, content, (m) => findings.push(findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length })));
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
         if (isLinkerd)
           add(RE_MESH_LINKERD_ECDSA, RULE_MESH_LINKERD_ECDSA);
         if (isConsulConnect) {
           add(RE_MESH_CONSUL_RSA, RULE_MESH_CONSUL_RSA);
           add(RE_MESH_CONSUL_EC, RULE_MESH_CONSUL_EC);
         }
-        if (isIstioCipher)
-          add(RE_MESH_ISTIO_CLASSICAL_CIPHER, RULE_MESH_ISTIO_CLASSICAL_CIPHER);
         return findings;
       }
     };
@@ -6282,24 +8026,24 @@ var init_mesh = __esm({
 function hasDnssecMarker(content) {
   return content.includes("DNSKEY") || content.includes("RRSIG") || /dnssec/i.test(content) || /ldns-signzone|dnssec-signzone/.test(content);
 }
-var DNSSEC_EXTENSIONS, NUM_RSA, NUM_ECDSA, NUM_EDDSA, NUM_DSA, RE_NAMED_RSA, RE_NAMED_ECDSA, RE_NAMED_EDDSA, RE_NAMED_DSA, RE_DNSKEY_RSA, RE_DNSKEY_ECDSA, RE_DNSKEY_EDDSA, RE_DNSKEY_DSA, RULE_DNSSEC_RSA, RULE_DNSSEC_ECDSA, RULE_DNSSEC_EDDSA, RULE_DNSSEC_DSA, DNSSEC_RULES, dnssecDetector;
+var DNSSEC_EXTENSIONS, NUM_RSA2, NUM_ECDSA2, NUM_EDDSA2, NUM_DSA, RE_NAMED_RSA, RE_NAMED_ECDSA, RE_NAMED_EDDSA, RE_NAMED_DSA, RE_DNSKEY_RSA, RE_DNSKEY_ECDSA, RE_DNSKEY_EDDSA, RE_DNSKEY_DSA, RULE_DNSSEC_RSA, RULE_DNSSEC_ECDSA, RULE_DNSSEC_EDDSA, RULE_DNSSEC_DSA, DNSSEC_RULES, dnssecDetector;
 var init_dnssec = __esm({
   "../core/dist/detectors/dnssec.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
     DNSSEC_EXTENSIONS = [".zone", ".db", ".conf"];
-    NUM_RSA = "5|7|8|10";
-    NUM_ECDSA = "13|14";
-    NUM_EDDSA = "15|16";
+    NUM_RSA2 = "5|7|8|10";
+    NUM_ECDSA2 = "13|14";
+    NUM_EDDSA2 = "15|16";
     NUM_DSA = "3|6";
-    RE_NAMED_RSA = /\bRSASHA(?:256|512|1(?:-NSEC3-SHA1)?)\b/g;
-    RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/g;
-    RE_NAMED_EDDSA = /\bED(?:25519|448)\b/g;
+    RE_NAMED_RSA = /\bRSASHA(?:256|512|1(?:-NSEC3-SHA1)?)\b/gi;
+    RE_NAMED_ECDSA = /\bECDSAP(?:256SHA256|384SHA384)\b/gi;
+    RE_NAMED_EDDSA = /\bED(?:25519|448)\b/gi;
     RE_NAMED_DSA = /\balgorithm\s*[:=]?\s*"?DSA(?:-NSEC3-SHA1)?"?\b/gi;
-    RE_DNSKEY_RSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA})\\b`, "g");
-    RE_DNSKEY_ECDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA})\\b`, "g");
-    RE_DNSKEY_EDDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA})\\b`, "g");
+    RE_DNSKEY_RSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_RSA2})\\b`, "g");
+    RE_DNSKEY_ECDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_ECDSA2})\\b`, "g");
+    RE_DNSKEY_EDDSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_EDDSA2})\\b`, "g");
     RE_DNSKEY_DSA = new RegExp(`\\bC?DNSKEY\\s+\\d+\\s+3\\s+(?:${NUM_DSA})\\b`, "g");
     RULE_DNSSEC_RSA = {
       id: "dnssec-rsa-sig",
@@ -6369,10 +8113,11 @@ var init_dnssec = __esm({
       detect({ file, content }) {
         if (!hasDnssecMarker(content))
           return [];
+        const scan2 = maskCommentLines(content, [";", "#", "//"]);
         const findings = [];
         for (const { meta, res } of DNSSEC_RULES) {
           for (const re of res) {
-            eachMatch(re, content, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
+            eachMatch(re, scan2, (m) => findings.push(findingFromRule(meta, { file, content, index: m.index, matchLength: m[0].length })));
           }
         }
         return findings;
@@ -6382,19 +8127,16 @@ var init_dnssec = __esm({
 });
 
 // ../core/dist/detectors/vpn.js
-function offersPqKex(kexLine) {
-  return /sntrup761x25519|mlkem768/.test(kexLine);
-}
-var RE_WG_KEY, RE_IPSEC_MODP, RE_IPSEC_ECP, RE_SSHD_KEX, RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC, RULE_SSHD_KEX, vpnDetector;
+var CONF_EXTENSIONS, RE_WG_KEY, RE_IPSEC_MODP, RE_IPSEC_ECP, RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC, vpnDetector;
 var init_vpn = __esm({
   "../core/dist/detectors/vpn.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
+    CONF_EXTENSIONS = [".conf"];
     RE_WG_KEY = /\b(?:PrivateKey|PublicKey)\s*=\s*[A-Za-z0-9+/]{42,}=/g;
     RE_IPSEC_MODP = /\bmodp\d+\b/gi;
     RE_IPSEC_ECP = /\becp\d+(?:bp)?\b/gi;
-    RE_SSHD_KEX = /^[ \t]*KexAlgorithms[ \t]+([^\n]*)/gm;
     RULE_WG = {
       id: "net-wireguard-x25519",
       title: "WireGuard Curve25519 key",
@@ -6435,33 +8177,16 @@ var init_vpn = __esm({
       message: "IPsec proposal uses a classical elliptic-curve Diffie-Hellman group (ecp*); the tunnel key exchange is harvest-now-decrypt-later exposed.",
       remediation: "Add a PQC/hybrid IKE proposal (X25519MLKEM768 / ML-KEM) as your IPsec stack supports it."
     };
-    RULE_SSHD_KEX = {
-      id: "net-sshd-classical-kex",
-      title: "SSH server offers no PQC key exchange",
-      description: "sshd_config KexAlgorithms lists only classical key exchange (no sntrup761/mlkem768)",
-      category: "key-exchange",
-      severity: "medium",
-      confidence: "high",
-      algorithm: "ECDH",
-      hndl: true,
-      cwe: CWE_BROKEN_CRYPTO,
-      message: "SSH server's KexAlgorithms offers only classical key exchange (no sntrup761x25519 / mlkem768x25519); sessions are harvest-now-decrypt-later exposed.",
-      remediation: "Add a PQC hybrid KEX: sntrup761x25519-sha512@openssh.com or mlkem768x25519-sha256."
-    };
     vpnDetector = {
       id: "network-transport-crypto",
-      description: "Classical key exchange in network transport / VPN config (WireGuard, IPsec, sshd)",
+      description: "Classical key exchange in network transport / VPN config (WireGuard, IPsec)",
       scope: "config",
       language: "any",
-      rules: [RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC, RULE_SSHD_KEX],
-      appliesTo: (f) => {
-        const lower = f.toLowerCase();
-        const base = lower.split("/").pop() ?? lower;
-        return lower.endsWith(".conf") || base === "sshd_config" || base === "ssh_config";
-      },
+      rules: [RULE_WG, RULE_IPSEC_DH, RULE_IPSEC_EC],
+      appliesTo: (f) => hasExtension(f, CONF_EXTENSIONS),
       detect({ file, content }) {
         const findings = [];
-        const push = (rule, index, length) => findings.push(findingFromRule(rule, { file, content, index, matchLength: length }));
+        const push = (rule2, index, length) => findings.push(findingFromRule(rule2, { file, content, index, matchLength: length }));
         const scan2 = maskCommentLines(content, ["#"]);
         if (content.includes("[Interface]") || content.includes("[Peer]")) {
           eachMatch(RE_WG_KEY, scan2, (m) => push(RULE_WG, m.index, m[0].length));
@@ -6470,17 +8195,572 @@ var init_vpn = __esm({
           eachMatch(RE_IPSEC_MODP, scan2, (m) => push(RULE_IPSEC_DH, m.index, m[0].length));
           eachMatch(RE_IPSEC_ECP, scan2, (m) => push(RULE_IPSEC_EC, m.index, m[0].length));
         }
-        const base = file.toLowerCase().split("/").pop() ?? "";
-        if (base === "sshd_config" || base === "ssh_config") {
-          eachMatch(RE_SSHD_KEX, scan2, (m) => {
-            const value = m[1].trim();
-            if (/^[-+^]/.test(value))
-              return;
-            if (!offersPqKex(value))
-              push(RULE_SSHD_KEX, m.index, m[0].length);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/ansible.js
+var YAML_EXTENSIONS, RE_ANSIBLE_RSA, RE_ANSIBLE_ECC, RE_ANSIBLE_EDDSA, RE_ANSIBLE_XDH, RE_ANSIBLE_DSA, RULE_ANSIBLE_RSA, RULE_ANSIBLE_ECC, RULE_ANSIBLE_EDDSA, RULE_ANSIBLE_XDH, RULE_ANSIBLE_DSA, ansibleDetector;
+var init_ansible = __esm({
+  "../core/dist/detectors/ansible.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    YAML_EXTENSIONS = [".yml", ".yaml"];
+    RE_ANSIBLE_RSA = /\btype:\s*["']?RSA\b/g;
+    RE_ANSIBLE_ECC = /\btype:\s*["']?ECC\b/g;
+    RE_ANSIBLE_EDDSA = /\btype:\s*["']?Ed(?:25519|448)\b/g;
+    RE_ANSIBLE_XDH = /\btype:\s*["']?X(?:25519|448)\b/g;
+    RE_ANSIBLE_DSA = /\btype:\s*["']?DSA\b/g;
+    RULE_ANSIBLE_RSA = {
+      id: "ansible-openssl-rsa",
+      title: "Ansible community.crypto RSA key",
+      description: "Ansible community.crypto openssl_privatekey/csr with type: RSA",
+      category: "kem",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ansible provisions a classical RSA key (community.crypto), which is not quantum-safe.",
+      remediation: "Plan migration to PQC keys (ML-KEM-768 / ML-DSA-65) as the collection adds support."
+    };
+    RULE_ANSIBLE_ECC = {
+      id: "ansible-openssl-ecc",
+      title: "Ansible community.crypto EC key",
+      description: "Ansible community.crypto openssl_privatekey/csr with type: ECC",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ansible provisions a classical EC key (community.crypto); EC keys feed ECDSA signatures and ECDH key agreement (the ECDH path is harvest-now-decrypt-later exposed).",
+      remediation: "For key agreement: hybrid X25519MLKEM768 (ML-KEM-768). For signatures: ML-DSA-65 (FIPS 204)."
+    };
+    RULE_ANSIBLE_EDDSA = {
+      id: "ansible-openssl-eddsa",
+      title: "Ansible community.crypto Ed25519/Ed448 key",
+      description: "Ansible community.crypto openssl_privatekey with type: Ed25519/Ed448",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ansible provisions a classical Ed25519/Ed448 key (community.crypto), forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_ANSIBLE_XDH = {
+      id: "ansible-openssl-xdh",
+      title: "Ansible community.crypto X25519/X448 key",
+      description: "Ansible community.crypto openssl_privatekey with type: X25519/X448",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ansible provisions a classical X25519/X448 key-agreement key (community.crypto), which is harvest-now-decrypt-later exposed.",
+      remediation: "Migrate key agreement to hybrid X25519MLKEM768 (ML-KEM-768)."
+    };
+    RULE_ANSIBLE_DSA = {
+      id: "ansible-openssl-dsa",
+      title: "Ansible community.crypto DSA key (deprecated)",
+      description: "Ansible community.crypto openssl_privatekey with type: DSA",
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "DSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Ansible provisions a classical DSA key (community.crypto); deprecated and forgeable by a quantum attacker.",
+      remediation: "Rotate off DSA today; migrate to ML-DSA-65 (FIPS 204)."
+    };
+    ansibleDetector = {
+      id: "ansible-crypto",
+      description: "Classical asymmetric keys provisioned by Ansible community.crypto",
+      scope: "config",
+      language: "any",
+      rules: [
+        RULE_ANSIBLE_RSA,
+        RULE_ANSIBLE_ECC,
+        RULE_ANSIBLE_EDDSA,
+        RULE_ANSIBLE_XDH,
+        RULE_ANSIBLE_DSA
+      ],
+      appliesTo: (f) => hasExtension(f, YAML_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes("community.crypto") && !content.includes("openssl_privatekey"))
+          return [];
+        const scan2 = maskCommentLines(content, ["#"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_ANSIBLE_RSA, RULE_ANSIBLE_RSA);
+        add(RE_ANSIBLE_ECC, RULE_ANSIBLE_ECC);
+        add(RE_ANSIBLE_EDDSA, RULE_ANSIBLE_EDDSA);
+        eachMatch(RE_ANSIBLE_XDH, scan2, (m) => findings.push(findingFromRule(RULE_ANSIBLE_XDH, { file, content, index: m.index, matchLength: m[0].length }, m[0].includes("448") ? { algorithm: "X448" } : void 0)));
+        add(RE_ANSIBLE_DSA, RULE_ANSIBLE_DSA);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/age.js
+var RE_AGE_SECRET, RULE_AGE_SECRET, ageDetector;
+var init_age = __esm({
+  "../core/dist/detectors/age.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    RE_AGE_SECRET = /\bAGE-SECRET-KEY-1[0-9A-Z]{50,}\b/g;
+    RULE_AGE_SECRET = {
+      id: "age-secret-key",
+      title: "age identity (X25519 private key)",
+      description: "An age AGE-SECRET-KEY-1 private identity key committed to disk",
+      category: "key-exchange",
+      severity: "high",
+      confidence: "high",
+      algorithm: "X25519",
+      hndl: true,
+      cwe: CWE_HARDCODED_KEY,
+      sensitive: true,
+      message: "An age identity (X25519 private key) is committed to disk; every age-wrapped payload addressed to it is decryptable by anyone with this key, and the exposure is retroactive if the ciphertext is already in git history.",
+      remediation: "Rotate the age identity and re-encrypt affected data; move the private key to a secret manager. Plan for a post-quantum KEM (ML-KEM) recipient when available."
+    };
+    ageDetector = {
+      id: "age-identity",
+      description: "Committed age identity (X25519 private) keys",
+      scope: "config",
+      language: "any",
+      rules: [RULE_AGE_SECRET],
+      appliesTo: () => true,
+      detect({ file, content }) {
+        if (!content.includes("AGE-SECRET-KEY-1"))
+          return [];
+        const findings = [];
+        eachMatch(RE_AGE_SECRET, content, (m) => findings.push(findingFromRule(RULE_AGE_SECRET, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length
+        })));
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/supply-chain.js
+function isSigningContext(filePath) {
+  const lower = filePath.toLowerCase();
+  const base = lower.split("/").pop() ?? lower;
+  return lower.includes(".github/workflows/") && (lower.endsWith(".yml") || lower.endsWith(".yaml")) || base === ".gitlab-ci.yml" || lower.endsWith(".gitlab-ci.yml") || base === "jenkinsfile" || lower.endsWith(".jenkinsfile") || base === "dockerfile" || base.startsWith("dockerfile.") || lower.endsWith(".dockerfile") || lower.endsWith(".sh") || lower.endsWith(".bash");
+}
+var SC_RULES, supplyChainDetector;
+var init_supply_chain = __esm({
+  "../core/dist/detectors/supply-chain.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    SC_RULES = [
+      {
+        re: /\bDOCKER_CONTENT_TRUST\s*[:=]\s*["']?1\b|\bdocker\s+trust\s+sign\b/g,
+        meta: {
+          id: "sc-docker-content-trust",
+          title: "Docker Content Trust signing (Notary v1)",
+          description: "Docker Content Trust / docker trust sign \u2014 Notary v1 (TUF) classical keys",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "ECDSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Docker Content Trust signs images with Notary v1 (TUF) classical keys (ECDSA/Ed25519); signatures are forgeable once a CRQC exists.",
+          remediation: "Track sigstore/Notary v2 (Notation) PQC roadmap; plan hybrid image signing."
+        }
+      },
+      {
+        re: /\bnotation\s+(?:sign|key\s+generate|cert\s+generate)\b/g,
+        meta: {
+          id: "sc-notation-sign",
+          title: "Notation artifact signing",
+          description: "CNCF Notation signing of OCI artifacts with classical keys",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "Notation signs OCI artifacts with a classical key (RSA/ECDSA); signatures are forgeable once a CRQC exists.",
+          remediation: "Track Notation's PQC signature support (ML-DSA) and plan migration."
+        }
+      },
+      {
+        re: /\bin[-_]toto[-_]?run\b|\bin-toto\b/g,
+        meta: {
+          id: "sc-in-toto",
+          title: "in-toto supply-chain signing",
+          description: "in-toto build provenance signed with classical keys",
+          category: "signature",
+          severity: "medium",
+          confidence: "high",
+          algorithm: "RSA",
+          hndl: false,
+          cwe: CWE_BROKEN_CRYPTO,
+          message: "in-toto signs build provenance with a classical key (RSA/Ed25519); the attestation is forgeable once a CRQC exists.",
+          remediation: "Track in-toto/DSSE PQC signature support and plan migration."
+        }
+      }
+    ];
+    supplyChainDetector = {
+      id: "supply-chain-signing",
+      description: "Classical container/artifact signing (Docker Content Trust, Notation, in-toto)",
+      scope: "config",
+      language: "any",
+      rules: SC_RULES.map((r) => r.meta),
+      appliesTo: isSigningContext,
+      detect({ file, content }) {
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        const findings = [];
+        for (const rule2 of SC_RULES) {
+          eachMatch(rule2.re, scan2, (m) => {
+            findings.push(findingFromRule(rule2.meta, { file, content, index: m.index, matchLength: m[0].length }));
           });
         }
         return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/vault.js
+var HCL_EXTENSIONS, RE_TRANSIT_RSA, RE_TRANSIT_ECDSA, RE_TRANSIT_ED25519, RE_PKI_RSA, RE_PKI_EC, RULE_TRANSIT_RSA, RULE_TRANSIT_ECDSA, RULE_TRANSIT_ED25519, RULE_PKI_RSA, RULE_PKI_EC, vaultDetector;
+var init_vault = __esm({
+  "../core/dist/detectors/vault.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    HCL_EXTENSIONS = [".hcl"];
+    RE_TRANSIT_RSA = /\btype\s*=\s*"rsa-\d+"/g;
+    RE_TRANSIT_ECDSA = /\btype\s*=\s*"ecdsa-p\d+"/g;
+    RE_TRANSIT_ED25519 = /\btype\s*=\s*"ed25519"/g;
+    RE_PKI_RSA = /\bkey_type\s*=\s*"rsa"/g;
+    RE_PKI_EC = /\bkey_type\s*=\s*"ec"/g;
+    RULE_TRANSIT_RSA = {
+      id: "vault-transit-rsa",
+      title: "Vault transit RSA key",
+      description: 'Vault transit secrets engine key type = "rsa-*"',
+      category: "kem",
+      severity: "high",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Vault transit provisions a classical RSA key (signing / key wrapping), not quantum-safe.",
+      remediation: "Plan migration to PQC (ML-KEM-768 for wrapping, ML-DSA-65 for signing) as Vault adds support."
+    };
+    RULE_TRANSIT_ECDSA = {
+      id: "vault-transit-ecdsa",
+      title: "Vault transit ECDSA key",
+      description: 'Vault transit secrets engine key type = "ecdsa-p*"',
+      category: "signature",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Vault transit provisions a classical ECDSA signing key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_TRANSIT_ED25519 = {
+      id: "vault-transit-ed25519",
+      title: "Vault transit Ed25519 key",
+      description: 'Vault transit secrets engine key type = "ed25519"',
+      category: "signature",
+      severity: "low",
+      confidence: "high",
+      algorithm: "EdDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Vault transit provisions a classical Ed25519 signing key, forgeable by a quantum attacker.",
+      remediation: "ML-DSA-65 (FIPS 204) or SLH-DSA (FIPS 205)."
+    };
+    RULE_PKI_RSA = {
+      id: "vault-pki-rsa",
+      title: "Vault PKI RSA role",
+      description: 'Vault pki secrets engine role key_type = "rsa"',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "RSA",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Vault PKI mints certificates with a classical RSA key, not quantum-safe.",
+      remediation: "Plan migration to PQC certificate keys (ML-DSA-65) as the CA chain adds support."
+    };
+    RULE_PKI_EC = {
+      id: "vault-pki-ec",
+      title: "Vault PKI EC role",
+      description: 'Vault pki secrets engine role key_type = "ec"',
+      category: "certificate",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDSA",
+      hndl: false,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: "Vault PKI mints certificates with a classical EC key, forgeable by a quantum attacker.",
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys."
+    };
+    vaultDetector = {
+      id: "vault-crypto",
+      description: "Classical asymmetric keys in native HashiCorp Vault config (transit, pki)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_TRANSIT_RSA, RULE_TRANSIT_ECDSA, RULE_TRANSIT_ED25519, RULE_PKI_RSA, RULE_PKI_EC],
+      appliesTo: (f) => hasExtension(f, HCL_EXTENSIONS),
+      detect({ file, content }) {
+        if (!content.includes("transit") && !content.includes("pki"))
+          return [];
+        const scan2 = maskCommentLines(content, ["#", "//"]);
+        const findings = [];
+        const add = (re, rule2) => eachMatch(re, scan2, (m) => findings.push(findingFromRule(rule2, { file, content, index: m.index, matchLength: m[0].length })));
+        add(RE_TRANSIT_RSA, RULE_TRANSIT_RSA);
+        add(RE_TRANSIT_ECDSA, RULE_TRANSIT_ECDSA);
+        add(RE_TRANSIT_ED25519, RULE_TRANSIT_ED25519);
+        add(RE_PKI_RSA, RULE_PKI_RSA);
+        add(RE_PKI_EC, RULE_PKI_EC);
+        return findings;
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/keystore.js
+function baseRule(id, title, message) {
+  return {
+    id,
+    title,
+    description: message,
+    category: "certificate",
+    severity: "high",
+    confidence: "high",
+    hndl: true,
+    cwe: CWE_HARDCODED_KEY,
+    sensitive: true,
+    message,
+    remediation: "Remove key material from version control and rotate it; store keys in a secret manager / HSM. Plan re-issuance with PQC keys (ML-DSA-65 / ML-KEM-768) as tooling supports it."
+  };
+}
+function magic(content, ...bytes) {
+  if (content.length < bytes.length)
+    return false;
+  for (let i = 0; i < bytes.length; i++) {
+    if (content.charCodeAt(i) !== bytes[i])
+      return false;
+  }
+  return true;
+}
+var KEYSTORE_EXTENSIONS2, RULE_JKS, RULE_JCEKS, RULE_PKCS12, RULE_BKS, keystoreDetector;
+var init_keystore = __esm({
+  "../core/dist/detectors/keystore.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    KEYSTORE_EXTENSIONS2 = [
+      ".jks",
+      ".keystore",
+      ".jceks",
+      ".bks",
+      ".p12",
+      ".pfx"
+    ];
+    RULE_JKS = baseRule("keystore-jks", "Java KeyStore (JKS)", "A Java KeyStore (JKS) holds classical private keys / certificates (RSA/EC/DSA); a keystore in version control is committed, harvest-now-decrypt-later exposed key material.");
+    RULE_JCEKS = baseRule("keystore-jceks", "Java JCEKS keystore", "A JCEKS keystore holds classical key material (RSA/EC/DSA); committed to version control it is harvest-now-decrypt-later exposed.");
+    RULE_PKCS12 = baseRule("keystore-pkcs12", "PKCS#12 keystore", "A PKCS#12 container (a `.p12`/`.pfx`, or a modern `.jks`/`.keystore` \u2014 keytool writes PKCS#12 by default since Java 9) holds classical private keys / certificate chains (RSA/EC); committed to version control it is harvest-now-decrypt-later exposed.");
+    RULE_BKS = baseRule("keystore-bks", "BouncyCastle keystore (.bks)", "A BouncyCastle (.bks) keystore holds classical key material; committed to version control it is harvest-now-decrypt-later exposed.");
+    keystoreDetector = {
+      id: "keystore-material",
+      description: "Committed classical cryptographic keystores (JKS, JCEKS, PKCS#12, BKS)",
+      scope: "config",
+      language: "any",
+      rules: [RULE_JKS, RULE_JCEKS, RULE_PKCS12, RULE_BKS],
+      appliesTo: (f) => hasExtension(f, KEYSTORE_EXTENSIONS2),
+      detect({ file, content }) {
+        const at = { file, content, index: 0, matchLength: 4 };
+        if (magic(content, 254, 237, 254, 237))
+          return [findingFromRule(RULE_JKS, at)];
+        if (magic(content, 206, 206, 206, 206))
+          return [findingFromRule(RULE_JCEKS, at)];
+        if (content.length >= 2 && content.charCodeAt(0) === 48) {
+          const lenOctet = content.charCodeAt(1);
+          if (lenOctet === 128 || lenOctet === 129 || lenOctet === 130 || lenOctet === 131) {
+            return [findingFromRule(RULE_PKCS12, { ...at, matchLength: 2 })];
+          }
+        }
+        if (file.toLowerCase().endsWith(".bks") && content.length > 0) {
+          return [findingFromRule(RULE_BKS, { ...at, matchLength: 1 })];
+        }
+        return [];
+      }
+    };
+  }
+});
+
+// ../core/dist/detectors/openpgp.js
+function firstPacket(content) {
+  if (content.length < 2)
+    return void 0;
+  const b0 = content.charCodeAt(0);
+  if ((b0 & 128) === 0)
+    return void 0;
+  if (b0 & 64) {
+    const tag2 = b0 & 63;
+    const l = content.charCodeAt(1);
+    let bodyOffset2;
+    if (l < 192)
+      bodyOffset2 = 2;
+    else if (l < 224)
+      bodyOffset2 = 3;
+    else if (l === 255)
+      bodyOffset2 = 6;
+    else
+      bodyOffset2 = 2;
+    return { tag: tag2, bodyOffset: bodyOffset2 };
+  }
+  const tag = b0 >> 2 & 15;
+  const lt = b0 & 3;
+  const bodyOffset = lt === 0 ? 2 : lt === 1 ? 3 : lt === 2 ? 5 : 1;
+  return { tag, bodyOffset };
+}
+function algo(id) {
+  switch (id) {
+    case 1:
+    case 2:
+    case 3:
+      return { family: "RSA", hndl: true };
+    // RSA (encrypt-capable)
+    case 16:
+    case 20:
+      return { family: "unknown", hndl: true };
+    // ElGamal (encrypt)
+    case 17:
+      return { family: "DSA", hndl: false };
+    // DSA (sign only)
+    case 18:
+      return { family: "ECDH", hndl: true };
+    // ECDH (encrypt)
+    case 19:
+      return { family: "ECDSA", hndl: false };
+    // ECDSA (sign only)
+    case 22:
+      return { family: "EdDSA", hndl: false };
+    // EdDSA (sign only)
+    // RFC 9580 (crypto-refresh) v6 algorithm ids.
+    case 25:
+      return { family: "X25519", hndl: true };
+    // X25519 (encrypt / key agreement)
+    case 26:
+      return { family: "X448", hndl: true };
+    // X448 (encrypt / key agreement)
+    case 27:
+      return { family: "EdDSA", hndl: false };
+    // Ed25519 (sign only)
+    case 28:
+      return { family: "EdDSA", hndl: false };
+    // Ed448 (sign only)
+    default:
+      return void 0;
+  }
+}
+function keyPacketAlgo(content, bodyOffset) {
+  if (bodyOffset >= content.length)
+    return void 0;
+  const version = content.charCodeAt(bodyOffset);
+  const algoOffset = version === 2 || version === 3 ? bodyOffset + 7 : bodyOffset + 5;
+  if (algoOffset >= content.length)
+    return void 0;
+  return content.charCodeAt(algoOffset);
+}
+function pkeskAlgo(content, bodyOffset) {
+  if (bodyOffset >= content.length)
+    return void 0;
+  const version = content.charCodeAt(bodyOffset);
+  if (version !== 3)
+    return void 0;
+  const algoOffset = bodyOffset + 9;
+  if (algoOffset >= content.length)
+    return void 0;
+  return content.charCodeAt(algoOffset);
+}
+function rule(id, title, message, opts) {
+  return {
+    id,
+    title,
+    description: message,
+    category: "certificate",
+    severity: "high",
+    confidence: "high",
+    hndl: false,
+    cwe: CWE_HARDCODED_KEY,
+    message,
+    remediation: "Remove key material from version control and rotate it; store keys in a secret manager / HSM. Plan re-issuance with PQC keys (ML-DSA-65 / ML-KEM-768) as OpenPGP tooling supports them.",
+    ...opts
+  };
+}
+var OPENPGP_EXTENSIONS, TAG_PKESK, TAG_SECRET_KEY, TAG_PUBLIC_KEY, TAG_SECRET_SUBKEY, TAG_PUBLIC_SUBKEY, RULE_SECRET, RULE_PUBLIC, RULE_PKESK, RULE_KEYBOX, openpgpDetector;
+var init_openpgp = __esm({
+  "../core/dist/detectors/openpgp.js"() {
+    "use strict";
+    init_detect_utils();
+    init_cwe();
+    OPENPGP_EXTENSIONS = [".gpg", ".pgp"];
+    TAG_PKESK = 1;
+    TAG_SECRET_KEY = 5;
+    TAG_PUBLIC_KEY = 6;
+    TAG_SECRET_SUBKEY = 7;
+    TAG_PUBLIC_SUBKEY = 14;
+    RULE_SECRET = rule("openpgp-secret-key", "OpenPGP secret key (binary)", "A binary OpenPGP SECRET key is committed to version control \u2014 a classical private key that is exposed and retroactively un-fixable.", { sensitive: true });
+    RULE_PUBLIC = rule("openpgp-public-key", "OpenPGP public key (binary)", "A binary OpenPGP public key uses classical asymmetric crypto (RSA/DSA/EC); plan a PQC migration path.", { severity: "medium" });
+    RULE_PKESK = rule("openpgp-encrypted-message", "OpenPGP-encrypted message (binary)", "A binary OpenPGP-encrypted message wraps its session key with classical asymmetric crypto (RSA/ElGamal/ECDH); harvest-now-decrypt-later exposed.", { category: "kem", hndl: true, cwe: CWE_BROKEN_CRYPTO });
+    RULE_KEYBOX = rule("openpgp-keybox", "GnuPG keybox (.kbx)", "A GnuPG keybox (.kbx) is a database of classical OpenPGP/X.509 keys and certificates.", { severity: "medium", cwe: CWE_BROKEN_CRYPTO });
+    openpgpDetector = {
+      id: "openpgp-material",
+      description: "Binary OpenPGP key material / encrypted messages and GnuPG keyboxes",
+      scope: "config",
+      language: "any",
+      rules: [RULE_SECRET, RULE_PUBLIC, RULE_PKESK, RULE_KEYBOX],
+      appliesTo: (f) => hasExtension(f, OPENPGP_EXTENSIONS) || f.toLowerCase().endsWith(".kbx"),
+      detect({ file, content }) {
+        const at = { file, content, index: 0, matchLength: Math.min(4, content.length) };
+        if (file.toLowerCase().endsWith(".kbx")) {
+          return content.includes("KBXf") ? [findingFromRule(RULE_KEYBOX, at)] : [];
+        }
+        const pkt = firstPacket(content);
+        if (!pkt)
+          return [];
+        const { tag, bodyOffset } = pkt;
+        if (tag === TAG_SECRET_KEY || tag === TAG_SECRET_SUBKEY) {
+          const id = keyPacketAlgo(content, bodyOffset);
+          const a = id !== void 0 ? algo(id) : void 0;
+          return [
+            findingFromRule(RULE_SECRET, at, a ? { algorithm: a.family, hndl: a.hndl } : void 0)
+          ];
+        }
+        if (tag === TAG_PUBLIC_KEY || tag === TAG_PUBLIC_SUBKEY) {
+          const id = keyPacketAlgo(content, bodyOffset);
+          const a = id !== void 0 ? algo(id) : void 0;
+          return [findingFromRule(RULE_PUBLIC, at, a ? { algorithm: a.family } : void 0)];
+        }
+        if (tag === TAG_PKESK) {
+          const id = pkeskAlgo(content, bodyOffset);
+          const a = id !== void 0 ? algo(id) : void 0;
+          return [findingFromRule(RULE_PKESK, at, a ? { algorithm: a.family } : void 0)];
+        }
+        return [];
       }
     };
   }
@@ -6611,9 +8891,9 @@ var init_stateful_hbs = __esm({
       appliesTo: () => true,
       detect({ file, content }) {
         const findings = [];
-        for (const rule of HBS_RULES) {
-          eachMatch(rule.re, content, (m) => {
-            findings.push(findingFromRule(rule.meta, {
+        for (const rule2 of HBS_RULES) {
+          eachMatch(rule2.re, content, (m) => {
+            findings.push(findingFromRule(rule2.meta, {
               file,
               content,
               index: m.index,
@@ -6645,6 +8925,10 @@ var init_registry = __esm({
     init_php();
     init_elixir();
     init_c();
+    init_swift();
+    init_objc();
+    init_dart();
+    init_solidity();
     init_pem();
     init_jwk();
     init_terraform();
@@ -6655,10 +8939,27 @@ var init_registry = __esm({
     init_k8s();
     init_messaging();
     init_database();
+    init_xmldsig();
+    init_pkcs11();
+    init_dkim();
+    init_ssh_ca();
+    init_spire();
+    init_proxy();
+    init_webauthn();
+    init_codesign();
+    init_weak_hash();
     init_cloudformation();
+    init_bicep();
+    init_pulumi();
     init_mesh();
     init_dnssec();
     init_vpn();
+    init_ansible();
+    init_age();
+    init_supply_chain();
+    init_vault();
+    init_keystore();
+    init_openpgp();
     init_stateful_hbs();
     DetectorRegistry = class _DetectorRegistry {
       byId = /* @__PURE__ */ new Map();
@@ -6700,12 +9001,12 @@ var init_registry = __esm({
         const out = [];
         const seen = /* @__PURE__ */ new Set();
         for (const det of this.all()) {
-          for (const rule of det.rules ?? []) {
-            if (seen.has(rule.id)) {
-              throw new Error(`duplicate rule id in catalog: ${rule.id}`);
+          for (const rule2 of det.rules ?? []) {
+            if (seen.has(rule2.id)) {
+              throw new Error(`duplicate rule id in catalog: ${rule2.id}`);
             }
-            seen.add(rule.id);
-            out.push(rule);
+            seen.add(rule2.id);
+            out.push(rule2);
           }
         }
         return out;
@@ -6713,9 +9014,9 @@ var init_registry = __esm({
       /** Resolve a rule id to its {@link RuleMeta} and the detector that emits it. */
       forRule(ruleId) {
         for (const det of this.all()) {
-          for (const rule of det.rules ?? []) {
-            if (rule.id === ruleId)
-              return { rule, detector: det };
+          for (const rule2 of det.rules ?? []) {
+            if (rule2.id === ruleId)
+              return { rule: rule2, detector: det };
           }
         }
         return void 0;
@@ -6736,6 +9037,10 @@ var init_registry = __esm({
       phpDetector,
       elixirDetector,
       cDetector,
+      swiftDetector,
+      objcDetector,
+      dartDetector,
+      solidityDetector,
       pemDetector,
       jwkDetector,
       terraformDetector,
@@ -6746,10 +9051,27 @@ var init_registry = __esm({
       k8sDetector,
       messagingDetector,
       databaseDetector,
+      xmldsigDetector,
+      pkcs11Detector,
+      dkimDetector,
+      sshCaDetector,
+      spireDetector,
+      proxyDetector,
+      webauthnDetector,
+      codesignDetector,
+      weakHashDetector,
       cloudformationDetector,
+      bicepDetector,
+      pulumiDetector,
       meshDetector,
       dnssecDetector,
       vpnDetector,
+      ansibleDetector,
+      ageDetector,
+      supplyChainDetector,
+      vaultDetector,
+      keystoreDetector,
+      openpgpDetector,
       statefulHbsDetector
     ];
     defaultRegistry = new DetectorRegistry(builtinDetectors);
@@ -6777,18 +9099,22 @@ function isTestOrFixturePath(file) {
 function readinessScore(findings) {
   if (findings.length === 0)
     return 100;
-  const seen = {
+  const zero = () => ({
     critical: 0,
     high: 0,
     medium: 0,
     low: 0,
     info: 0
-  };
+  });
+  const seenReal = zero();
+  const seenTest = zero();
   let penalty = 0;
   for (const f of findings) {
-    seen[f.severity] += 1;
-    const weight = SEVERITY_WEIGHT[f.severity] * (isTestOrFixturePath(f.location.file) ? TEST_PATH_WEIGHT : 1);
-    penalty += penaltyFor(weight, seen[f.severity]);
+    const isTest = isTestOrFixturePath(f.location.file);
+    const bucket = isTest ? seenTest : seenReal;
+    bucket[f.severity] += 1;
+    const weight = SEVERITY_WEIGHT[f.severity] * (isTest ? TEST_PATH_WEIGHT : 1);
+    penalty += penaltyFor(weight, bucket[f.severity]);
   }
   return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));
 }
@@ -6933,18 +9259,29 @@ async function scan(options) {
     const absPath = singleFileName ? options.root : path3.join(baseDir, ...rel.split("/"));
     const reportedPath = singleFileName ? toPosix(rel) : rel;
     options.onFile?.(reportedPath);
+    const keystore = isKeystorePath(reportedPath);
+    if (keystore) {
+      try {
+        const { size } = await stat2(absPath);
+        if (size > (options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE))
+          continue;
+      } catch {
+        unreadable += 1;
+        continue;
+      }
+    }
     let content;
     try {
-      content = await readFile2(absPath, "utf8");
+      content = await readFile2(absPath, keystore ? "latin1" : "utf8");
     } catch {
       unreadable += 1;
       continue;
     }
-    if (!scanMinified && !isManifestFile(reportedPath) && looksMinified(content)) {
+    if (!scanMinified && !isManifestFile(reportedPath) && !keystore && looksMinified(content)) {
       skippedMinified += 1;
       continue;
     }
-    bytesScanned += Buffer.byteLength(content, "utf8");
+    bytesScanned += Buffer.byteLength(content, keystore ? "latin1" : "utf8");
     if (typeof maxBytes === "number" && bytesScanned > maxBytes) {
       throw new BudgetExceededError(`maxBytes budget exceeded (limit: ${maxBytes}).`);
     }
@@ -7016,7 +9353,16 @@ var init_scan = __esm({
     init_inventory();
     init_errors();
     init_version();
-    CODE_ONLY_RULES = /* @__PURE__ */ new Set(["go-jwt-signingmethod"]);
+    CODE_ONLY_RULES = /* @__PURE__ */ new Set([
+      "go-jwt-signingmethod",
+      // Identifier-form JWT alg constants (jjwt `SignatureAlgorithm.RS256`, auth0
+      // `Algorithm.RSA256`, C# `SecurityAlgorithms.*`, Rust `Algorithm::RS256`). Like the
+      // Go rule, these are only meaningful as code; the SAME token inside a string literal
+      // (an error message that names/forbids the alg) is prose, not a usage.
+      "java-jwt-alg",
+      "csharp-jwt-alg",
+      "rust-jwt-algorithm"
+    ]);
   }
 });
 
@@ -7914,9 +10260,8 @@ function toJson(result, opts) {
     }))
   };
 }
-function formatTierGuidance(byAlgorithm, tier) {
-  const label = tier === "category-5" ? "CNSA 2.0 (Category 5)" : "Category 3 (commercial)";
-  const out = [`${label} migration targets:`];
+function formatProfileGuidance(byAlgorithm, profile) {
+  const out = [`${profile.name} migration targets:`];
   const seen = /* @__PURE__ */ new Set();
   for (const [k, n] of Object.entries(byAlgorithm)) {
     if (n <= 0)
@@ -7924,15 +10269,14 @@ function formatTierGuidance(byAlgorithm, tier) {
     const fam = k;
     if (fam === "unknown" || !remediationFor(fam))
       continue;
-    const rem = remediationForTier(fam, tier);
+    const rem = remediationForProfile(fam, profile);
     if (seen.has(rem.recommendation))
       continue;
     seen.add(rem.recommendation);
     out.push(`  ${fam} \u2192 ${rem.recommendation}`);
   }
-  if (tier === "category-5") {
-    out.push("  CNSA 2.0 mandates ML-KEM-1024 / ML-DSA-87 for national-security systems and long-lived secrets (2030/2033 milestones).");
-  }
+  const stance = profile.hybridStance === "required" ? "requires classical+PQC hybridization" : profile.hybridStance === "recommended" ? "recommends hybridization" : "does not require hybridization";
+  out.push(`  ${profile.authority} ${stance}; classical public-key crypto disallowed after ${profile.disallowAfter} (${profile.citation}).`);
   return out;
 }
 var SARIF_SCHEMA, INFORMATION_URI;
@@ -7959,13 +10303,42 @@ function primitiveFor(category) {
       return "key-agree";
     case "signature":
       return "signature";
-    case "certificate":
-      return "other";
-    case "tls":
-      return "other";
+    case "hash":
+      return "hash";
     default:
       return "other";
   }
+}
+function classifyAsset(f) {
+  if (f.category === "tls") {
+    return { assetType: "protocol", discriminator: "tls", protocolType: "tls" };
+  }
+  if (f.category === "certificate") {
+    const id = f.ruleId.toLowerCase();
+    if (id.includes("private-key") || id.includes("keystore")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "private-key",
+        materialType: "private-key"
+      };
+    }
+    if (id.includes("public-key")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "public-key",
+        materialType: "public-key"
+      };
+    }
+    if (id.includes("message")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "ciphertext",
+        materialType: "ciphertext"
+      };
+    }
+    return { assetType: "certificate", discriminator: "" };
+  }
+  return { assetType: "algorithm", discriminator: primitiveFor(f.category) };
 }
 function isQuantumVulnerable(_algorithm) {
   return true;
@@ -7995,11 +10368,11 @@ function toCbom(result) {
   const groups = /* @__PURE__ */ new Map();
   for (const f of result.findings) {
     const algorithm = f.algorithm ?? "unknown";
-    const primitive = primitiveFor(f.category);
-    const key = `${algorithm}|${primitive}`;
+    const cls = classifyAsset(f);
+    const key = `${cls.assetType}|${algorithm}|${cls.discriminator}`;
     let g = groups.get(key);
     if (!g) {
-      g = { algorithm, primitive, findings: [] };
+      g = { ...cls, algorithm, findings: [] };
       groups.set(key, g);
     }
     g.findings.push(f);
@@ -8010,23 +10383,61 @@ function toCbom(result) {
       ...f.cwe ? { additionalContext: f.cwe } : {}
     })).sort((a, b) => a.location < b.location ? -1 : a.location > b.location ? 1 : 0);
     const anyHndl = g.findings.some((f) => f.hndl);
+    let typeProps;
+    let label;
+    switch (g.assetType) {
+      case "certificate":
+        typeProps = { certificateProperties: {} };
+        label = "certificate";
+        break;
+      case "related-crypto-material":
+        typeProps = {
+          relatedCryptoMaterialProperties: { type: g.materialType ?? "key" }
+        };
+        label = g.materialType ?? "key";
+        break;
+      case "protocol":
+        typeProps = { protocolProperties: { type: g.protocolType ?? "tls" } };
+        label = g.protocolType ?? "tls";
+        break;
+      case "algorithm":
+      default:
+        typeProps = {
+          algorithmProperties: {
+            primitive: g.discriminator,
+            parameterSetIdentifier: g.algorithm,
+            executionEnvironment: "software-plain-ram",
+            classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
+            nistQuantumSecurityLevel: 0,
+            cryptoFunctions: g.discriminator === "signature" ? ["sign", "verify"] : g.discriminator === "kem" ? ["encapsulate", "decapsulate"] : (
+              // CycloneDX 1.6 has no "keyagree" cryptoFunction; "other" is
+              // the valid value for a key-agreement primitive.
+              ["other"]
+            )
+          }
+        };
+        label = g.discriminator;
+        break;
+    }
     return {
       type: "cryptographic-asset",
       "bom-ref": bomRef(key),
-      name: `${g.algorithm} (${g.primitive})`,
+      name: `${g.algorithm} (${label})`,
       cryptoProperties: {
-        assetType: "algorithm",
-        algorithmProperties: {
-          primitive: g.primitive,
-          parameterSetIdentifier: g.algorithm,
-          executionEnvironment: "software-plain-ram",
-          classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
-          nistQuantumSecurityLevel: 0,
-          cryptoFunctions: g.primitive === "signature" ? ["sign", "verify"] : g.primitive === "kem" ? ["encapsulate", "decapsulate"] : g.primitive === "key-agree" ? ["keyagree"] : ["other"]
-        },
-        quantumVulnerable: isQuantumVulnerable(g.algorithm),
-        harvestNowDecryptLater: anyHndl
+        assetType: g.assetType,
+        ...typeProps
       },
+      // The quantum posture flags are carried as CycloneDX component `properties`
+      // (an open name/value list) rather than inside `cryptoProperties`, whose
+      // 1.6 schema is `additionalProperties: false` — so a strict validator
+      // accepts the BOM. Namespaced to avoid clashing with other tools' keys.
+      properties: [
+        {
+          name: "quantakrypto:quantumVulnerable",
+          value: String(isQuantumVulnerable(g.algorithm))
+        },
+        { name: "quantakrypto:harvestNowDecryptLater", value: String(anyHndl) }
+      ],
       evidence: { occurrences }
     };
   });
@@ -8057,7 +10468,12 @@ function toCbom(result) {
   };
 }
 function stableUuid(result) {
-  const h = createHash3("sha256").update(`${result.root}|${result.toolVersion}|${result.findings.length}`, "utf8").digest("hex");
+  const hash = createHash3("sha256").update(`${result.root}|${result.toolVersion}`, "utf8");
+  for (const f of result.findings) {
+    hash.update(`
+${f.ruleId}@${f.location.file}:${f.location.line}:${f.location.column ?? 0}`);
+  }
+  const h = hash.digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 var init_cbom = __esm({
@@ -8068,31 +10484,166 @@ var init_cbom = __esm({
 });
 
 // ../core/dist/cbom-merge.js
+import { createHash as createHash4 } from "node:crypto";
+function occurrencesOf(c) {
+  const ev = c.evidence;
+  const occ = ev?.occurrences;
+  return Array.isArray(occ) ? occ : [];
+}
+function hndlOf(c) {
+  const prop = c.properties?.find((p) => p.name === HNDL_PROP);
+  if (prop)
+    return prop.value === "true";
+  return c.cryptoProperties?.harvestNowDecryptLater === true;
+}
+function withHndl(props, value) {
+  const rest = (props ?? []).filter((p) => p.name !== HNDL_PROP);
+  return [...rest, { name: HNDL_PROP, value: String(value) }];
+}
+function mergeOccurrences(a, b) {
+  const byLoc = /* @__PURE__ */ new Map();
+  for (const o of [...a, ...b])
+    if (!byLoc.has(o.location))
+      byLoc.set(o.location, o);
+  return [...byLoc.values()].sort((x, y) => x.location < y.location ? -1 : x.location > y.location ? 1 : 0);
+}
+function mergeCboms(boms) {
+  const byRef = /* @__PURE__ */ new Map();
+  const toolComponents = [];
+  const toolSeen = /* @__PURE__ */ new Set();
+  const roots = [];
+  for (const bom of boms) {
+    const tools = bom.metadata?.tools?.components;
+    if (Array.isArray(tools)) {
+      for (const t of tools) {
+        const tc = t;
+        const key = `${tc.name}@${tc.version}`;
+        if (!toolSeen.has(key)) {
+          toolSeen.add(key);
+          toolComponents.push(t);
+        }
+      }
+    }
+    const root = bom.metadata?.component?.name;
+    if (typeof root === "string" && root && !roots.includes(root))
+      roots.push(root);
+    for (const c of bom.components ?? []) {
+      const ref = c["bom-ref"];
+      const existing = byRef.get(ref);
+      if (!existing) {
+        byRef.set(ref, {
+          ...c,
+          cryptoProperties: { ...c.cryptoProperties },
+          properties: c.properties ? [...c.properties] : void 0,
+          evidence: { occurrences: occurrencesOf(c) }
+        });
+      } else {
+        const merged = mergeOccurrences(occurrencesOf(existing), occurrencesOf(c));
+        existing.evidence = { occurrences: merged };
+        existing.properties = withHndl(existing.properties, hndlOf(existing) || hndlOf(c));
+      }
+    }
+  }
+  const components = [...byRef.values()].sort((a, b) => a["bom-ref"] < b["bom-ref"] ? -1 : a["bom-ref"] > b["bom-ref"] ? 1 : 0);
+  const serialSeed = components.map((c) => `${c["bom-ref"]}#${occurrencesOf(c).map((o) => o.location).join(",")}`).join("|") + `|${roots.join(",")}`;
+  const h = createHash4("sha256").update(serialSeed, "utf8").digest("hex");
+  const serial = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  return {
+    bomFormat: "CycloneDX",
+    specVersion: "1.6",
+    serialNumber: `urn:uuid:${serial}`,
+    version: 1,
+    metadata: {
+      tools: { components: toolComponents },
+      component: {
+        type: "application",
+        "bom-ref": "root",
+        name: roots.length ? `combined: ${roots.join(" + ")}` : "combined"
+      }
+    },
+    components
+  };
+}
+var HNDL_PROP;
 var init_cbom_merge = __esm({
   "../core/dist/cbom-merge.js"() {
+    "use strict";
+    HNDL_PROP = "quantakrypto:harvestNowDecryptLater";
+  }
+});
+
+// ../core/dist/vex.js
+import { createHash as createHash5 } from "node:crypto";
+function productId(f) {
+  return `file:${f.location.file}#L${f.location.line}`;
+}
+function toOpenVex(result, opts = {}) {
+  const byRule = /* @__PURE__ */ new Map();
+  for (const f of result.findings) {
+    const list = byRule.get(f.ruleId);
+    if (list)
+      list.push(f);
+    else
+      byRule.set(f.ruleId, [f]);
+  }
+  const statements = [...byRule.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0).map(([ruleId, findings]) => {
+    const first = findings[0];
+    const products = [...new Set(findings.map(productId))].sort().map((id2) => ({ "@id": id2 }));
+    const triaged = findings.filter((f) => f.triage).sort((a, b) => (b.triage?.exposureScore ?? 0) - (a.triage?.exposureScore ?? 0))[0]?.triage;
+    const statement = {
+      vulnerability: {
+        name: `QK-${ruleId}`,
+        description: first.message
+      },
+      products,
+      status: "affected",
+      action_statement: first.remediation ?? "Migrate to a NIST PQC standard (FIPS 203/204/205)."
+    };
+    if (triaged) {
+      statement.status_notes = `qScan triage \u2014 exposure ${triaged.exposureScore}/100, priority ${triaged.priority}: ` + triaged.rationale;
+    }
+    return statement;
+  });
+  const digest = createHash5("sha256").update(`${result.root}|${result.toolVersion}`, "utf8");
+  for (const s of statements) {
+    digest.update(`
+${s.vulnerability.name}|${s.products.map((p) => p["@id"]).join(",")}|${s.status_notes ?? ""}`);
+  }
+  const id = `https://quantakrypto.com/vex/${digest.digest("hex").slice(0, 16)}`;
+  return {
+    "@context": "https://openvex.dev/ns/v0.2.0",
+    "@id": id,
+    author: opts.author ?? "qScan",
+    timestamp: result.finishedAt,
+    version: 1,
+    statements
+  };
+}
+var init_vex = __esm({
+  "../core/dist/vex.js"() {
     "use strict";
   }
 });
 
 // ../core/dist/policy.js
 function verdictForAlgorithm(algorithm, policy) {
-  const algo = algorithm ?? "unknown";
-  if (policy.prohibited?.includes(algo)) {
-    return { verdict: "violation", reason: `${algo} is prohibited by the policy.` };
+  const algo2 = algorithm ?? "unknown";
+  if (policy.prohibited?.includes(algo2)) {
+    return { verdict: "violation", reason: `${algo2} is prohibited by the policy.` };
   }
-  if (policy.inTransition?.includes(algo)) {
+  if (policy.inTransition?.includes(algo2)) {
     return {
       verdict: "transition-pending",
-      reason: `${algo} is being migrated (in the policy's transition set).`
+      reason: `${algo2} is being migrated (in the policy's transition set).`
     };
   }
-  if (policy.permitted?.includes(algo)) {
-    return { verdict: "conformant", reason: `${algo} is permitted by the policy.` };
+  if (policy.permitted?.includes(algo2)) {
+    return { verdict: "conformant", reason: `${algo2} is permitted by the policy.` };
   }
   const fallback = policy.defaultVerdict ?? "violation";
   return {
     verdict: fallback,
-    reason: `${algo} is not named in the policy (default verdict: ${fallback}).`
+    reason: `${algo2} is not named in the policy (default verdict: ${fallback}).`
   };
 }
 function buildPolicyMapping(findings, policy) {
@@ -8182,7 +10733,7 @@ var init_policy = __esm({
 });
 
 // ../core/dist/evidence.js
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 function canonicalize(value) {
   if (Array.isArray(value))
     return value.map(canonicalize);
@@ -8218,12 +10769,27 @@ function buildReadinessReport(result, opts = {}) {
     findings,
     ...policyMapping ? { policyMapping } : {}
   };
-  const contentHash = "sha256:" + createHash4("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
+  const contentHash = "sha256:" + createHash6("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
   return {
     ...hashableBody,
     subject: { ...hashableBody.subject, scanTimeUtc: result.finishedAt },
     cbom: toCbom(result),
     attestation: { contentHash, timestamp: null, signature: null }
+  };
+}
+async function signReadinessReport(report, opts) {
+  const payload = report.attestation.contentHash;
+  const signature = opts.signer ? await opts.signer.sign(payload) : report.attestation.signature;
+  const timestamp = opts.timestamper ? await opts.timestamper.sign(payload) : report.attestation.timestamp;
+  return {
+    ...report,
+    attestation: {
+      ...report.attestation,
+      signature,
+      timestamp,
+      ...opts.signer ? { signedWith: opts.signer.label } : {},
+      ...opts.timestamper ? { timestampedWith: opts.timestamper.label } : {}
+    }
   };
 }
 var init_evidence = __esm({
@@ -8239,6 +10805,79 @@ var init_evidence = __esm({
 var init_standards = __esm({
   "../core/dist/standards.js"() {
     "use strict";
+  }
+});
+
+// ../core/dist/standards-profiles.js
+function getStandardsProfile(id) {
+  return STANDARDS_PROFILES[id];
+}
+var STANDARDS_PROFILES;
+var init_standards_profiles = __esm({
+  "../core/dist/standards-profiles.js"() {
+    "use strict";
+    STANDARDS_PROFILES = {
+      nist: {
+        id: "nist",
+        name: "NIST (general / commercial)",
+        authority: "NIST",
+        paramSets: { kem: "ML-KEM-768 (FIPS 203)", signature: "ML-DSA-65 (FIPS 204)" },
+        hybridStance: "recommended",
+        hybridGuidance: "Hybrid key establishment (e.g. X25519MLKEM768) is permitted and recommended during the transition; pure ML-KEM is also acceptable (SP 800-227 / IR 8547).",
+        deprecateAfter: 2030,
+        disallowAfter: 2035,
+        citation: "NIST IR 8547 + FIPS 203/204/205",
+        asOf: "2026-07"
+      },
+      "cnsa-2.0": {
+        id: "cnsa-2.0",
+        name: "NSA CNSA 2.0 (national-security systems)",
+        authority: "NSA",
+        paramSets: { kem: "ML-KEM-1024 (FIPS 203)", signature: "ML-DSA-87 (FIPS 204)" },
+        hybridStance: "optional",
+        hybridGuidance: "CNSA 2.0 targets pure PQC and does not require hybrids; if a hybrid TLS group is used, it must be SecP384r1MLKEM1024 \u2014 X25519MLKEM768's ML-KEM-768 component is sub-CNSA.",
+        deprecateAfter: 2030,
+        disallowAfter: 2035,
+        citation: "NSA CNSA 2.0 (2030/2033/2035 migration milestones)",
+        asOf: "2026-07"
+      },
+      "bsi-tr-02102": {
+        id: "bsi-tr-02102",
+        name: "BSI TR-02102 (Germany)",
+        authority: "BSI",
+        paramSets: { kem: "ML-KEM-768 (FIPS 203)", signature: "ML-DSA-65 (FIPS 204)" },
+        hybridStance: "required",
+        hybridGuidance: "BSI requires PQC be deployed in HYBRID with an established classical scheme during the transition (defense-in-depth); FrodoKEM is the conservative KEM alternative to ML-KEM, and XMSS/LMS are approved for firmware signing.",
+        deprecateAfter: 2030,
+        disallowAfter: 2035,
+        citation: "BSI TR-02102-1 (Kryptographische Verfahren)",
+        asOf: "2026-07"
+      },
+      anssi: {
+        id: "anssi",
+        name: "ANSSI (France)",
+        authority: "ANSSI",
+        paramSets: { kem: "ML-KEM-1024 (FIPS 203)", signature: "ML-DSA-87 (FIPS 204)" },
+        hybridStance: "required",
+        hybridGuidance: "ANSSI requires HYBRIDIZATION (classical + PQC) throughout the transition phase and does not endorse pure PQC alone yet; use the highest parameter set for long-lived assurance.",
+        deprecateAfter: 2030,
+        disallowAfter: 2035,
+        citation: "ANSSI \u2014 PQC transition position papers",
+        asOf: "2026-07"
+      },
+      "uk-ncsc": {
+        id: "uk-ncsc",
+        name: "UK NCSC",
+        authority: "NCSC",
+        paramSets: { kem: "ML-KEM-768 (FIPS 203)", signature: "ML-DSA-65 (FIPS 204)" },
+        hybridStance: "recommended",
+        hybridGuidance: "NCSC recommends ML-KEM / ML-DSA and is broadly agnostic on hybridization (recommended, not mandated); its migration milestones are earlier \u2014 discovery/plan by 2028, high-priority migration by 2031, complete by 2035.",
+        deprecateAfter: 2031,
+        disallowAfter: 2035,
+        citation: "NCSC \u2014 Preparing for quantum-safe cryptography / PQC migration timeline",
+        asOf: "2026-07"
+      }
+    };
   }
 });
 
@@ -8272,10 +10911,12 @@ var init_dist = __esm({
     init_report();
     init_cbom();
     init_cbom_merge();
+    init_vex();
     init_evidence();
     init_policy();
     init_remediation();
     init_standards();
+    init_standards_profiles();
     init_cwe();
   }
 });
@@ -8726,7 +11367,6 @@ var init_dist2 = __esm({
 // ../qscan/dist/triage-run.js
 var triage_run_exports = {};
 __export(triage_run_exports, {
-  DEFAULT_MAX_TRIAGE: () => DEFAULT_MAX_TRIAGE,
   runTriage: () => runTriage
 });
 import { readFile as fsReadFile } from "node:fs/promises";
@@ -8780,7 +11420,11 @@ async function runTriage(result, opts) {
     });
   });
   const maxFindings = opts.maxFindings ?? DEFAULT_MAX_TRIAGE;
-  const toTriage = targets.length > maxFindings ? [...targets].sort(compareFindings).slice(0, maxFindings) : result.findings;
+  const bySeverityThenOrder = (a, b) => {
+    const d = severityRank(a.severity) - severityRank(b.severity);
+    return d !== 0 ? d : compareFindings(a, b);
+  };
+  const toTriage = targets.length > maxFindings ? [...targets].sort(bySeverityThenOrder).slice(0, maxFindings) : targets;
   if (targets.length > maxFindings) {
     stderr(`qscan: --triage capped at ${maxFindings} findings (${targets.length} at/above floor); raise --max-findings to triage more.
 `);
@@ -8837,6 +11481,43 @@ import { pathToFileURL } from "node:url";
 init_dist();
 import { readFile as readFile5 } from "node:fs/promises";
 import process4 from "node:process";
+
+// ../qscan/dist/sign.js
+import { spawnSync } from "node:child_process";
+var SIGN_TIMEOUT_MS = 3e4;
+var SIGN_MAX_BUFFER = 1 << 20;
+function signerLabel(command) {
+  const prog = command.trim().split(/\s+/).find((t) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || "external-signer";
+  return prog.replace(/^.*[/\\]/, "");
+}
+function commandSigner(command) {
+  const label = signerLabel(command);
+  return {
+    label,
+    sign(payload) {
+      const res = spawnSync(command, {
+        shell: true,
+        input: payload,
+        encoding: "utf8",
+        timeout: SIGN_TIMEOUT_MS,
+        maxBuffer: SIGN_MAX_BUFFER
+      });
+      if (res.error) {
+        throw new Error(`--sign/--timestamp: command "${label}" failed to run: ${res.error.message}`);
+      }
+      if (res.status !== 0) {
+        const how = res.status !== null ? `exited ${res.status}` : `terminated on ${res.signal}`;
+        const detail = (res.stderr || "").trim().slice(0, 200);
+        throw new Error(`--sign/--timestamp: command "${label}" ${how}${detail ? `: ${detail}` : ""}`);
+      }
+      const out = (res.stdout || "").trim();
+      if (!out) {
+        throw new Error(`--sign/--timestamp: command "${label}" produced no output`);
+      }
+      return out;
+    }
+  };
+}
 
 // ../qscan/dist/baseline.js
 init_dist();
@@ -8901,6 +11582,17 @@ function defaultOptions() {
 
 // ../qscan/dist/report.js
 init_dist();
+var TIER_TO_PROFILE = {
+  "category-3": "nist",
+  "category-5": "cnsa-2.0"
+};
+function resolveProfile(profileId, tier) {
+  if (profileId)
+    return getStandardsProfile(profileId);
+  if (tier)
+    return getStandardsProfile(TIER_TO_PROFILE[tier]);
+  return void 0;
+}
 var PLAIN = { reset: "", bold: "", dim: "", red: "", yellow: "", green: "", cyan: "" };
 var COLOR = {
   reset: "\x1B[0m",
@@ -8918,8 +11610,13 @@ function renderSarif(result, opts) {
   const catalog = [...defaultRegistry.ruleCatalog(), DEP_VULNERABLE_RULE];
   return JSON.stringify(toSarif(result, { catalog, ...opts }), null, 2);
 }
-function renderCbom(result) {
-  return JSON.stringify(toCbom(result), null, 2);
+function renderCbom(result, extra = []) {
+  const scanBom = toCbom(result);
+  const bom = extra.length > 0 ? mergeCboms([scanBom, ...extra]) : scanBom;
+  return JSON.stringify(bom, null, 2);
+}
+function renderVex(result) {
+  return JSON.stringify(toOpenVex(result), null, 2);
 }
 function renderHuman(result, opts = {}) {
   const c = opts.color ? COLOR : PLAIN;
@@ -8987,9 +11684,10 @@ function renderHuman(result, opts = {}) {
   }
   lines.push("");
   lines.push(`${c.dim}Next step:${c.reset} ${nextStep(findings)}`);
-  if (opts.tier) {
+  const profile = resolveProfile(opts.profile, opts.tier);
+  if (profile) {
     lines.push("");
-    const g = formatTierGuidance(inventory.byAlgorithm, opts.tier);
+    const g = formatProfileGuidance(inventory.byAlgorithm, profile);
     lines.push(`${c.bold}${g[0]}${c.reset}`);
     for (const t of g.slice(1))
       lines.push(`${c.cyan}${t}${c.reset}`);
@@ -9161,37 +11859,77 @@ async function runQscan(opts, hooks = {}) {
       return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };
     }
   }
-  return {
-    result,
-    suppressed,
-    report: renderReport(result, options.format, {
-      color: hooks.color ?? false,
-      redactSnippets: options.noSnippets,
-      topN: options.topN,
-      tier: options.tier,
-      ...policy ? { policy } : {}
-    }),
-    exitCode
-  };
+  if (options.mergeCboms && options.mergeCboms.length > 0 && options.format !== "cbom") {
+    throw new Error(`--merge requires --format cbom (got ${options.format ?? "the human report"})`);
+  }
+  if ((options.sign || options.timestamp) && options.format !== "evidence") {
+    throw new Error(`--sign/--timestamp require --format evidence (got ${options.format ?? "the human report"})`);
+  }
+  const signer = options.sign ? commandSigner(options.sign) : void 0;
+  const timestamper = options.timestamp ? commandSigner(options.timestamp) : void 0;
+  let mergeCbomsData;
+  if (options.format === "cbom" && options.mergeCboms && options.mergeCboms.length > 0) {
+    mergeCbomsData = [];
+    for (const path7 of options.mergeCboms) {
+      let text;
+      try {
+        text = await readFile5(path7, "utf8");
+      } catch {
+        throw new Error(`--merge: cannot read CBOM file "${path7}"`);
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(`--merge: "${path7}" is not valid JSON`);
+      }
+      const bom = parsed;
+      if (bom?.bomFormat !== "CycloneDX") {
+        throw new Error(`--merge: "${path7}" is not a CycloneDX CBOM (missing bomFormat)`);
+      }
+      mergeCbomsData.push(bom);
+    }
+  }
+  let report = renderReport(result, options.format, {
+    color: hooks.color ?? false,
+    redactSnippets: options.noSnippets,
+    topN: options.topN,
+    tier: options.tier,
+    ...options.profile ? { profile: options.profile } : {},
+    ...policy ? { policy } : {},
+    ...mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}
+  });
+  if (options.format === "evidence" && (signer || timestamper)) {
+    const signed = await signReadinessReport(JSON.parse(report), {
+      signer,
+      timestamper
+    });
+    report = JSON.stringify(signed, null, 2);
+  }
+  return { result, suppressed, report, exitCode };
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, policy = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
   switch (format) {
     case "json":
       return renderJson(result, { redactSnippets });
     case "sarif":
       return renderSarif(result, { redactSnippets });
     case "cbom":
-      return renderCbom(result);
-    case "evidence":
-      return JSON.stringify(buildReadinessReport(result, {
+      return renderCbom(result, mergeCboms2);
+    case "vex":
+      return renderVex(result);
+    case "evidence": {
+      const report = buildReadinessReport(result, {
         repository: process4.env.GITHUB_REPOSITORY,
         commit: process4.env.GITHUB_SHA,
         ...policy ? { policy } : {}
-      }), null, 2);
+      });
+      return JSON.stringify(report, null, 2);
+    }
     case "human":
     default:
-      return renderHuman(result, { color, topN, tier });
+      return renderHuman(result, { color, topN, tier, profile });
   }
 }
 
@@ -9365,9 +12103,9 @@ function buildSummary(result, newFindings, threshold) {
   lines.push("| --- | --- | --- | --- |");
   for (const f of blocking.slice(0, 50)) {
     const loc = mdCell(`${f.location.file}:${f.location.line}`);
-    const rule = mdCell(f.ruleId);
+    const rule2 = mdCell(f.ruleId);
     const msg = mdCell(f.message);
-    lines.push(`| ${f.severity} | \`${rule}\` | ${loc} | ${msg} |`);
+    lines.push(`| ${f.severity} | \`${rule2}\` | ${loc} | ${msg} |`);
   }
   if (blocking.length > 50) lines.push(`| \u2026 | | | _${blocking.length - 50} more_ |`);
   lines.push("");
@@ -9416,15 +12154,15 @@ function buildPlanComment(result) {
   lines.push("Migrate in this order (harvest-now-decrypt-later exposure first):");
   lines.push("");
   let step = 1;
-  for (const algo of algos) {
-    const group = byAlgo.get(algo) ?? [];
+  for (const algo2 of algos) {
+    const group = byAlgo.get(algo2) ?? [];
     const hndlCount = group.filter((f) => f.hndl).length;
-    const rec = remediationFor(algo)?.recommendation ?? "review for PQC migration";
+    const rec = remediationFor(algo2)?.recommendation ?? "review for PQC migration";
     const uniqueFiles = [...new Set(group.map((f) => f.location.file))];
     const shown = uniqueFiles.slice(0, 5).map(mdCell).join(", ");
     const more = uniqueFiles.length > 5 ? ` (+${uniqueFiles.length - 5} more)` : "";
     lines.push(
-      `${step}. **${mdCell(algo)}** \u2014 ${group.length} finding(s)${hndlCount ? `, ${hndlCount} HNDL` : ""}. Migrate to ${mdCell(rec)}.`
+      `${step}. **${mdCell(algo2)}** \u2014 ${group.length} finding(s)${hndlCount ? `, ${hndlCount} HNDL` : ""}. Migrate to ${mdCell(rec)}.`
     );
     lines.push(`   _Files:_ ${shown}${more}`);
     step++;
@@ -9590,11 +12328,9 @@ export {
   annotateFindings,
   buildPlanComment,
   buildSummary,
-  commentOnPullRequest,
   fingerprintFinding as fingerprint,
   meetsThreshold,
   readInputs,
-  readPullRequestContext,
   run,
   shouldFail
 };
