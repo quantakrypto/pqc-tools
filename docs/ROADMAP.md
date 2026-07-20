@@ -143,7 +143,8 @@ running against this list; findings will be folded in.
   byte-clean. *i18n:* deliberately **not** localised — the audience reads FIPS /
   CNSA / IR-8547 terminology that is itself English-only, and message catalogs
   would add drift-prone surface for no reader benefit (YAGNI). Revisit only if a
-  concrete localized-consumer need appears.
+  concrete localized-consumer need appears. **This scope exclusion is now a
+  load-bearing decision — see [ADR-0006](adr/0006-report-output-english-only.md).**
 - ~~**Published supply-chain gate on a cadence** — Scorecard + dependency/Action
   review, now that the packages are live on npm.~~ ✅ **Done (2026-07-19).**
   Scorecard (weekly) and Dependabot (weekly npm + Actions) were already wired;

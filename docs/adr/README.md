@@ -18,6 +18,7 @@ Format: a lightweight [MADR](https://adr.github.io/madr/)-style record.
 | [0003](0003-monorepo-and-build.md) | npm-workspaces monorepo + `tsc -b` project references | Accepted |
 | [0004](0004-sieve-no-fabricated-vectors.md) | Sieve ships no KAT vectors and never fabricates expected values | Accepted |
 | [0005](0005-byok-agent-two-planes.md) | BYOK agent line: `@quantakrypto/agent` is the sole networked plane; the engine disposes | Accepted |
+| [0006](0006-report-output-english-only.md) | Human-facing report output is English-only (no i18n) | Accepted |
 
 ## Related governance
 
