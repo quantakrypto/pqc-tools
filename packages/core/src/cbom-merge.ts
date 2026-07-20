@@ -27,8 +27,12 @@ function occurrencesOf(c: CbomComponent): Occurrence[] {
 }
 
 function hndlOf(c: CbomComponent): boolean {
+  // `cryptoProperties` is optional on an externally-authored / hand-built CBOM
+  // component, so guard it — a duplicate bom-ref whose second copy lacks it must not
+  // crash the merge.
   return (
-    (c.cryptoProperties as { harvestNowDecryptLater?: unknown }).harvestNowDecryptLater === true
+    (c.cryptoProperties as { harvestNowDecryptLater?: unknown } | undefined)
+      ?.harvestNowDecryptLater === true
   );
 }
 
@@ -69,7 +73,9 @@ export function mergeCboms(boms: readonly CycloneDxBom[]): CycloneDxBom {
     const root = (bom.metadata as { component?: { name?: string } })?.component?.name;
     if (typeof root === "string" && root && !roots.includes(root)) roots.push(root);
 
-    for (const c of bom.components) {
+    // `components` is optional in the CycloneDX 1.6 spec — a legal CBOM can carry none
+    // (a scan that found nothing). Treat a missing array as empty instead of crashing.
+    for (const c of bom.components ?? []) {
       const ref = c["bom-ref"];
       const existing = byRef.get(ref);
       if (!existing) {
@@ -94,7 +100,19 @@ export function mergeCboms(boms: readonly CycloneDxBom[]): CycloneDxBom {
     a["bom-ref"] < b["bom-ref"] ? -1 : a["bom-ref"] > b["bom-ref"] ? 1 : 0,
   );
 
-  const serialSeed = components.map((c) => c["bom-ref"]).join("|") + `|${roots.join(",")}`;
+  // Content-address the serial over bom-refs AND their occurrence locations (+ roots),
+  // so two merges that differ only in occurrence evidence get distinct serials — a
+  // CycloneDX serialNumber is meant to identify a BOM *instance*, and downstream
+  // bom-link/dedup tooling relies on that. Occurrences are already sorted.
+  const serialSeed =
+    components
+      .map(
+        (c) =>
+          `${c["bom-ref"]}#${occurrencesOf(c)
+            .map((o) => o.location)
+            .join(",")}`,
+      )
+      .join("|") + `|${roots.join(",")}`;
   const h = createHash("sha256").update(serialSeed, "utf8").digest("hex");
   const serial = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 

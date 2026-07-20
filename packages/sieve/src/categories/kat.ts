@@ -81,12 +81,18 @@ export const kat: Category = async (ctx): Promise<CategoryResult> => {
   }
 
   let okCount = 0;
+  let skipCount = 0;
   let idx = 0;
   for (const v of relevant) {
     idx++;
     try {
       const result = await checkVector(ctx, v);
-      if (result.ok) {
+      if (result.skipped) {
+        // Unverifiable (e.g. a keygen vector with no seed) — NOT a match. Record it as
+        // a skip so it can't inflate the "matched" count into a false conformance pass.
+        skipCount++;
+        checks.push(skip(`${v.kind}[${idx}]`, result.detail));
+      } else if (result.ok) {
         okCount++;
         // Keep the report compact: don't push a pass per vector.
       } else {
@@ -97,9 +103,15 @@ export const kat: Category = async (ctx): Promise<CategoryResult> => {
     }
   }
 
+  // Denominator is the number of ACTUALLY-verified vectors, excluding skips.
+  const verified = relevant.length - skipCount;
   if (okCount > 0) {
+    checks.push(pass("kat", `${okCount}/${verified} ${param} vectors matched expected values`));
+  } else if (skipCount > 0) {
+    // Everything relevant was unverifiable — say so explicitly rather than passing on
+    // zero comparisons.
     checks.push(
-      pass("kat", `${okCount}/${relevant.length} ${param} vectors matched expected values`),
+      skip("kat", `all ${skipCount} ${param} vector(s) were unverifiable (no seed/coins)`),
     );
   }
 
@@ -117,6 +129,8 @@ export const kat: Category = async (ctx): Promise<CategoryResult> => {
 
 interface VectorResult {
   ok: boolean;
+  /** True when the vector could not be verified (no seed/coins) — NOT a match. */
+  skipped?: boolean;
   detail: string;
 }
 
@@ -129,7 +143,7 @@ async function checkVector(
 
   switch (v.kind) {
     case "kem-keygen": {
-      if (!v.seed) return { ok: true, detail: "no seed; skipped" };
+      if (!v.seed) return { ok: false, skipped: true, detail: "no seed; skipped" };
       const resp = await runner.send({
         family: "ml-kem",
         param,
@@ -149,7 +163,7 @@ async function checkVector(
         : { ok: false, detail: `seeded keygen mismatch (pkOk=${pkOk}, skOk=${skOk})` };
     }
     case "kem-encap": {
-      if (!v.coins) return { ok: true, detail: "no coins; skipped" };
+      if (!v.coins) return { ok: false, skipped: true, detail: "no coins; skipped" };
       const resp = await runner.send({
         family: "ml-kem",
         param,

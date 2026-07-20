@@ -75,20 +75,28 @@ export function isTestOrFixturePath(file: string): boolean {
 export function readinessScore(findings: Finding[]): number {
   if (findings.length === 0) return 100;
 
-  const seen: Record<Severity, number> = {
+  // Diminishing-returns occurrence counters, kept SEPARATE for full-weight vs
+  // test-path findings. Sharing one counter per severity let whichever finding came
+  // first in the (path-sorted) list claim the `1/√1` slot, so a directory rename — or
+  // a test finding sorting ahead of a real one — changed the score. Bucketing makes
+  // the penalty independent of file order and of test/real interleaving.
+  const zero = (): Record<Severity, number> => ({
     critical: 0,
     high: 0,
     medium: 0,
     low: 0,
     info: 0,
-  };
+  });
+  const seenReal = zero();
+  const seenTest = zero();
 
   let penalty = 0;
   for (const f of findings) {
-    seen[f.severity] += 1;
-    const weight =
-      SEVERITY_WEIGHT[f.severity] * (isTestOrFixturePath(f.location.file) ? TEST_PATH_WEIGHT : 1);
-    penalty += penaltyFor(weight, seen[f.severity]);
+    const isTest = isTestOrFixturePath(f.location.file);
+    const bucket = isTest ? seenTest : seenReal;
+    bucket[f.severity] += 1;
+    const weight = SEVERITY_WEIGHT[f.severity] * (isTest ? TEST_PATH_WEIGHT : 1);
+    penalty += penaltyFor(weight, bucket[f.severity]);
   }
 
   return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));

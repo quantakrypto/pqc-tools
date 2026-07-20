@@ -77,10 +77,13 @@ test("triage NEVER changes the exit code and NEVER drops a finding (invariant)",
   );
   assert.equal(run.exitCode, EXIT.FINDINGS, "a blocking finding still fails CI after triage");
   assert.equal(run.result.findings.length, 2, "triage dropped no findings");
-  assert.ok(
-    run.result.findings.every((f) => f.triage?.priority === "low"),
-    "every finding was annotated",
-  );
+  // Triage operates on findings at/above the floor (default: medium). The high is
+  // annotated; the below-floor low survives un-annotated (never dropped). This matches
+  // the production agent, which re-applies the floor internally.
+  const annotatedHigh = run.result.findings.find((f) => f.severity === "high");
+  assert.equal(annotatedHigh?.triage?.priority, "low", "the at-floor finding was annotated");
+  const untouchedLow = run.result.findings.find((f) => f.severity === "low");
+  assert.equal(untouchedLow?.triage, undefined, "the below-floor finding is left un-annotated");
 });
 
 test("baseline suppresses a finding and can flip the exit code to 0", async () => {

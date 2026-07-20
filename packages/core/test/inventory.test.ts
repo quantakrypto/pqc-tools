@@ -71,3 +71,13 @@ test("score is clamped to [0, 100]", () => {
   const score = buildInventory(many).readinessScore;
   assert.ok(score >= 0 && score <= 100);
 });
+
+test("readiness score is independent of file order and real/test interleaving", () => {
+  // One real critical + one test-path critical. The score must not depend on which
+  // one sorts first (a directory rename must not move the score).
+  const real = finding("critical", { location: { file: "app/main.ts", line: 1 } });
+  const testF = finding("critical", { location: { file: "app/main.test.ts", line: 1 } });
+  const a = buildInventory([real, testF]).readinessScore;
+  const b = buildInventory([testF, real]).readinessScore;
+  assert.equal(a, b, "order of real vs test findings must not change the score");
+});

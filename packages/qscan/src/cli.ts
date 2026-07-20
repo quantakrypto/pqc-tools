@@ -85,11 +85,14 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     run = await runQscan(options, { color });
   } catch (err) {
-    // A missing scan path is the most common failure; a raw
-    // "ENOENT: no such file or directory, stat '…'" reads like a tool bug.
-    // Turn it into a plain, actionable line (still exit 2).
+    // A missing file is the most common failure; a raw "ENOENT: no such file or
+    // directory, stat '…'" reads like a tool bug. Turn it into a plain, actionable
+    // line (still exit 2). Report the ACTUAL missing path from `err.path` when present
+    // — an ENOENT can come from `--policy`, `--baseline`, or `--write-baseline`, not
+    // just the scan path, and blaming the (existing) scan path misdirects the user.
     if (isErrno(err) && err.code === "ENOENT") {
-      process.stderr.write(`qscan: path not found: ${options.path}\n`);
+      const missing = typeof err.path === "string" && err.path ? err.path : options.path;
+      process.stderr.write(`qscan: path not found: ${missing}\n`);
       return EXIT.ERROR;
     }
     const message = err instanceof Error ? err.message : String(err);

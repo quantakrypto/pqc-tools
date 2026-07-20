@@ -16,6 +16,7 @@ import {
   compareFindings,
   fingerprintFinding,
   renderPreflight,
+  severityRank,
 } from "@quantakrypto/core";
 import type {
   ContextLevel,
@@ -142,13 +143,20 @@ export async function runTriage(
       });
     });
 
-  // Spend/DoS guard: triage only up to maxFindings (top by severity among those
-  // at/above the floor). The rest keep their deterministic order and no annotation.
+  // Spend/DoS guard: triage only up to maxFindings, and when capping, pick the TOP by
+  // SEVERITY (most severe first) — not by file-path order — so a critical in a
+  // late-sorting file isn't silently dropped from triage and sunk to the bottom of the
+  // report. Under the cap, triage exactly the `targets` (findings at/above the floor),
+  // not the full result set. Ties fall back to the stable file/line/ruleId order.
   const maxFindings = opts.maxFindings ?? DEFAULT_MAX_TRIAGE;
+  const bySeverityThenOrder = (a: Finding, b: Finding): number => {
+    const d = severityRank(a.severity) - severityRank(b.severity);
+    return d !== 0 ? d : compareFindings(a, b);
+  };
   const toTriage =
     targets.length > maxFindings
-      ? [...targets].sort(compareFindings).slice(0, maxFindings)
-      : result.findings;
+      ? [...targets].sort(bySeverityThenOrder).slice(0, maxFindings)
+      : targets;
   if (targets.length > maxFindings) {
     stderr(
       `qscan: --triage capped at ${maxFindings} findings (${targets.length} at/above floor); raise --max-findings to triage more.\n`,

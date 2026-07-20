@@ -146,3 +146,12 @@ test("runQscan renders cbom output through the format pipeline", async () => {
   assert.equal(cbom.bomFormat, "CycloneDX");
   assert.equal(cbom.specVersion, "1.6");
 });
+
+test("--merge without --cbom is a loud error, not a silent no-op", async () => {
+  const { scanFn } = recordingScanner();
+  await assert.rejects(
+    () => runQscan({ path: ".", mergeCboms: ["probe.json"] }, { scanFn }),
+    /--merge requires --format cbom/,
+    "merging into a non-cbom format must fail rather than drop the merge files",
+  );
+});

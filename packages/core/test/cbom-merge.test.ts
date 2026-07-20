@@ -109,3 +109,65 @@ test("mergeCboms is deterministic", () => {
   );
   assert.deepEqual(mergeCboms([a, b]), mergeCboms([a, b]));
 });
+
+test("mergeCboms tolerates a CBOM with no components (legal, empty)", () => {
+  const empty = { bomFormat: "CycloneDX", specVersion: "1.6" } as never;
+  const a = toCbom(result("a", [finding({ ruleId: "r", algorithm: "RSA", category: "kem" })]));
+  assert.doesNotThrow(() => mergeCboms([empty, a]));
+  const merged = mergeCboms([empty, a]);
+  assert.equal(merged.components.length, 1, "the empty CBOM contributes nothing");
+});
+
+test("mergeCboms tolerates a duplicate bom-ref whose copy lacks cryptoProperties", () => {
+  const a = toCbom(result("a", [finding({ ruleId: "r", algorithm: "RSA", category: "kem" })]));
+  const ref = a.components[0]["bom-ref"];
+  // A hand-built external CBOM sharing the bom-ref but with no cryptoProperties.
+  const ext = {
+    bomFormat: "CycloneDX",
+    specVersion: "1.6",
+    components: [{ "bom-ref": ref, type: "cryptographic-asset", name: "ext" }],
+  } as never;
+  assert.doesNotThrow(() => mergeCboms([a, ext]));
+});
+
+test("mergeCboms serial reflects occurrence evidence, not just bom-refs", () => {
+  const mk = (loc: string) =>
+    toCbom(
+      result("root", [
+        finding({
+          ruleId: "r",
+          algorithm: "RSA",
+          category: "kem",
+          location: { file: loc, line: 1 },
+        }),
+      ]),
+    );
+  const s1 = mergeCboms([mk("a.ts")]).serialNumber;
+  const s2 = mergeCboms([mk("b.ts")]).serialNumber;
+  assert.notEqual(s1, s2, "same bom-ref, different occurrence → distinct serials");
+});
+
+test("toCbom serialNumber is content-addressed (not derived from finding COUNT)", () => {
+  // Two scans with the SAME count of DIFFERENT findings must not collide.
+  const one = toCbom(
+    result("root", [
+      finding({
+        ruleId: "r",
+        algorithm: "RSA",
+        category: "kem",
+        location: { file: "a.ts", line: 1 },
+      }),
+    ]),
+  );
+  const two = toCbom(
+    result("root", [
+      finding({
+        ruleId: "e",
+        algorithm: "ECDSA",
+        category: "signature",
+        location: { file: "b.ts", line: 1 },
+      }),
+    ]),
+  );
+  assert.notEqual(one.serialNumber, two.serialNumber);
+});

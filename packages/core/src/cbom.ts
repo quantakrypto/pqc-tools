@@ -190,12 +190,18 @@ export function toCbom(result: ScanResult): CycloneDxBom {
 
 /**
  * Derive a stable UUID-shaped serial from the scan result so re-exporting the
- * same result yields the same serial number (deterministic output).
+ * same result yields the same serial number (deterministic output). Hashed over the
+ * actual finding set (ruleId + location per finding), NOT just the COUNT — two scans
+ * with the same number of totally different findings must not collide, since a
+ * CycloneDX serialNumber identifies a specific BOM instance. Findings are already in
+ * a stable order (scan.ts sorts by file/line/ruleId).
  */
 function stableUuid(result: ScanResult): string {
-  const h = createHash("sha256")
-    .update(`${result.root}|${result.toolVersion}|${result.findings.length}`, "utf8")
-    .digest("hex");
+  const hash = createHash("sha256").update(`${result.root}|${result.toolVersion}`, "utf8");
+  for (const f of result.findings) {
+    hash.update(`\n${f.ruleId}@${f.location.file}:${f.location.line}:${f.location.column ?? 0}`);
+  }
+  const h = hash.digest("hex");
   // Shape as a v4-ish UUID (variant/version nibbles forced).
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }

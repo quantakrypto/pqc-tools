@@ -265,6 +265,14 @@ export async function runQscan(
     }
   }
 
+  // `--merge` only has an effect on a `--cbom` output. If the user asked to merge but
+  // the format is not cbom, that is almost certainly a mistake (a typo'd `--cbom`, or a
+  // pipeline that forgot it) — the merge files would be silently ignored and the
+  // combined bill of materials never produced. Fail loudly instead of dropping data.
+  if (options.mergeCboms && options.mergeCboms.length > 0 && options.format !== "cbom") {
+    throw new Error(`--merge requires --format cbom (got ${options.format ?? "the human report"})`);
+  }
+
   // Load any external CBOMs to merge into a `--cbom` output (combined
   // code + infrastructure bill of materials). Only relevant for the cbom format.
   let mergeCbomsData: CycloneDxBom[] | undefined;
