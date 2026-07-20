@@ -5,9 +5,12 @@
  * for compliance / supply-chain tooling.
  *
  * Reference: CycloneDX 1.6 cryptography properties
- * (https://cyclonedx.org/capabilities/cbom/). We emit one
- * `cryptographic-asset` component per distinct (algorithm, primitive) pair
- * observed, with occurrence evidence pointing back at the findings.
+ * (https://cyclonedx.org/capabilities/cbom/). Each finding is classified into
+ * its CycloneDX `assetType` — `algorithm` (usage), `certificate` (X.509),
+ * `related-crypto-material` (private/public key material), or `protocol` (TLS) —
+ * and we emit one `cryptographic-asset` component per distinct
+ * (assetType, algorithm, discriminator), with occurrence evidence pointing back
+ * at the findings. Every asset carries the quantum posture flags.
  */
 import { createHash } from "node:crypto";
 
@@ -33,7 +36,7 @@ export interface CbomComponent {
   evidence?: Record<string, unknown>;
 }
 
-/** CycloneDX cryptographic primitive for a finding category. */
+/** CycloneDX cryptographic primitive for a finding category (algorithm assets only). */
 function primitiveFor(category: FindingCategory): string {
   switch (category) {
     case "kem":
@@ -42,16 +45,66 @@ function primitiveFor(category: FindingCategory): string {
       return "key-agree";
     case "signature":
       return "signature";
-    case "certificate":
-      // "pki" is NOT a valid CycloneDX 1.6 algorithmProperties.primitive enum
-      // value; use "other" so the CBOM validates (audit: quantum #3). Modeling
-      // certificates as assetType:"certificate" is a future refinement.
-      return "other";
-    case "tls":
-      return "other";
     default:
+      // `certificate` / `tls` no longer route here (they become their own
+      // assetType — see {@link classifyAsset}); `dependency` / `hash` / `rng`
+      // and any future category fall back to the valid "other" primitive.
       return "other";
   }
+}
+
+/** The CycloneDX 1.6 `cryptoProperties.assetType` a finding maps to. */
+type CbomAssetType = "algorithm" | "certificate" | "protocol" | "related-crypto-material";
+
+/**
+ * Classify a finding into its CycloneDX 1.6 asset type. Most findings are
+ * algorithm USAGE (`kem` / `key-exchange` / `signature` / `hash` / …). The
+ * `certificate` category is a mix of real X.509 certificates and raw key
+ * material, disambiguated by rule id; `tls` findings are protocol configuration.
+ *
+ * `discriminator` keeps distinct kinds in separate components (it is the algorithm
+ * primitive for `algorithm`, the material type for `related-crypto-material`, the
+ * protocol type for `protocol`, and empty for `certificate`).
+ */
+function classifyAsset(f: Finding): {
+  assetType: CbomAssetType;
+  discriminator: string;
+  materialType?: string;
+  protocolType?: string;
+} {
+  if (f.category === "tls") {
+    return { assetType: "protocol", discriminator: "tls", protocolType: "tls" };
+  }
+  if (f.category === "certificate") {
+    const id = f.ruleId.toLowerCase();
+    if (id.includes("private-key") || id.includes("keystore")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "private-key",
+        materialType: "private-key",
+      };
+    }
+    if (id.includes("public-key")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "public-key",
+        materialType: "public-key",
+      };
+    }
+    if (id.includes("message")) {
+      return {
+        assetType: "related-crypto-material",
+        discriminator: "ciphertext",
+        materialType: "ciphertext",
+      };
+    }
+    if (id.includes("cert")) {
+      return { assetType: "certificate", discriminator: "" };
+    }
+    // Other PKI material (e.g. PGP key blocks that aren't tagged private): a key.
+    return { assetType: "related-crypto-material", discriminator: "key", materialType: "key" };
+  }
+  return { assetType: "algorithm", discriminator: primitiveFor(f.category) };
 }
 
 /**
@@ -102,19 +155,28 @@ function bomRef(key: string): string {
  * finding. Output is deterministic (components and occurrences are sorted).
  */
 export function toCbom(result: ScanResult): CycloneDxBom {
-  // Group findings by (algorithm | primitive).
+  // Group findings by (assetType | algorithm | discriminator) so each distinct
+  // cryptographic asset — an algorithm usage, a certificate, key material, or a
+  // protocol — becomes its own component.
   const groups = new Map<
     string,
-    { algorithm: AlgorithmFamily; primitive: string; findings: Finding[] }
+    {
+      assetType: CbomAssetType;
+      algorithm: AlgorithmFamily;
+      discriminator: string;
+      materialType?: string;
+      protocolType?: string;
+      findings: Finding[];
+    }
   >();
 
   for (const f of result.findings) {
     const algorithm: AlgorithmFamily = f.algorithm ?? "unknown";
-    const primitive = primitiveFor(f.category);
-    const key = `${algorithm}|${primitive}`;
+    const cls = classifyAsset(f);
+    const key = `${cls.assetType}|${algorithm}|${cls.discriminator}`;
     let g = groups.get(key);
     if (!g) {
-      g = { algorithm, primitive, findings: [] };
+      g = { ...cls, algorithm, findings: [] };
       groups.set(key, g);
     }
     g.findings.push(f);
@@ -132,27 +194,57 @@ export function toCbom(result: ScanResult): CycloneDxBom {
 
       const anyHndl = g.findings.some((f) => f.hndl);
 
+      // The type-specific CycloneDX properties block + a human label for the name.
+      let typeProps: Record<string, unknown>;
+      let label: string;
+      switch (g.assetType) {
+        case "certificate":
+          // A certificate / CSR: we know the public-key family but not the X.509
+          // fields (subject, validity, refs) from a lexical scan, so the block is
+          // left minimal — all certificateProperties are optional in 1.6.
+          typeProps = { certificateProperties: {} };
+          label = "certificate";
+          break;
+        case "related-crypto-material":
+          typeProps = {
+            relatedCryptoMaterialProperties: { type: g.materialType ?? "key" },
+          };
+          label = g.materialType ?? "key";
+          break;
+        case "protocol":
+          typeProps = { protocolProperties: { type: g.protocolType ?? "tls" } };
+          label = g.protocolType ?? "tls";
+          break;
+        case "algorithm":
+        default:
+          typeProps = {
+            algorithmProperties: {
+              primitive: g.discriminator,
+              parameterSetIdentifier: g.algorithm,
+              executionEnvironment: "software-plain-ram",
+              classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
+              nistQuantumSecurityLevel: 0,
+              cryptoFunctions:
+                g.discriminator === "signature"
+                  ? ["sign", "verify"]
+                  : g.discriminator === "kem"
+                    ? ["encapsulate", "decapsulate"]
+                    : g.discriminator === "key-agree"
+                      ? ["keyagree"]
+                      : ["other"],
+            },
+          };
+          label = g.discriminator;
+          break;
+      }
+
       return {
         type: "cryptographic-asset" as const,
         "bom-ref": bomRef(key),
-        name: `${g.algorithm} (${g.primitive})`,
+        name: `${g.algorithm} (${label})`,
         cryptoProperties: {
-          assetType: "algorithm",
-          algorithmProperties: {
-            primitive: g.primitive,
-            parameterSetIdentifier: g.algorithm,
-            executionEnvironment: "software-plain-ram",
-            classicalSecurityLevel: classicalSecurityLevelFor(g.algorithm),
-            nistQuantumSecurityLevel: 0,
-            cryptoFunctions:
-              g.primitive === "signature"
-                ? ["sign", "verify"]
-                : g.primitive === "kem"
-                  ? ["encapsulate", "decapsulate"]
-                  : g.primitive === "key-agree"
-                    ? ["keyagree"]
-                    : ["other"],
-          },
+          assetType: g.assetType,
+          ...typeProps,
           quantumVulnerable: isQuantumVulnerable(g.algorithm),
           harvestNowDecryptLater: anyHndl,
         },

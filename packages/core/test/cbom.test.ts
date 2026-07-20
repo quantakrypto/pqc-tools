@@ -93,6 +93,77 @@ test("toCbom is deterministic for the same result", () => {
   assert.deepEqual(toCbom(r), toCbom(r));
 });
 
+test("CBOM refines assetType: certificate, key material, and protocol are not 'algorithm'", () => {
+  const bom = toCbom(
+    result([
+      f({ ruleId: "pem-rsa-private-key", category: "certificate", algorithm: "RSA" }),
+      f({
+        ruleId: "pem-public-key",
+        category: "certificate",
+        algorithm: "RSA",
+        location: { file: "p.pub", line: 1 },
+      }),
+      f({
+        ruleId: "pem-certificate",
+        category: "certificate",
+        algorithm: "unknown",
+        location: { file: "c.pem", line: 1 },
+      }),
+      f({
+        ruleId: "tls-weak-cipher",
+        category: "tls",
+        algorithm: "unknown",
+        location: { file: "nginx.conf", line: 1 },
+      }),
+      f({
+        ruleId: "node-crypto-keygen",
+        category: "kem",
+        algorithm: "RSA",
+        location: { file: "k.ts", line: 1 },
+      }),
+    ]),
+  );
+  const byAsset = (t: string) =>
+    bom.components.filter((c) => (c.cryptoProperties as { assetType: string }).assetType === t);
+
+  // A private key and a public key are related-crypto-material, typed accordingly.
+  const material = byAsset("related-crypto-material");
+  assert.equal(material.length, 2);
+  const types = material
+    .map(
+      (c) =>
+        (c.cryptoProperties as { relatedCryptoMaterialProperties: { type: string } })
+          .relatedCryptoMaterialProperties.type,
+    )
+    .sort();
+  assert.deepEqual(types, ["private-key", "public-key"]);
+
+  // An X.509 certificate is assetType "certificate" (no algorithmProperties).
+  const certs = byAsset("certificate");
+  assert.equal(certs.length, 1);
+  assert.equal(
+    (certs[0].cryptoProperties as { algorithmProperties?: unknown }).algorithmProperties,
+    undefined,
+  );
+
+  // A TLS finding is a protocol asset.
+  const protos = byAsset("protocol");
+  assert.equal(protos.length, 1);
+  assert.equal(
+    (protos[0].cryptoProperties as { protocolProperties: { type: string } }).protocolProperties
+      .type,
+    "tls",
+  );
+
+  // The keygen usage stays an algorithm asset.
+  assert.equal(byAsset("algorithm").length, 1);
+
+  // Every asset — whatever its type — still reports the quantum posture.
+  for (const c of bom.components) {
+    assert.equal((c.cryptoProperties as { quantumVulnerable: boolean }).quantumVulnerable, true);
+  }
+});
+
 test("CBOM uses valid primitives and marks classical unknown-family findings vulnerable (audit)", () => {
   const bom = toCbom(
     result([

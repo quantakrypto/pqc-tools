@@ -195,8 +195,11 @@ qscan . --concurrency 4          # pin the worker count (implies --parallel)
 ## CBOM (CycloneDX)
 
 Emit a CycloneDX 1.6 **cryptographic bill of materials** — one
-`cryptographic-asset` component per distinct (algorithm, primitive) pair, with
-file:line occurrence evidence — for compliance and supply-chain tooling:
+`cryptographic-asset` component per distinct (assetType, algorithm, discriminator),
+with file:line occurrence evidence — for compliance and supply-chain tooling.
+Findings are classified into their proper CycloneDX `assetType`: `algorithm`
+(crypto usage), `certificate` (X.509), `related-crypto-material` (private/public
+key material), and `protocol` (TLS):
 
 ```bash
 qscan . --cbom -o qscan-cbom.json

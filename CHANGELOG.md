@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Changed — CBOM asset-type refinement
+
+- The CycloneDX CBOM now classifies each finding into its proper `assetType`
+  instead of labelling everything `algorithm`: X.509 findings become
+  `certificate`, private/public key material becomes `related-crypto-material`
+  (typed `private-key` / `public-key`), and TLS findings become `protocol`
+  (`protocolProperties.type: "tls"`). Algorithm-usage components are unchanged.
+  Every asset still carries `quantumVulnerable` / `harvestNowDecryptLater`.
+  (Completes the "future refinement" noted in the CBOM audit.)
+
 ### Added — OpenVEX export (`--format vex`)
 
 - `qscan --format vex` emits an **OpenVEX 0.2.0** document so the quantum-readiness
