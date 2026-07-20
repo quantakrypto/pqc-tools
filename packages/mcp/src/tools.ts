@@ -43,7 +43,7 @@ import type {
 } from "@quantakrypto/core";
 
 import { errorResult, textResult } from "./protocol.js";
-import type { JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./protocol.js";
+import type { ToolContext, ToolDefinition, ToolResult } from "./protocol.js";
 import { resolveRule } from "./rules.js";
 import { realpathInsideRoots, resolveFsConfig, resolveScanPath } from "./fsconfig.js";
 
@@ -1465,6 +1465,3 @@ export const __test = {
   describeError,
   FIX_EXAMPLES,
 };
-
-/** Keep the schema type imported and referenced (documentation aid). */
-export type ToolInputSchema = JsonSchema;

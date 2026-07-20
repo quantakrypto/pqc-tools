@@ -48,7 +48,9 @@ interface CiRule {
 
 const CI_RULES: CiRule[] = [
   {
-    re: /\bcosign\s+(?:sign|attest|sign-blob|generate-key-pair)\b/g,
+    // `sign-blob` precedes `sign` so the longer subcommand wins — otherwise `sign`
+    // matches first and the trailing `\b` succeeds at the `-`, never reaching `sign-blob`.
+    re: /\bcosign\s+(?:sign-blob|sign|attest|generate-key-pair)\b/g,
     meta: {
       id: "ci-cosign-ecdsa",
       title: "cosign artifact signing (ECDSA)",

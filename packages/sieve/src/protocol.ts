@@ -171,9 +171,6 @@ export type Response =
   | VerifyResult
   | ErrorResult;
 
-/** A successful (non-error) response. */
-export type SuccessResponse = Exclude<Response, ErrorResult>;
-
 // ---------------------------------------------------------------------------
 // Serialization
 // ---------------------------------------------------------------------------

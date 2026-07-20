@@ -68,12 +68,10 @@ export const cloudKmsDetector: Detector = {
   // the KMS API is not a live key-minting call.
   appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
   detect({ file, content }): Finding[] {
-    // Fast reject: only proceed if a KMS key-spec field name is present.
-    if (
-      !content.includes("KeySpec") &&
-      !content.includes("KeyPairSpec") &&
-      !content.includes("CustomerMasterKeySpec")
-    ) {
+    // Fast reject: only proceed if a KMS key-spec field name is present. Note
+    // `CustomerMasterKeySpec` contains `KeySpec` as a substring, so the `KeySpec`
+    // check already covers it — only `KeyPairSpec` needs its own test.
+    if (!content.includes("KeySpec") && !content.includes("KeyPairSpec")) {
       return [];
     }
     // Inside a CloudFormation / ARM template FILE, the cloudformation detector owns

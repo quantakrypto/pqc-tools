@@ -21,11 +21,6 @@ import { createQuantakryptoServer } from "./index.js";
 import { ErrorCode, makeFailure } from "./protocol.js";
 import type { McpServer } from "./server.js";
 
-/** Serialize a value as one newline-terminated JSON line to stdout. */
-function writeLine(value: unknown): void {
-  process.stdout.write(JSON.stringify(value) + "\n");
-}
-
 /**
  * Attach a line-delimited JSON-RPC loop to the given streams. Exposed (rather
  * than only run on import) so it can be reused or tested with custom streams.
@@ -96,5 +91,3 @@ function isMainModule(): boolean {
 if (isMainModule()) {
   main();
 }
-
-export { writeLine };
