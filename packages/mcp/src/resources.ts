@@ -7,7 +7,7 @@
 import { defaultRegistry, REMEDIATE_RUBRIC } from "@quantakrypto/core";
 
 /** A resource descriptor for `resources/list`. */
-export interface ResourceDescriptor {
+interface ResourceDescriptor {
   uri: string;
   name: string;
   description: string;
@@ -63,7 +63,7 @@ export function readResource(uri: string): { uri: string; mimeType: string; text
 }
 
 /** A prompt descriptor for `prompts/list`. */
-export interface PromptDescriptor {
+interface PromptDescriptor {
   name: string;
   description: string;
   arguments?: { name: string; description: string; required?: boolean }[];
@@ -79,7 +79,7 @@ export const PROMPTS: PromptDescriptor[] = [
 ];
 
 /** A prompt message (MCP `prompts/get` shape). */
-export interface PromptMessage {
+interface PromptMessage {
   role: "user";
   content: { type: "text"; text: string };
 }

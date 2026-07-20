@@ -22,7 +22,7 @@ import { isParamSet } from "./sizes.js";
 import type { Family, ParamSet } from "./sizes.js";
 
 /** A normalized ML-KEM keygen vector: seed -> (pk, sk). */
-export interface KemKeygenVector {
+interface KemKeygenVector {
   kind: "kem-keygen";
   param: ParamSet;
   /** Concatenated d||z seed (hex-decoded). */
@@ -32,7 +32,7 @@ export interface KemKeygenVector {
 }
 
 /** A normalized ML-KEM encapsulation vector: (pk, coins) -> (ct, ss). */
-export interface KemEncapVector {
+interface KemEncapVector {
   kind: "kem-encap";
   param: ParamSet;
   pk: Uint8Array;
@@ -43,7 +43,7 @@ export interface KemEncapVector {
 }
 
 /** A normalized ML-KEM decapsulation vector: (sk, ct) -> ss. */
-export interface KemDecapVector {
+interface KemDecapVector {
   kind: "kem-decap";
   param: ParamSet;
   sk: Uint8Array;
@@ -52,7 +52,7 @@ export interface KemDecapVector {
 }
 
 /** A normalized ML-DSA signature-verification vector: (pk, msg, sig) -> ok. */
-export interface DsaVerifyVector {
+interface DsaVerifyVector {
   kind: "dsa-verify";
   param: ParamSet;
   pk: Uint8Array;

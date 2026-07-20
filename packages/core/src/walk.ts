@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { isManifestFile } from "./dependencies.js";
 
 /** Directories ignored by default (can be disabled with noDefaultIgnores). */
-export const DEFAULT_IGNORES: readonly string[] = [
+const DEFAULT_IGNORES: readonly string[] = [
   "node_modules",
   ".git",
   "dist",
@@ -99,7 +99,7 @@ const BINARY_EXTENSIONS = new Set<string>([
 ]);
 
 /** Options accepted by {@link walkFiles}. */
-export interface WalkOptions {
+interface WalkOptions {
   /**
    * Restrict to paths matching one of these include patterns (substring or
    * relative-path-prefix match). When omitted/empty, all files pass.

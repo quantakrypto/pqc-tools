@@ -51,7 +51,7 @@ import { quantakryptoTools, FS_TOOL_NAMES, NETWORK_TOOL_NAMES } from "./tools.js
 import type { McpServer } from "./server.js";
 
 /** Header carrying the MCP session id (per the Streamable HTTP transport). */
-export const SESSION_HEADER = "mcp-session-id";
+const SESSION_HEADER = "mcp-session-id";
 
 /** Maximum accepted request body size (1 MiB) — a basic abuse guard. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -65,7 +65,7 @@ const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 /** Loopback hosts that are safe to bind without authentication. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 
-export interface HttpServerOptions {
+interface HttpServerOptions {
   /** Port to listen on. Defaults to env PORT or 3000. */
   port?: number;
   /** Host/interface to bind. Defaults to QUANTAKRYPTO_MCP_HOST / HOST or "127.0.0.1". */
@@ -91,10 +91,10 @@ export interface HttpServerOptions {
 /* -------------------------------------------------------------------------- */
 
 /** A minimal env shape so the config resolver is pure and testable. */
-export type HttpEnv = Record<string, string | undefined>;
+type HttpEnv = Record<string, string | undefined>;
 
 /** Resolved, validated HTTP transport configuration. */
-export interface HttpConfig {
+interface HttpConfig {
   host: string;
   port: number;
   /** The bearer token, or "" when auth is disabled. */
@@ -242,7 +242,7 @@ export function allowedOriginHosts(config: HttpConfig): Set<string> {
 }
 
 /** A request-authorization outcome. */
-export interface AuthDecision {
+interface AuthDecision {
   authorized: boolean;
   /** HTTP status to use when not authorized. */
   status?: number;
@@ -377,7 +377,7 @@ function sendJson(
 }
 
 /** Error raised by {@link withTimeout} when the request deadline elapses. */
-export class RequestTimeoutError extends Error {
+class RequestTimeoutError extends Error {
   override readonly name = "RequestTimeoutError";
   constructor(message = "request timed out") {
     super(message);
@@ -617,7 +617,7 @@ export function createHttpMcpServer(config: HttpConfig): McpServer {
 }
 
 /** Start the HTTP server, resolving once it is listening. */
-export function startHttpServer(options: HttpServerOptions = {}): Promise<Server> {
+function startHttpServer(options: HttpServerOptions = {}): Promise<Server> {
   const config = resolveHttpConfig(process.env, options);
 
   const decision = startupDecision(config);

@@ -45,7 +45,7 @@ import { mdCell } from "./escape.js";
 const DEFAULT_OUTPUT = "quantakrypto.sarif.json";
 
 /** Normalised, validated inputs for a run. */
-export interface ActionInputs {
+interface ActionInputs {
   path: string;
   severityThreshold: Severity;
   failOnFindings: boolean;
@@ -259,7 +259,7 @@ export function buildPlanComment(result: ScanResult): string {
 }
 
 /** Minimal GitHub PR context derived from the runner environment. */
-export interface PullRequestContext {
+interface PullRequestContext {
   owner: string;
   repo: string;
   prNumber: number;
@@ -270,7 +270,7 @@ export interface PullRequestContext {
  * Derive PR context from the `GITHUB_*` env + event payload, or return
  * undefined when not running on a pull request. Never throws.
  */
-export async function readPullRequestContext(
+async function readPullRequestContext(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PullRequestContext | undefined> {
   try {
@@ -314,7 +314,7 @@ async function findExistingComment(
  * push edits a single comment instead of stacking a new one each time. Best-effort:
  * any failure is logged as a warning and swallowed so commenting never breaks CI.
  */
-export async function commentOnPullRequest(
+async function commentOnPullRequest(
   ctx: PullRequestContext,
   token: string,
   body: string,

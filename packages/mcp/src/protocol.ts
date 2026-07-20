@@ -20,16 +20,7 @@ export const JSONRPC_VERSION = "2.0" as const;
 export const MCP_PROTOCOL_VERSION = "2025-06-18" as const;
 
 /** A JSON-RPC id: string or number per spec (we never originate notifications). */
-export type JsonRpcId = string | number | null;
-
-/** Any JSON value. Kept structural rather than `any` for strict mode. */
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type JsonRpcId = string | number | null;
 
 /** A JSON-RPC 2.0 request or notification (notifications omit `id`). */
 export interface JsonRpcRequest {
@@ -48,7 +39,7 @@ export interface JsonRpcSuccess {
 }
 
 /** A JSON-RPC error object. */
-export interface JsonRpcErrorObject {
+interface JsonRpcErrorObject {
   code: number;
   message: string;
   data?: unknown;

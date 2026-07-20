@@ -19,7 +19,7 @@
 export type ColorChoice = "always" | "never" | "auto";
 
 /** Just the environment variables the decision reads. */
-export interface ColorEnv {
+interface ColorEnv {
   NO_COLOR?: string | undefined;
   FORCE_COLOR?: string | undefined;
 }

@@ -43,7 +43,7 @@ const CFN_MARKERS: readonly string[] = [
  * True when the content looks like a CloudFormation / ARM deployment template (one
  * of the {@link CFN_MARKERS} is present).
  */
-export function isCloudTemplate(content: string): boolean {
+function isCloudTemplate(content: string): boolean {
   return CFN_MARKERS.some((marker) => content.includes(marker));
 }
 

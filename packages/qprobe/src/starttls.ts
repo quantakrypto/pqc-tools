@@ -14,7 +14,7 @@ import { connect as tlsConnect } from "node:tls";
 import { extractNegotiated, type TlsNegotiated } from "./tls.js";
 
 /** A one-shot line-based STARTTLS dialog: send `command`, expect `success`, upgrade. */
-export interface StartTlsDialog {
+interface StartTlsDialog {
   /** The upgrade command to send after the server greeting. */
   command: string;
   /** Matches the server reply that grants the TLS upgrade. */

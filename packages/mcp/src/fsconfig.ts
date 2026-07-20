@@ -26,7 +26,7 @@ import process from "node:process";
 import { realpath } from "node:fs/promises";
 
 /** Minimal env shape so the resolver stays pure and testable. */
-export type FsEnv = Record<string, string | undefined>;
+type FsEnv = Record<string, string | undefined>;
 
 /** Default file-count budget for a single FS tool call. */
 export const DEFAULT_MAX_FILES = 25_000;
@@ -41,7 +41,7 @@ export const DEFAULT_MAX_BYTES = 256 * 1024 * 1024;
 export const MAX_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** Resolved FS-tool policy: where scans may read and how much work they may do. */
-export interface FsConfig {
+interface FsConfig {
   /**
    * Absolute, normalized roots a scan may read inside. Always non-empty; defaults
    * to `[process.cwd()]` when `QUANTAKRYPTO_MCP_ROOT` is unset.
@@ -94,7 +94,7 @@ export function resolveFsConfig(env: FsEnv, cwd: string = process.cwd()): FsConf
 }
 
 /** Outcome of validating a requested path against the root allow-list. */
-export type PathDecision = { ok: true; path: string } | { ok: false; reason: string };
+type PathDecision = { ok: true; path: string } | { ok: false; reason: string };
 
 /** True when `child` is `root` itself or lives beneath it (no `..` escape). */
 function isInsideRoot(child: string, root: string): boolean {

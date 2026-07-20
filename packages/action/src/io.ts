@@ -72,7 +72,7 @@ function escapeProperty(value: string): string {
 }
 
 /** Properties accepted by the annotation workflow commands. */
-export interface AnnotationProperties {
+interface AnnotationProperties {
   title?: string;
   file?: string;
   /** 1-based start line. */

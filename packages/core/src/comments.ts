@@ -16,7 +16,7 @@
  */
 import type { Finding } from "./types.js";
 
-export type CommentStyle = "c" | "hash";
+type CommentStyle = "c" | "hash";
 
 /** C-style (line + block) comment languages, by extension. */
 const C_LIKE: readonly string[] = [
@@ -57,7 +57,7 @@ const C_LIKE: readonly string[] = [
 const HASH_LIKE: readonly string[] = [".py", ".pyi", ".pyw", ".rb", ".ex", ".exs"];
 
 /** The comment style for a file path, or null when we don't strip comments for it. */
-export function commentStyleForFile(file: string): CommentStyle | null {
+function commentStyleForFile(file: string): CommentStyle | null {
   const lower = file.toLowerCase();
   if (C_LIKE.some((e) => lower.endsWith(e))) return "c";
   if (HASH_LIKE.some((e) => lower.endsWith(e))) return "hash";
@@ -159,7 +159,7 @@ export function commentSpans(
  * exempts `pem-*` rules. Comments and normal strings are skipped so a `"""`
  * delimiter inside them is not mis-detected.
  */
-export function pythonDocstringSpans(content: string): Array<[number, number]> {
+function pythonDocstringSpans(content: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   const n = content.length;
   let i = 0;
@@ -200,7 +200,7 @@ export function pythonDocstringSpans(content: string): Array<[number, number]> {
 }
 
 /** True if `offset` falls inside one of the (sorted, non-overlapping) spans. */
-export function offsetInSpans(spans: ReadonlyArray<[number, number]>, offset: number): boolean {
+function offsetInSpans(spans: ReadonlyArray<[number, number]>, offset: number): boolean {
   let lo = 0;
   let hi = spans.length - 1;
   while (lo <= hi) {
@@ -221,7 +221,7 @@ export function offsetInSpans(spans: ReadonlyArray<[number, number]>, offset: nu
  * it is language-agnostic. `qscan-ignore-line` is not a substring of
  * `qscan-ignore-next-line`, so the two never collide.
  */
-export function ignoredLines(content: string): Set<number> {
+function ignoredLines(content: string): Set<number> {
   const ignored = new Set<number>();
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {

@@ -14,7 +14,7 @@ import type {
 import { remediationText } from "./remediation.js";
 
 /** A 1-based line/column position derived from a character offset. */
-export interface LineCol {
+interface LineCol {
   line: number;
   column: number;
 }
@@ -62,14 +62,14 @@ function lineIndexFor(starts: readonly number[], offset: number): number {
  * line/column. Newlines are LF; CR is treated as an ordinary character, so on
  * CRLF files the column includes the trailing CR offset harmlessly.
  */
-export function offsetToLineCol(content: string, offset: number): LineCol {
+function offsetToLineCol(content: string, offset: number): LineCol {
   const starts = lineStartsFor(content);
   const idx = lineIndexFor(starts, offset);
   return { line: idx + 1, column: offset - starts[idx] + 1 };
 }
 
 /** Extract the (trimmed) single source line containing `offset`. */
-export function lineAt(content: string, offset: number): string {
+function lineAt(content: string, offset: number): string {
   const starts = lineStartsFor(content);
   const idx = lineIndexFor(starts, offset);
   const start = starts[idx];
@@ -80,7 +80,7 @@ export function lineAt(content: string, offset: number): string {
 }
 
 /** Inputs for {@link makeFinding}. */
-export interface FindingSpec {
+interface FindingSpec {
   ruleId: string;
   title: string;
   category: FindingCategory;
@@ -146,7 +146,7 @@ export function makeFinding(spec: FindingSpec): Finding {
 }
 
 /** Where a match occurred, plus optional per-finding field overrides. */
-export interface RuleMatch {
+interface RuleMatch {
   file: string;
   content: string;
   /** Match start offset within `content`. */
@@ -160,7 +160,7 @@ export interface RuleMatch {
  * rules (e.g. key generation across algorithm families) override these; fixed
  * rules pass none and inherit the catalog metadata verbatim.
  */
-export type RuleOverrides = Partial<
+type RuleOverrides = Partial<
   Pick<
     RuleMeta,
     "title" | "category" | "severity" | "confidence" | "algorithm" | "hndl" | "message" | "cwe"

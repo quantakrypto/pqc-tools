@@ -48,7 +48,7 @@ const SCORE_SCALE = 100;
 const TEST_PATH_WEIGHT = 0.15;
 
 /** True when a finding's file path is test / fixture / example / documentation. */
-export function isTestOrFixturePath(file: string): boolean {
+function isTestOrFixturePath(file: string): boolean {
   const f = file.toLowerCase().replace(/\\/g, "/");
   if (
     /(?:^|\/)(?:tests?|__tests__|testdata|test-data|fixtures?|examples?|demos?|samples?|specs?|mocks?|docs?|benchmarks?|e2e)\//.test(

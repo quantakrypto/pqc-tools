@@ -19,7 +19,7 @@ import { timing } from "./timing.js";
 export * from "./types.js";
 
 /** A named, family-scoped category. */
-export interface RegisteredCategory {
+interface RegisteredCategory {
   name: string;
   family: Family | "any";
   /** Whether the category runs by default (timing is opt-in). */

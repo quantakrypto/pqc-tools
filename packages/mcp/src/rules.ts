@@ -23,7 +23,7 @@ import { defaultRegistry, detectors } from "@quantakrypto/core";
 import type { AlgorithmFamily, Detector, RuleMeta } from "@quantakrypto/core";
 
 /** A resolved rule: the detector it belongs to (if any) and its algorithm. */
-export interface ResolvedRule {
+interface ResolvedRule {
   /** The rule id that was looked up (echoed for convenience). */
   ruleId: string;
   /** The detector that emits this rule, when one could be resolved. */

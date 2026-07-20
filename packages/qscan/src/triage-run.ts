@@ -37,7 +37,7 @@ const SEVERITY_RANK: Record<Severity, number> = {
 };
 
 /** Default cap on findings sent to the LLM per triage run (spend/DoS guard). */
-export const DEFAULT_MAX_TRIAGE = 100;
+const DEFAULT_MAX_TRIAGE = 100;
 
 /** The model's `rationale` is untrusted text that lands in JSON/SARIF output.
  * Strip control characters and clamp length so a prompt-injected rationale can't
@@ -51,7 +51,7 @@ function sanitizeRationale(s: string): string {
 /** Injectable triage function (default wraps `@quantakrypto/agent`). */
 export type TriageFn = (findings: readonly Finding[]) => Promise<Map<string, TriageVerdict>>;
 
-export interface RunTriageOptions {
+interface RunTriageOptions {
   level: ContextLevel;
   floor?: Severity;
   dryRun?: boolean;
@@ -69,7 +69,7 @@ export interface RunTriageOptions {
   stderr?: (s: string) => void;
 }
 
-export interface RunTriageResult {
+interface RunTriageResult {
   /** When `--dry-run`, the preflight text to show instead of a normal report. */
   preflight?: string;
 }

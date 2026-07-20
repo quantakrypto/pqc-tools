@@ -21,7 +21,7 @@ export const PROTOCOL_VERSION = 1 as const;
 // ---------------------------------------------------------------------------
 
 /** Operation names, shared across families where the semantics overlap. */
-export type Op = "keygen" | "encaps" | "decaps" | "sign" | "verify";
+type Op = "keygen" | "encaps" | "decaps" | "sign" | "verify";
 
 /** Families that support the signature operations (sign / verify). */
 export type SignatureFamily = "ml-dsa" | "slh-dsa";
@@ -39,14 +39,14 @@ interface RequestBase {
 }
 
 /** ML-KEM / ML-DSA key generation. `seed` (base64) makes it deterministic. */
-export interface KeygenRequest extends RequestBase {
+interface KeygenRequest extends RequestBase {
   op: "keygen";
   /** Optional base64 seed for deterministic keygen (impl-defined length). */
   seed?: string;
 }
 
 /** ML-KEM encapsulation against a public key. */
-export interface EncapsRequest extends RequestBase {
+interface EncapsRequest extends RequestBase {
   family: "ml-kem";
   op: "encaps";
   /** Base64 public (encapsulation) key. */
@@ -56,7 +56,7 @@ export interface EncapsRequest extends RequestBase {
 }
 
 /** ML-KEM decapsulation of a ciphertext with a secret key. */
-export interface DecapsRequest extends RequestBase {
+interface DecapsRequest extends RequestBase {
   family: "ml-kem";
   op: "decaps";
   /** Base64 secret (decapsulation) key. */
@@ -66,7 +66,7 @@ export interface DecapsRequest extends RequestBase {
 }
 
 /** ML-DSA / SLH-DSA signature generation. */
-export interface SignRequest extends RequestBase {
+interface SignRequest extends RequestBase {
   family: SignatureFamily;
   op: "sign";
   /** Base64 secret (signing) key. */
@@ -76,7 +76,7 @@ export interface SignRequest extends RequestBase {
 }
 
 /** ML-DSA / SLH-DSA signature verification. */
-export interface VerifyRequest extends RequestBase {
+interface VerifyRequest extends RequestBase {
   family: SignatureFamily;
   op: "verify";
   /** Base64 public (verification) key. */
@@ -104,7 +104,7 @@ export type RequestInput = DistributiveOmit<Request, "id"> & { id?: number };
 // ---------------------------------------------------------------------------
 
 /** Successful keygen result. */
-export interface KeygenResult {
+interface KeygenResult {
   id: number;
   ok: true;
   /** Base64 public key. */
@@ -114,7 +114,7 @@ export interface KeygenResult {
 }
 
 /** Successful encapsulation result. */
-export interface EncapsResult {
+interface EncapsResult {
   id: number;
   ok: true;
   /** Base64 ciphertext. */
@@ -124,7 +124,7 @@ export interface EncapsResult {
 }
 
 /** Successful decapsulation result. */
-export interface DecapsResult {
+interface DecapsResult {
   id: number;
   ok: true;
   /** Base64 shared secret. */
@@ -132,7 +132,7 @@ export interface DecapsResult {
 }
 
 /** Successful signing result. */
-export interface SignResult {
+interface SignResult {
   id: number;
   ok: true;
   /** Base64 signature. */
@@ -153,7 +153,7 @@ export interface VerifyResult {
  * for example when given a wrong-length key. Sieve treats a clean `error`
  * response as a *correct* rejection in the size/robustness categories.
  */
-export interface ErrorResult {
+interface ErrorResult {
   id: number;
   ok: false;
   /** Short machine-readable code, e.g. "invalid-length", "unsupported". */

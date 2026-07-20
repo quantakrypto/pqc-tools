@@ -40,7 +40,7 @@ export interface LlmConfig {
  * context to an attacker endpoint over http (agent audit — provider spoofing).
  * Plain http is permitted only for loopback (local LLM servers: Ollama/vLLM).
  */
-export function assertSafeBaseUrl(baseURL: string | undefined): void {
+function assertSafeBaseUrl(baseURL: string | undefined): void {
   if (!baseURL) return;
   let u: URL;
   try {

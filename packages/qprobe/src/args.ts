@@ -3,10 +3,10 @@
  * the parser is pure and total — it never throws and never does I/O.
  */
 
-export type ProbeModeArg = "tls" | "ssh" | "smtp" | "imap" | "pop3" | "postgres" | "auto";
-export type FormatArg = "human" | "json" | "sarif" | "cbom";
+type ProbeModeArg = "tls" | "ssh" | "smtp" | "imap" | "pop3" | "postgres" | "auto";
+type FormatArg = "human" | "json" | "sarif" | "cbom";
 
-export interface CliArgs {
+interface CliArgs {
   targets: string[];
   mode: ProbeModeArg;
   iOwnThis: boolean;

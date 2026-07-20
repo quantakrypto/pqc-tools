@@ -64,7 +64,7 @@ export function oidToSignatureFamily(oid: string): AlgorithmFamily | undefined {
   return undefined;
 }
 
-export interface CertSignature {
+interface CertSignature {
   oid: string;
   family?: AlgorithmFamily;
 }

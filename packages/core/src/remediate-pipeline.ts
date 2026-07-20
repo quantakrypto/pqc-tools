@@ -69,7 +69,7 @@ const NEW_SINK_LINE_RE = new RegExp(NEW_SINK_RE.source);
 
 /** Max changed lines allowed in an auto-verified LLM patch — a real crypto fix
  * is localized; a sprawling rewrite is not reviewable as "just the fix". */
-export const LLM_PATCH_MAX_CHANGED_LINES = 60;
+const LLM_PATCH_MAX_CHANGED_LINES = 60;
 
 function countMatches(re: RegExp, s: string): number {
   return (s.match(re) ?? []).length;

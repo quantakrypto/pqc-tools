@@ -34,7 +34,7 @@ interface Packet {
 }
 
 /** Parse the FIRST OpenPGP packet header; return its tag and body offset. */
-export function firstPacket(content: string): Packet | undefined {
+function firstPacket(content: string): Packet | undefined {
   if (content.length < 2) return undefined;
   const b0 = content.charCodeAt(0);
   if ((b0 & 0x80) === 0) return undefined; // high bit always set on a packet tag

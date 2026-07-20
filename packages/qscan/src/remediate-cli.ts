@@ -50,7 +50,7 @@ export interface RemediateRun {
 }
 
 /** A verified fix set ready to become a draft PR. */
-export interface DraftPrPlan {
+interface DraftPrPlan {
   branch: string;
   title: string;
   body: string;
@@ -58,7 +58,7 @@ export interface DraftPrPlan {
 }
 
 /** Open a draft PR for the plan (injectable; default shells git + gh in a worktree). */
-export type OpenDraftPr = (plan: DraftPrPlan) => Promise<{ url?: string }>;
+type OpenDraftPr = (plan: DraftPrPlan) => Promise<{ url?: string }>;
 
 export interface RemediateHooks {
   scanFn?: (root: string) => Promise<ScanResult>;
@@ -77,7 +77,7 @@ export interface RemediateHooks {
 export const REMEDIATE_EXIT = { OK: 0, CHANGES: 0, ERROR: 2 } as const;
 
 /** Default per-run cap on paid LLM fix proposals (spend/DoS guard; override with --max-llm). */
-export const DEFAULT_MAX_LLM = 25;
+const DEFAULT_MAX_LLM = 25;
 
 function envKey(provider: LlmProvider): string | undefined {
   return (

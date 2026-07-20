@@ -439,7 +439,7 @@ export function asFormat(value: string): QscanFormat {
 }
 
 /** Validate/normalize a `--context` level. */
-export function asContextLevel(value: string): ContextLevel {
+function asContextLevel(value: string): ContextLevel {
   if ((CONTEXT_LEVELS as readonly string[]).includes(value)) return value as ContextLevel;
   throw new ArgError(
     `invalid --context "${value}" (expected one of: ${CONTEXT_LEVELS.join(", ")})`,
@@ -447,13 +447,13 @@ export function asContextLevel(value: string): ContextLevel {
 }
 
 /** Validate/normalize a `--tier` value. */
-export function asTier(value: string): SecurityTier {
+function asTier(value: string): SecurityTier {
   if ((SECURITY_TIERS as readonly string[]).includes(value)) return value as SecurityTier;
   throw new ArgError(`invalid --tier "${value}" (expected one of: ${SECURITY_TIERS.join(", ")})`);
 }
 
 /** Validate/normalize a `--llm-provider` value. */
-export function asProvider(value: string): LlmProvider {
+function asProvider(value: string): LlmProvider {
   if ((LLM_PROVIDERS as readonly string[]).includes(value)) return value as LlmProvider;
   throw new ArgError(
     `invalid --llm-provider "${value}" (expected one of: ${LLM_PROVIDERS.join(", ")})`,
