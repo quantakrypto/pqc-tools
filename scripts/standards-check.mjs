@@ -10,7 +10,10 @@
 //
 // Usage: node scripts/standards-check.mjs   (run `npm run build` first)
 
-import { PQC_STANDARDS, standardsReviewStatus } from "../packages/core/dist/index.js";
+// Import from the `standards` module directly: `standardsReviewStatus` is an
+// internal cadence helper that the frozen public barrel (index.js) does not
+// re-export, so importing it from the barrel throws. `standards.js` exports both.
+import { PQC_STANDARDS, standardsReviewStatus } from "../packages/core/dist/standards.js";
 
 const s = PQC_STANDARDS;
 const status = standardsReviewStatus(new Date());

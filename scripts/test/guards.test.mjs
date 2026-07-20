@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -288,4 +288,18 @@ test("offline-boundary does not false-positive on legitimate offline-trio patter
   assert.deepEqual(scan("core", 'const RE = "\\\\bfetch\\\\(";\n'), []);
   // qscan reaching the agent via dynamic import() is the sanctioned path.
   assert.deepEqual(scan("qscan", 'const a = await import("@quantakrypto/agent");\n'), []);
+});
+
+test("standards-check.mjs imports + runs cleanly (advisory gate must not crash)", () => {
+  // This gate is advisory (always exit 0), so an import crash would go unnoticed
+  // in CI. Guard against it — but only once dist exists (the script reads core's
+  // built output); skip pre-build so the zero-dep guard suite stays build-free.
+  const dist = join(SCRIPTS_DIR, "..", "packages", "core", "dist", "index.js");
+  if (!existsSync(dist)) return; // not built yet — nothing to check
+  const res = spawnSync(process.execPath, [join(SCRIPTS_DIR, "standards-check.mjs")], {
+    encoding: "utf8",
+  });
+  assert.equal(res.status, 0, `standards-check exited ${res.status}: ${res.stderr}`);
+  assert.doesNotMatch(res.stderr, /SyntaxError|does not provide an export/);
+  assert.match(res.stdout, /PQC standards/);
 });
