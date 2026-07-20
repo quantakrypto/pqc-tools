@@ -1158,5 +1158,44 @@
   "negative/php-commented-crypto.php": {
     "category": "negative",
     "expected": []
+  },
+  "positive/bicep-keyvault.bicep": {
+    "category": "iac-bicep",
+    "expected": [
+      {
+        "ruleId": "bicep-keyvault-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
+  },
+  "positive/swift-cryptokit.swift": {
+    "category": "swift",
+    "expected": [
+      {
+        "ruleId": "swift-ecdsa",
+        "algorithm": "ECDSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "swift-x25519",
+        "algorithm": "X25519",
+        "hndl": true
+      }
+    ]
+  },
+  "positive/pulumi-tls.ts": {
+    "category": "iac-pulumi",
+    "expected": [
+      {
+        "ruleId": "pulumi-tls-rsa",
+        "algorithm": "RSA",
+        "hndl": true
+      }
+    ]
+  },
+  "negative/bicep-jwk-no-marker.bicep": {
+    "category": "negative",
+    "expected": []
   }
 }

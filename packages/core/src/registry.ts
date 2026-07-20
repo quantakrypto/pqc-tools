@@ -21,6 +21,7 @@ import { rubyDetector } from "./detectors/ruby.js";
 import { phpDetector } from "./detectors/php.js";
 import { elixirDetector } from "./detectors/elixir.js";
 import { cDetector } from "./detectors/c.js";
+import { swiftDetector } from "./detectors/swift.js";
 import { pemDetector } from "./detectors/pem.js";
 import { jwkDetector } from "./detectors/jwk.js";
 import { terraformDetector } from "./detectors/terraform.js";
@@ -32,6 +33,8 @@ import { k8sDetector } from "./detectors/k8s.js";
 import { messagingDetector } from "./detectors/messaging.js";
 import { databaseDetector } from "./detectors/database.js";
 import { cloudformationDetector } from "./detectors/cloudformation.js";
+import { bicepDetector } from "./detectors/bicep.js";
+import { pulumiDetector } from "./detectors/pulumi.js";
 import { meshDetector } from "./detectors/mesh.js";
 import { dnssecDetector } from "./detectors/dnssec.js";
 import { vpnDetector } from "./detectors/vpn.js";
@@ -151,6 +154,7 @@ export const builtinDetectors: Detector[] = [
   phpDetector,
   elixirDetector,
   cDetector,
+  swiftDetector,
   pemDetector,
   jwkDetector,
   terraformDetector,
@@ -162,6 +166,8 @@ export const builtinDetectors: Detector[] = [
   messagingDetector,
   databaseDetector,
   cloudformationDetector,
+  bicepDetector,
+  pulumiDetector,
   meshDetector,
   dnssecDetector,
   vpnDetector,

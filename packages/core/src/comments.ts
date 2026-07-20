@@ -51,6 +51,7 @@ const C_LIKE: readonly string[] = [
   ".phtml",
   ".scala",
   ".sc",
+  ".swift",
 ];
 
 /** Hash-style (`#`) comment languages, by extension. */

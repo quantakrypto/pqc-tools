@@ -137,6 +137,7 @@ export type DetectorLanguage =
   | "php"
   | "elixir"
   | "c"
+  | "swift"
   | "any";
 
 /**
