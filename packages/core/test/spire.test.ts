@@ -69,6 +69,29 @@ test("agent svid_key_type = rsa-2048 (YAML `:` form) classifies as RSA", () => {
   assert.equal(f?.hndl, false);
 });
 
+test("unquoted YAML (Helm values) svid_key_type: rsa-2048 classifies as RSA", () => {
+  // The common Helm/YAML form leaves the value unquoted; a required-quote regex
+  // missed this entirely.
+  const content = ["spire:", "  agent:", "    svid_key_type: rsa-2048"].join("\n");
+  assert.equal(rule(run("values.yaml", content), "spire-rsa-key")?.algorithm, "RSA");
+});
+
+test('JSON config (quoted key) "key_type": "ec-p256" classifies as ECDSA', () => {
+  // In JSON the attribute name is quoted, so the closing quote sits between the
+  // name and the colon — the detector must tolerate that.
+  const content = '{ "spire": { "server": { "ca_key_type": "ec-p256" } } }';
+  assert.equal(rule(run("spire.json", content), "spire-ec-key")?.algorithm, "ECDSA");
+});
+
+test("a marker substring inside a longer word (aspire/inspired) does NOT trigger", () => {
+  // `key_type = "rsa-2048"` in a file whose only 'spire' is inside 'aspire' must
+  // not fire — the marker is word-anchored.
+  const content = ["# aspire-config for the inspired backend", '  key_type = "rsa-2048"'].join(
+    "\n",
+  );
+  assert.deepEqual(run("aspire.conf", content), []);
+});
+
 test("bare key_type = rsa-2048 with NO spiffe/spire marker does NOT fire", () => {
   // Same attribute, unrelated file (no spiffe/spire/svid/ca_key_type anywhere):
   // the generic `key_type` must not be enough to trigger the SPIRE detector.

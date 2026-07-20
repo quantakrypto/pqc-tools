@@ -72,7 +72,7 @@ test("products are de-duplicated, sorted, and cover every occurrence of the rule
   );
   assert.deepEqual(
     doc.statements[0]!.products.map((p) => p["@id"]),
-    ["src/a.ts:3", "src/b.ts:9"],
+    ["file:src/a.ts#L3", "file:src/b.ts#L9"],
     "products deduped and sorted",
   );
 });

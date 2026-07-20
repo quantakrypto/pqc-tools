@@ -60,10 +60,13 @@ const SPIRE_EXTENSIONS: readonly string[] = [".conf", ".hcl", ".yaml", ".yml", "
 // The three SPIRE key-type attribute names in one anchor: `ca_key_type`,
 // `svid_key_type`, and the bare per-plugin `key_type`.
 const KEY_ATTR = "(?:ca_|svid_)?key_type";
-// HCL `=` and YAML/JSON `:` assignment forms; value quoted. Case-insensitive so
-// an upper/mixed-case value can't slip past, though SPIRE writes them lowercase.
-const RE_SPIRE_RSA = new RegExp(`\\b${KEY_ATTR}\\s*[:=]\\s*"rsa-\\d+"`, "gi");
-const RE_SPIRE_ECDSA = new RegExp(`\\b${KEY_ATTR}\\s*[:=]\\s*"(?:ec-p\\d+|ecdsa)"`, "gi");
+// HCL `=`, unquoted YAML `:`, and JSON `"key_type": "..."` assignment forms. The
+// attribute-name and value quotes are BOTH optional (`"?`): HCL uses `key_type =
+// "rsa-2048"`, Helm/YAML uses the unquoted `key_type: rsa-2048`, and JSON quotes
+// the key (`"key_type": "rsa-2048"`) — a required-quote regex missed the latter
+// two entirely. Case-insensitive, though SPIRE writes these lowercase.
+const RE_SPIRE_RSA = new RegExp(`\\b${KEY_ATTR}"?\\s*[:=]\\s*"?rsa-\\d+`, "gi");
+const RE_SPIRE_ECDSA = new RegExp(`\\b${KEY_ATTR}"?\\s*[:=]\\s*"?(?:ec-p\\d+|ecdsa)\\b`, "gi");
 
 const RULE_SPIRE_RSA: RuleMeta = {
   id: "spire-rsa-key",
@@ -104,7 +107,9 @@ const RULE_SPIRE_ECDSA: RuleMeta = {
  * config that merely sets `key_type = "rsa-2048"` cannot fire.
  */
 function hasSpireMarker(content: string): boolean {
-  return /spiffe|spire|ca_key_type|svid/i.test(content);
+  // Word-anchored so `inspired` / `aspire` / a `svid` substring inside a longer
+  // token don't qualify; `ca_key_type` is distinctive enough to match unanchored.
+  return /\b(?:spiffe|spire|svid)\b/i.test(content) || content.includes("ca_key_type");
 }
 
 /** Detects classical key types configured for SPIFFE X.509 SVIDs in SPIRE config. */

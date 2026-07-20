@@ -45,9 +45,13 @@ export interface OpenVexOptions {
   author?: string;
 }
 
-/** A stable product identifier for a finding: `<file>:<line>`. */
+/**
+ * A stable product identifier for a finding as an IRI (OpenVEX requires product
+ * `@id` to be an IRI): a `file:` URI with the line in the fragment, e.g.
+ * `file:src/a.ts#L3`.
+ */
 function productId(f: Finding): string {
-  return `${f.location.file}:${f.location.line}`;
+  return `file:${f.location.file}#L${f.location.line}`;
 }
 
 /**
@@ -96,10 +100,14 @@ export function toOpenVex(result: ScanResult, opts: OpenVexOptions = {}): OpenVe
       return statement;
     });
 
-  // Deterministic doc id + timestamp so the same scan yields identical VEX.
+  // Deterministic doc id + timestamp so the same scan yields identical VEX. The
+  // triage `status_notes` are part of the identity: a triaged and an untriaged
+  // export of the same scan are DIFFERENT documents and must not share an @id.
   const digest = createHash("sha256").update(`${result.root}|${result.toolVersion}`, "utf8");
   for (const s of statements) {
-    digest.update(`\n${s.vulnerability.name}|${s.products.map((p) => p["@id"]).join(",")}`);
+    digest.update(
+      `\n${s.vulnerability.name}|${s.products.map((p) => p["@id"]).join(",")}|${s.status_notes ?? ""}`,
+    );
   }
   const id = `https://quantakrypto.com/vex/${digest.digest("hex").slice(0, 16)}`;
 

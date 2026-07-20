@@ -85,3 +85,10 @@ test("non-DKIM .conf with no marker produces no findings (fast-reject gate)", ()
   ].join("\n");
   assert.deepEqual(run("app.conf", content), []);
 });
+
+test("a bare `k=rsa` in unrelated config/text is NOT flagged (marker is not self-satisfying)", () => {
+  // `k=rsa` is what the RSA rule matches, so it must NOT double as its own marker,
+  // or any `.txt`/`.conf` mentioning it in passing would false-positive.
+  assert.deepEqual(run("notes.txt", "reminder: set k=rsa for the legacy widget importer"), []);
+  assert.deepEqual(run("kv.conf", "partition_key=rsa\nsort=asc"), []);
+});

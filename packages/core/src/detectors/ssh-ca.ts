@@ -27,29 +27,36 @@
  * rarely), so the exposure window is large. Hence `category: "signature"`,
  * `severity: "medium"`, `confidence: "high"`.
  *
- * The cert key type NAMES the signing algorithm, which is how each finding gets
- * an accurate {@link AlgorithmFamily}:
- *  - `ssh-rsa-cert-v01@openssh.com`, `rsa-sha2-256-cert-v01@openssh.com`,
- *    `rsa-sha2-512-cert-v01@openssh.com`                              → RSA
- *  - `ecdsa-sha2-nistp256-cert-v01@openssh.com` / `nistp384` / `nistp521` → ECDSA
- *  - `ssh-ed25519-cert-v01@openssh.com`                               → EdDSA
+ * Two match shapes:
+ *  1. The cert key type, which NAMES the signing algorithm → an accurate
+ *     {@link AlgorithmFamily}:
+ *      - `ssh-rsa-cert-v01@openssh.com`, `rsa-sha2-256/512-cert-v01@openssh.com` → RSA
+ *      - `ecdsa-sha2-nistp256/384/521-cert-v01@openssh.com`                      → ECDSA
+ *      - `ssh-ed25519-cert-v01@openssh.com`                                      → EdDSA
+ *  2. The CA *deployment* directives — `TrustedUserCAKeys` / `HostCertificate`
+ *     (sshd_config) and `ssh-keygen -s` (the CA signing command). These are the
+ *     MOST COMMON way an SSH CA is configured, but they don't name the algorithm
+ *     (that lives in the referenced key file), so they emit the `ssh-ca-config`
+ *     rule with `algorithm: "unknown"` and `confidence: "medium"`.
  *
  * Precision:
  *  - Fast reject: `detect()` bails unless the file carries an SSH-CA marker
  *    (`cert-v01@openssh.com`, `@cert-authority`, `TrustedUserCAKeys`,
  *    `HostCertificate`, or `ssh-keygen -s`) — so the algorithm tokens can't be
  *    reached on unrelated config.
- *  - The matched tokens are the full `*-cert-v01@openssh.com` cert-type strings.
- *    The trailing `-cert-v01@openssh.com` suffix is what distinguishes a CA
- *    certificate type from the plain `ssh-rsa` / `ssh-ed25519` public-key tokens
- *    handled by `ssh-public-key`, so a non-cert `ssh-ed25519 AAAA…` line NEVER
- *    fires a CA rule here.
+ *  - The cert-type tokens are the full `*-cert-v01@openssh.com` strings. The
+ *    trailing `-cert-v01@openssh.com` suffix distinguishes a CA certificate type
+ *    from the plain `ssh-rsa` / `ssh-ed25519` public-key tokens handled by
+ *    `ssh-public-key`, so a non-cert `ssh-ed25519 AAAA…` line NEVER fires a cert
+ *    rule here.
  *  - Comment lines (`#`) are masked with {@link maskCommentLines} (offsets
  *    preserved) so a commented-out cert line can't fire. Known_hosts
  *    `@cert-authority` lines start with `@`, not `#`, so masking leaves them
  *    live — exactly what we want.
- *  - Doc/prose files are excluded ({@link DOC_EXTENSIONS}) so a README mentioning
- *    a cert key type in a sentence stays silent.
+ *  - Doc/prose files are excluded ({@link DOC_EXTENSIONS}), and so are program
+ *    SOURCE files ({@link ANALYZABLE_SOURCE_EXTENSIONS}) — a vendored SSH library
+ *    or constants table that spells a cert type as a string literal is not live
+ *    CA config. SSH CA config lives in extensionless / `.conf` / `.pub` files.
  *
  * The matched line frequently carries the CA public key's base64 blob (a
  * `@cert-authority` known_hosts entry), so findings are marked `sensitive` and
@@ -62,6 +69,7 @@ import {
   hasExtension,
   maskCommentLines,
   DOC_EXTENSIONS,
+  ANALYZABLE_SOURCE_EXTENSIONS,
 } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
@@ -73,6 +81,11 @@ import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 const RE_CERT_RSA = /\b(?:ssh-rsa|rsa-sha2-(?:256|512))-cert-v01@openssh\.com\b/g;
 const RE_CERT_ECDSA = /\becdsa-sha2-nistp(?:256|384|521)-cert-v01@openssh\.com\b/g;
 const RE_CERT_EDDSA = /\bssh-ed25519-cert-v01@openssh\.com\b/g;
+// The canonical CA *deployment* directives — the most common way an SSH CA is
+// configured (sshd_config `TrustedUserCAKeys` / `HostCertificate`, and the CA
+// signing command `ssh-keygen -s`). These name the CA usage but not the algorithm
+// (that lives in the referenced key file), so the finding is `algorithm: "unknown"`.
+const RE_CA_DIRECTIVE = /\bTrustedUserCAKeys\b|\bHostCertificate\b|\bssh-keygen\s+-s\b/g;
 
 const REMEDIATION =
   "No post-quantum SSH certificate format is standardized yet — track OpenSSH release notes and IETF work on PQC signatures for SSH. SSH CA keys are long-lived trust roots, so plan for their rotation to a PQC signing algorithm (e.g. ML-DSA) as soon as a cert format lands, and keep validity periods short in the interim.";
@@ -123,6 +136,24 @@ const RULE_CA_EDDSA: RuleMeta = {
   remediation: REMEDIATION,
 };
 
+const RULE_CA_CONFIG: RuleMeta = {
+  id: "ssh-ca-config",
+  title: "SSH certificate authority configured",
+  description:
+    "OpenSSH CA deployment directive (TrustedUserCAKeys / HostCertificate / ssh-keygen -s)",
+  category: "signature",
+  severity: "medium",
+  // The directive names CA usage, not the algorithm — hence a lower confidence and
+  // an unknown family; the CA key file itself carries the specific algorithm.
+  confidence: "medium",
+  algorithm: "unknown",
+  hndl: false,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "SSH certificate authority is configured (TrustedUserCAKeys / HostCertificate / ssh-keygen -s); the CA signing key is a long-lived classical trust root whose signatures become forgeable once a CRQC exists — verify the CA key's algorithm.",
+  remediation: REMEDIATION,
+};
+
 interface SshCaRule {
   meta: RuleMeta;
   re: RegExp;
@@ -132,6 +163,7 @@ const SSH_CA_RULES: readonly SshCaRule[] = [
   { meta: RULE_CA_RSA, re: RE_CERT_RSA },
   { meta: RULE_CA_ECDSA, re: RE_CERT_ECDSA },
   { meta: RULE_CA_EDDSA, re: RE_CERT_EDDSA },
+  { meta: RULE_CA_CONFIG, re: RE_CA_DIRECTIVE },
 ];
 
 /** True when `content` carries some SSH-CA-specific marker (not just a bare token). */
@@ -156,9 +188,13 @@ export const sshCaDetector: Detector = {
   scope: "config",
   language: "any",
   rules: SSH_CA_RULES.map((r) => r.meta),
-  // Apply broadly (SSH CA config lives in many differently-named files) but never
-  // on prose/docs. The strict fast-reject in detect() is the real gate.
-  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+  // Apply broadly (SSH CA config lives in many differently-named / extensionless
+  // files: sshd_config, known_hosts, *.pub) but never on prose/docs OR on program
+  // SOURCE files — a vendored SSH library or a constants table that spells out
+  // `ssh-ed25519-cert-v01@openssh.com` as a string literal is not a live CA config.
+  // The strict fast-reject in detect() is the remaining gate.
+  appliesTo: (f) =>
+    !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, ANALYZABLE_SOURCE_EXTENSIONS),
   detect({ file, content }): Finding[] {
     if (!hasSshCaMarker(content)) return [];
 

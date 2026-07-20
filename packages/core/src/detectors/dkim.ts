@@ -112,14 +112,20 @@ const RULE_DKIM_EDDSA: RuleMeta = {
     "There is no standardized post-quantum DKIM algorithm yet — track IETF work. Ed25519 is already the smaller/modern DKIM choice but is NOT post-quantum: it stays forgeable under a CRQC, so no rotation today resolves the quantum exposure.",
 };
 
-/** True when `content` carries a DKIM-specific marker (not just a bare tag token). */
+/**
+ * True when `content` carries a DKIM-specific marker. Deliberately does NOT accept
+ * a bare `k=rsa` / `k=ed25519` tag as its own marker: that tag is exactly what the
+ * RSA/EdDSA rules match, so treating it as the gate would be self-satisfying and
+ * fire on unrelated prose ("set `k=rsa` for the legacy importer"). A real DKIM
+ * record always also carries `v=DKIM1`, `_domainkey`, a `DKIM-Signature` field, or
+ * the OpenDKIM `SigningAlgorithm` directive — one of those must be present.
+ */
 function hasDkimMarker(content: string): boolean {
   return (
     /\bDKIM1\b/i.test(content) ||
     content.includes("_domainkey") ||
     /DKIM-Signature/i.test(content) ||
-    /\bSigningAlgorithm\b/i.test(content) ||
-    /\bk\s*=\s*(?:rsa|ed25519)\b/i.test(content)
+    /\bSigningAlgorithm\b/i.test(content)
   );
 }
 

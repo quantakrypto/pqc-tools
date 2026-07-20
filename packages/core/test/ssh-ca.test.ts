@@ -67,13 +67,35 @@ test("plain ssh-ed25519 public key WITHOUT -cert-v01 does NOT fire the CA rule",
   assert.equal(run("authorized_keys", content).length, 0);
 });
 
-test("a plain public key ALONGSIDE a CA marker still does not fire a CA rule", () => {
-  // Marker present (so detect() runs), but the ed25519 line itself is not a cert.
+test("the canonical CA deployment (TrustedUserCAKeys) fires ssh-ca-config, not a cert rule", () => {
+  // The most common SSH-CA deployment names the CA via a directive; the CA key's
+  // algorithm lives in the referenced .pub file, so this is algorithm:"unknown".
   const content = [
     "TrustedUserCAKeys /etc/ssh/ca.pub",
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL0 user@host",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL0 user@host", // a plain key line, not a cert
   ].join("\n");
-  assert.equal(run("sshd_config", content).length, 0);
+  const findings = run("sshd_config", content);
+  const cfg = rule(findings, "ssh-ca-config");
+  assert.ok(cfg, "the TrustedUserCAKeys directive is flagged");
+  assert.equal(cfg?.algorithm, "unknown");
+  assert.equal(cfg?.category, "signature");
+  assert.equal(cfg?.confidence, "medium");
+  // The plain ed25519 line is NOT a certificate, so no cert rule fires.
+  assert.equal(rule(findings, "ssh-ca-ed25519-cert"), undefined);
+});
+
+test("HostCertificate and `ssh-keygen -s` also fire ssh-ca-config", () => {
+  assert.ok(rule(run("sshd_config", "HostCertificate /etc/ssh/host-cert.pub"), "ssh-ca-config"));
+  assert.ok(
+    rule(run("sign-ca.sh", "ssh-keygen -s ca_key -I id -n user id_ed25519.pub"), "ssh-ca-config"),
+  );
+});
+
+test("SSH-CA does NOT fire on program SOURCE files (vendored constants are not config)", () => {
+  // golang.org/x/crypto/ssh spells the cert type verbatim as a string constant.
+  const go = 'const CertAlgoED25519v01 = "ssh-ed25519-cert-v01@openssh.com"';
+  assert.equal(run("cert.go", go).length, 0, ".go source is not scanned for SSH-CA config");
+  assert.equal(run("ssh.ts", go).length, 0, ".ts source is not scanned for SSH-CA config");
 });
 
 test("prose .md file never fires, even with a cert token", () => {

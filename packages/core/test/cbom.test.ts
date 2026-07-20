@@ -5,7 +5,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { toCbom, buildInventory } from "../src/index.js";
-import type { Finding, ScanResult } from "../src/index.js";
+import type { CbomComponent, Finding, ScanResult } from "../src/index.js";
+
+/** Read a namespaced CycloneDX component property (the quantum posture flags). */
+function prop(c: CbomComponent, name: string): string | undefined {
+  return c.properties?.find((p) => p.name === name)?.value;
+}
 
 function result(findings: Finding[]): ScanResult {
   return {
@@ -43,11 +48,10 @@ test("toCbom emits a CycloneDX 1.6 cryptographic BOM", () => {
   assert.equal(bom.components.length, 1);
   const comp = bom.components[0];
   assert.equal(comp.type, "cryptographic-asset");
-  assert.equal((comp.cryptoProperties as { quantumVulnerable: boolean }).quantumVulnerable, true);
-  assert.equal(
-    (comp.cryptoProperties as { harvestNowDecryptLater: boolean }).harvestNowDecryptLater,
-    true,
-  );
+  // The quantum posture is carried as CycloneDX component `properties` (name/value),
+  // not inside `cryptoProperties` (whose 1.6 schema is additionalProperties:false).
+  assert.equal(prop(comp, "quantakrypto:quantumVulnerable"), "true");
+  assert.equal(prop(comp, "quantakrypto:harvestNowDecryptLater"), "true");
 });
 
 test("toCbom reports a per-family classical security level (quantum level stays 0)", () => {
@@ -91,6 +95,43 @@ test("toCbom is deterministic for the same result", () => {
     f({ ruleId: "x", category: "signature", algorithm: "ECDSA", hndl: false }),
   ]);
   assert.deepEqual(toCbom(r), toCbom(r));
+});
+
+test("CBOM cryptoProperties carries no non-schema keys; key-agree cryptoFunction is valid", () => {
+  // cryptoProperties in CycloneDX 1.6 is additionalProperties:false — the quantum
+  // flags must NOT appear there (they live in component.properties), and
+  // "keyagree" is not a valid cryptoFunction enum member ("other" is).
+  const bom = toCbom(result([f({})])); // ECDH / key-agree
+  const cp = bom.components[0].cryptoProperties as Record<string, unknown>;
+  assert.equal(cp.quantumVulnerable, undefined, "flag not inside cryptoProperties");
+  assert.equal(cp.harvestNowDecryptLater, undefined, "flag not inside cryptoProperties");
+  assert.deepEqual(Object.keys(cp).sort(), ["algorithmProperties", "assetType"]);
+  const fns = (cp.algorithmProperties as { cryptoFunctions: string[] }).cryptoFunctions;
+  assert.ok(!fns.includes("keyagree"), 'no invalid "keyagree" cryptoFunction');
+  assert.deepEqual(fns, ["other"], "key-agree maps to the valid 'other' cryptoFunction");
+});
+
+test("CBOM classifies PKI trust material (ACM/Vault/SPIFFE-style) as assetType certificate", () => {
+  // Category-'certificate' rules whose ids don't spell 'cert' (cfn-acm, vault-pki,
+  // spire SVIDs) must still be certificates, not related-crypto-material 'key'.
+  const bom = toCbom(
+    result([
+      f({ ruleId: "cfn-acm-rsa", category: "certificate", algorithm: "RSA" }),
+      f({
+        ruleId: "spire-rsa-key",
+        category: "certificate",
+        algorithm: "RSA",
+        location: { file: "b", line: 1 },
+      }),
+    ]),
+  );
+  for (const c of bom.components) {
+    assert.equal(
+      (c.cryptoProperties as { assetType: string }).assetType,
+      "certificate",
+      `${c.name} is a certificate asset`,
+    );
+  }
 });
 
 test("CBOM refines assetType: certificate, key material, and protocol are not 'algorithm'", () => {
@@ -160,7 +201,7 @@ test("CBOM refines assetType: certificate, key material, and protocol are not 'a
 
   // Every asset — whatever its type — still reports the quantum posture.
   for (const c of bom.components) {
-    assert.equal((c.cryptoProperties as { quantumVulnerable: boolean }).quantumVulnerable, true);
+    assert.equal(prop(c, "quantakrypto:quantumVulnerable"), "true");
   }
 });
 
@@ -208,6 +249,8 @@ test("CBOM uses valid primitives and marks classical unknown-family findings vul
     assert.notEqual(prim, "pki");
   }
   // The signature finding's asset must report quantumVulnerable = true.
-  const anyVulnerable = JSON.stringify(bom).includes('"quantumVulnerable":true');
+  const anyVulnerable = bom.components.some(
+    (c) => prop(c, "quantakrypto:quantumVulnerable") === "true",
+  );
   assert.ok(anyVulnerable, "classical findings report quantumVulnerable:true");
 });

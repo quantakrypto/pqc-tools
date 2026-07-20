@@ -188,12 +188,14 @@ export const dartDetector: Detector = {
     const masked = maskCommentLines(maskBlockComments(content), ["//"]);
 
     const findings: Finding[] = [];
+    // Scan the masked text, but build the finding (its snippet) from the ORIGINAL
+    // `content` so a line with a trailing comment renders live, not blanked.
     const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, masked, (m) =>
         findings.push(
           findingFromRule(rule, {
             file,
-            content: masked,
+            content,
             index: m.index,
             matchLength: m[0].length,
           }),

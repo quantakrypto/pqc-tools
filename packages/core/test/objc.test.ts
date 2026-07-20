@@ -53,7 +53,7 @@ test("RSA signing algorithm is flagged (signature, hndl:false)", () => {
   assert.equal(f?.algorithm, "RSA");
   assert.equal(f?.category, "signature");
   assert.equal(f?.hndl, false);
-  assert.equal(f?.severity, "medium");
+  assert.equal(f?.severity, "high", "consistent with sibling packs' signature severity");
 });
 
 test("RSA encryption algorithm is flagged (kem, hndl:true)", () => {

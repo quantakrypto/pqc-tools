@@ -26,14 +26,27 @@ function occurrencesOf(c: CbomComponent): Occurrence[] {
   return Array.isArray(occ) ? (occ as Occurrence[]) : [];
 }
 
+const HNDL_PROP = "quantakrypto:harvestNowDecryptLater";
+
 function hndlOf(c: CbomComponent): boolean {
-  // `cryptoProperties` is optional on an externally-authored / hand-built CBOM
-  // component, so guard it — a duplicate bom-ref whose second copy lacks it must not
-  // crash the merge.
+  // The flag is carried as a CycloneDX component `property` (name/value). Fall back
+  // to the legacy `cryptoProperties.harvestNowDecryptLater` location so an
+  // externally-authored / older CBOM still merges correctly.
+  const prop = c.properties?.find((p) => p.name === HNDL_PROP);
+  if (prop) return prop.value === "true";
   return (
     (c.cryptoProperties as { harvestNowDecryptLater?: unknown } | undefined)
       ?.harvestNowDecryptLater === true
   );
+}
+
+/** Return a copy of `props` with the HNDL flag set to `value`. */
+function withHndl(
+  props: { name: string; value: string }[] | undefined,
+  value: boolean,
+): { name: string; value: string }[] {
+  const rest = (props ?? []).filter((p) => p.name !== HNDL_PROP);
+  return [...rest, { name: HNDL_PROP, value: String(value) }];
 }
 
 /** Union + dedup occurrences by `location`, sorted deterministically. */
@@ -79,19 +92,18 @@ export function mergeCboms(boms: readonly CycloneDxBom[]): CycloneDxBom {
       const ref = c["bom-ref"];
       const existing = byRef.get(ref);
       if (!existing) {
-        // Deep-ish copy so we can mutate evidence/hndl without touching the input.
+        // Deep-ish copy so we can mutate evidence/properties without touching the input.
         byRef.set(ref, {
           ...c,
           cryptoProperties: { ...c.cryptoProperties },
+          properties: c.properties ? [...c.properties] : undefined,
           evidence: { occurrences: occurrencesOf(c) },
         });
       } else {
         const merged = mergeOccurrences(occurrencesOf(existing), occurrencesOf(c));
         existing.evidence = { occurrences: merged };
-        existing.cryptoProperties = {
-          ...existing.cryptoProperties,
-          harvestNowDecryptLater: hndlOf(existing) || hndlOf(c),
-        };
+        // OR the harvest-now-decrypt-later flag across the merged copies.
+        existing.properties = withHndl(existing.properties, hndlOf(existing) || hndlOf(c));
       }
     }
   }

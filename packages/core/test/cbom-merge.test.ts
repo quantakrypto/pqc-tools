@@ -95,11 +95,11 @@ test("mergeCboms OR-s the harvest-now-decrypt-later flag", () => {
   );
   const merged = mergeCboms([safe, hndl]);
   assert.equal(merged.components.length, 1);
-  assert.equal(
-    (merged.components[0].cryptoProperties as { harvestNowDecryptLater: boolean })
-      .harvestNowDecryptLater,
-    true,
+  // The HNDL flag is OR-ed across the merged copies and lives in component properties.
+  const hndlProp = merged.components[0].properties?.find(
+    (p) => p.name === "quantakrypto:harvestNowDecryptLater",
   );
+  assert.equal(hndlProp?.value, "true");
 });
 
 test("mergeCboms is deterministic", () => {

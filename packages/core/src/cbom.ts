@@ -33,6 +33,8 @@ export interface CbomComponent {
   "bom-ref": string;
   name: string;
   cryptoProperties: Record<string, unknown>;
+  /** CycloneDX component name/value properties (carries the quantum posture flags). */
+  properties?: { name: string; value: string }[];
   evidence?: Record<string, unknown>;
 }
 
@@ -45,10 +47,12 @@ function primitiveFor(category: FindingCategory): string {
       return "key-agree";
     case "signature":
       return "signature";
+    case "hash":
+      return "hash";
     default:
       // `certificate` / `tls` no longer route here (they become their own
-      // assetType — see {@link classifyAsset}); `dependency` / `hash` / `rng`
-      // and any future category fall back to the valid "other" primitive.
+      // assetType — see {@link classifyAsset}); `dependency` / `rng` and any
+      // future category fall back to the valid "other" primitive.
       return "other";
   }
 }
@@ -77,6 +81,7 @@ function classifyAsset(f: Finding): {
   }
   if (f.category === "certificate") {
     const id = f.ruleId.toLowerCase();
+    // Route the explicitly key-SHAPED material to related-crypto-material…
     if (id.includes("private-key") || id.includes("keystore")) {
       return {
         assetType: "related-crypto-material",
@@ -98,11 +103,13 @@ function classifyAsset(f: Finding): {
         materialType: "ciphertext",
       };
     }
-    if (id.includes("cert")) {
-      return { assetType: "certificate", discriminator: "" };
-    }
-    // Other PKI material (e.g. PGP key blocks that aren't tagged private): a key.
-    return { assetType: "related-crypto-material", discriminator: "key", materialType: "key" };
+    // …and DEFAULT the rest of the `certificate` category to assetType
+    // "certificate" — the category's own meaning. This covers real X.509 certs
+    // and CSRs (pem-certificate/pem-cert-request) plus PKI trust material whose
+    // ids don't spell "cert": ACM certs (cfn-acm-*), Vault PKI (vault-pki-*),
+    // mesh identity, and SPIFFE X.509-SVIDs (spire-*). Previously these fell
+    // through to related-crypto-material "key", mislabelling certificates.
+    return { assetType: "certificate", discriminator: "" };
   }
   return { assetType: "algorithm", discriminator: primitiveFor(f.category) };
 }
@@ -229,9 +236,9 @@ export function toCbom(result: ScanResult): CycloneDxBom {
                   ? ["sign", "verify"]
                   : g.discriminator === "kem"
                     ? ["encapsulate", "decapsulate"]
-                    : g.discriminator === "key-agree"
-                      ? ["keyagree"]
-                      : ["other"],
+                    : // CycloneDX 1.6 has no "keyagree" cryptoFunction; "other" is
+                      // the valid value for a key-agreement primitive.
+                      ["other"],
             },
           };
           label = g.discriminator;
@@ -245,9 +252,18 @@ export function toCbom(result: ScanResult): CycloneDxBom {
         cryptoProperties: {
           assetType: g.assetType,
           ...typeProps,
-          quantumVulnerable: isQuantumVulnerable(g.algorithm),
-          harvestNowDecryptLater: anyHndl,
         },
+        // The quantum posture flags are carried as CycloneDX component `properties`
+        // (an open name/value list) rather than inside `cryptoProperties`, whose
+        // 1.6 schema is `additionalProperties: false` — so a strict validator
+        // accepts the BOM. Namespaced to avoid clashing with other tools' keys.
+        properties: [
+          {
+            name: "quantakrypto:quantumVulnerable",
+            value: String(isQuantumVulnerable(g.algorithm)),
+          },
+          { name: "quantakrypto:harvestNowDecryptLater", value: String(anyHndl) },
+        ],
         evidence: { occurrences },
       };
     });

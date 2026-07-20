@@ -95,8 +95,10 @@ const RULE_OBJC_RSA_SIGN: RuleMeta = {
   title: "Objective-C RSA signature",
   description: "SecKeyCreateSignature / SecKeyVerifySignature with kSecKeyAlgorithmRSASignature*",
   category: "signature",
-  // `medium` is acceptable for signatures — they are forgeable but not HNDL-exposed.
-  severity: "medium",
+  // `high`, consistent with every sibling pack's signature severity (swift-rsa,
+  // go-rsa-sign, java-rsa-sign) — the same primitive must not flip CI exit codes
+  // based on which language wrote it.
+  severity: "high",
   confidence: "high",
   algorithm: "RSA",
   hndl: false,
@@ -124,7 +126,8 @@ const RULE_OBJC_ECDSA_SIGN: RuleMeta = {
   title: "Objective-C ECDSA signature",
   description: "SecKeyCreateSignature / SecKeyVerifySignature with kSecKeyAlgorithmECDSASignature*",
   category: "signature",
-  severity: "medium",
+  // `high`, consistent with swift-ecdsa / go-ecdsa / java-ecdsa-sign / dart-ecdsa.
+  severity: "high",
   confidence: "high",
   algorithm: "ECDSA",
   hndl: false,
@@ -180,12 +183,14 @@ export const objcDetector: Detector = {
     const masked = maskCommentLines(maskBlockComments(content), ["//"]);
 
     const findings: Finding[] = [];
+    // Scan the masked text, but build the finding (its snippet) from the ORIGINAL
+    // `content` so a line with a trailing comment renders live, not blanked.
     const add = (re: RegExp, rule: RuleMeta) =>
       eachMatch(re, masked, (m) =>
         findings.push(
           findingFromRule(rule, {
             file,
-            content: masked,
+            content,
             index: m.index,
             matchLength: m[0].length,
           }),
