@@ -86,3 +86,23 @@ test("non-PEM files produce no PEM findings", () => {
   const findings = run("readme.md", "Just some text, no keys here.");
   assert.equal(findings.filter((f) => f.ruleId.startsWith("pem-")).length, 0);
 });
+
+test("a bare BEGIN-marker string literal (no body, no END) does NOT fire", () => {
+  // Regression: a PEM parser / i18n message / test that names the marker as a string
+  // constant must not be reported as an embedded private key.
+  const content = [
+    'const PEM_RSA_HEADER = "-----BEGIN RSA PRIVATE KEY-----";',
+    'const PEM_PK8_HEADER = "-----BEGIN PRIVATE KEY-----";',
+    'if (!line.startsWith("-----BEGIN CERTIFICATE-----")) throw new Error("bad");',
+  ].join("\n");
+  const pem = run("pem-parser.ts", content).filter((f) => f.ruleId.startsWith("pem-"));
+  assert.equal(pem.length, 0, "bare marker string literals must not fire");
+});
+
+test("a real PEM block with only a short/placeholder body still fires (END marker)", () => {
+  // The END-marker fallback keeps recall for short fixtures/bodies that lack a long
+  // base64 run (the strong signal reserved for real long keys).
+  const content = "-----BEGIN RSA PRIVATE KEY-----\nMIIB\n-----END RSA PRIVATE KEY-----\n";
+  const f = run("k.pem", content).find((x) => x.ruleId === "pem-rsa-private-key");
+  assert.ok(f, "short-bodied PEM block with an END marker still fires");
+});

@@ -368,44 +368,42 @@ export function eachMatch(
  * Return the innermost `{ … }` object that contains `index`, as a substring — so a
  * per-match check (e.g. a JWK's own `use`/`alg`, or whether an `alg` sits inside a
  * JWK) analyses ONLY that object and can't be contaminated by a neighbouring object
- * in a packed array. Brace matching is naive (it does not skip braces inside JSON
- * string values), which is fine for JWK/JOSE (base64url values carry no braces), and
- * both scans are bounded by `maxSpan` so a pathological input can't blow up. Falls
- * back to a bounded ±window when no enclosing braces are found.
+ * in a packed array. The scan is STRING-AWARE (braces and quotes inside JSON string
+ * values, honouring `\"`, are ignored), so a value like `"a}b{c"` can't mis-scope the
+ * object. Bounded by `maxSpan` each way so a pathological input can't blow up; falls
+ * back to a bounded ±window when no enclosing object is found in range.
  */
 export function enclosingObject(content: string, index: number, maxSpan = 4000): string {
-  let depth = 0;
-  let start = -1;
   const lo = Math.max(0, index - maxSpan);
-  for (let i = Math.min(index, content.length - 1); i >= lo; i--) {
+  const hi = Math.min(content.length, index + maxSpan);
+  const stack: number[] = []; // positions of currently-open `{`
+  let inStr = false;
+  let esc = false;
+  let enclosingOpen = -1; // innermost `{` open at `index`
+  for (let i = lo; i < hi; i++) {
     const c = content[i];
-    if (c === "}") depth++;
-    else if (c === "{") {
-      if (depth === 0) {
-        start = i;
-        break;
-      }
-      depth--;
-    }
-  }
-  if (start < 0) {
-    return content.slice(Math.max(0, index - 250), index + 250);
-  }
-  let d = 0;
-  let end = -1;
-  const hi = Math.min(content.length, start + maxSpan);
-  for (let i = start; i < hi; i++) {
-    const c = content[i];
-    if (c === "{") d++;
-    else if (c === "}") {
-      d--;
-      if (d === 0) {
-        end = i + 1;
-        break;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    } else if (c === "{") {
+      stack.push(i);
+    } else if (c === "}") {
+      const open = stack.pop();
+      if (open !== undefined && open === enclosingOpen) {
+        return content.slice(enclosingOpen, i + 1); // closed the enclosing object
       }
     }
+    if (i === index && enclosingOpen < 0 && stack.length > 0) {
+      enclosingOpen = stack[stack.length - 1];
+    }
   }
-  return content.slice(start, end < 0 ? hi : end);
+  // No complete enclosing object in range: return from its open (if found) to hi, or
+  // a bounded ±window as a last resort.
+  if (enclosingOpen >= 0) return content.slice(enclosingOpen, hi);
+  return content.slice(Math.max(0, index - 250), hi);
 }
 
 /**

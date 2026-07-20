@@ -131,15 +131,16 @@ export const jwkDetector: Detector = {
   detect({ file, content }): Finding[] {
     // Fast reject: a JWK always has one of these two members.
     if (!content.includes('"kty"') && !content.includes('"crv"')) return [];
-    // In a CloudFormation/ARM template FILE the cloudformation detector owns the key
-    // resource `kty`; defer to it so a Key Vault key is not counted twice. (Gated to
-    // the template extensions it actually scans, so a `.ts` that merely mentions a
-    // marker string is still covered here.)
-    if (isCloudTemplateFile(file, content)) return [];
+    // The ONLY overlap with the cloudformation detector is the ARM Key Vault key
+    // `kty:"RSA"` (cfn-arm-keyvault-rsa), which only fires when Microsoft.KeyVault is
+    // present. Defer just the RSA rule in that case — everything else (crv keys, and
+    // JWKs embedded in AWS CloudFormation, which cfn does not own) is still reported.
+    const isArm = isCloudTemplateFile(file, content) && content.includes("Microsoft.KeyVault");
 
     const findings: Finding[] = [];
     for (const rule of JWK_RULES) {
       eachMatch(rule.re, content, (m) => {
+        if (rule.meta.id === "jwk-rsa" && isArm) return; // cfn-arm-keyvault-rsa owns it
         const at = { file, content, index: m.index, matchLength: m[0].length };
         // Analyse the key's OWN enclosing object so a neighbouring key in a JWKS
         // array can't flip this key's sig/enc classification.

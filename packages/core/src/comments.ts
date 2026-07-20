@@ -41,10 +41,17 @@ const C_LIKE: readonly string[] = [
   ".cxx",
   ".hpp",
   ".hh",
+  // PHP and Scala also use C-style `//` + `/* */` comments (PHP additionally uses
+  // `#`, handled by the hash lexer running first would miss `//`; C-style covers both
+  // since PHP `//` is the common form and `#` lines are rare in modern PHP).
+  ".php",
+  ".phtml",
+  ".scala",
+  ".sc",
 ];
 
 /** Hash-style (`#`) comment languages, by extension. */
-const HASH_LIKE: readonly string[] = [".py", ".pyi", ".pyw", ".rb"];
+const HASH_LIKE: readonly string[] = [".py", ".pyi", ".pyw", ".rb", ".ex", ".exs"];
 
 /** The comment style for a file path, or null when we don't strip comments for it. */
 export function commentStyleForFile(file: string): CommentStyle | null {

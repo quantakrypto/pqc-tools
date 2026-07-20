@@ -91,14 +91,13 @@ export const keystoreDetector: Detector = {
     // PKCS#12), so this runs for ANY keystore extension once the JKS/JCEKS magics
     // fail. Accept the long-form length octets 0x81/0x82/0x83 (real PKCS#12 is
     // always >127 bytes, so short-form would be a false positive).
-    if (
-      content.length >= 2 &&
-      content.charCodeAt(0) === 0x30 &&
-      (content.charCodeAt(1) === 0x81 ||
-        content.charCodeAt(1) === 0x82 ||
-        content.charCodeAt(1) === 0x83)
-    ) {
-      return [findingFromRule(RULE_PKCS12, { ...at, matchLength: 2 })];
+    if (content.length >= 2 && content.charCodeAt(0) === 0x30) {
+      const lenOctet = content.charCodeAt(1);
+      // Long-form DER length (0x81/0x82/0x83) or BER indefinite length (0x80, emitted
+      // by NSS/Firefox .p12 exports). Short-form is excluded (real PKCS#12 is >127 B).
+      if (lenOctet === 0x80 || lenOctet === 0x81 || lenOctet === 0x82 || lenOctet === 0x83) {
+        return [findingFromRule(RULE_PKCS12, { ...at, matchLength: 2 })];
+      }
     }
     // BouncyCastle keystores have no stable magic; key off the extension, but
     // require some content so an empty `.bks` placeholder does not fire.

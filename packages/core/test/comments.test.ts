@@ -27,6 +27,45 @@ test("crypto in a // line comment is suppressed; the same call in code is not", 
   );
 });
 
+test("PHP/Scala // and Elixir # commented-out crypto is suppressed (but code fires)", () => {
+  // Regression: these extensions were absent from the comment-style tables, so
+  // commented-out code fired detectors as if it were live (P0 false positives).
+  // Each assertion is paired with the CODE form to prove the rule id is real and the
+  // suppression — not a typo'd rule id — is what makes the comment case false.
+  assert.equal(
+    has(
+      scan1("a.php", "// $k = openssl_pkey_new(['private_key_bits' => 2048]);"),
+      "php-openssl-keygen",
+    ),
+    false,
+  );
+  assert.equal(
+    has(
+      scan1("a.php", "$k = openssl_pkey_new(['private_key_bits' => 2048]);"),
+      "php-openssl-keygen",
+    ),
+    true,
+  );
+
+  assert.equal(
+    has(scan1("a.scala", '// val kp = KeyPairGenerator.getInstance("RSA")'), "java-rsa"),
+    false,
+  );
+  assert.equal(
+    has(scan1("a.scala", 'val kp = KeyPairGenerator.getInstance("RSA")'), "java-rsa"),
+    true,
+  );
+
+  assert.equal(
+    has(scan1("a.ex", "# key = :crypto.generate_key(:rsa, {2048, 65537})"), "elixir-crypto-keygen"),
+    false,
+  );
+  assert.equal(
+    has(scan1("a.ex", "key = :crypto.generate_key(:rsa, {2048, 65537})"), "elixir-crypto-keygen"),
+    true,
+  );
+});
+
 test("crypto in a /* block comment */ is suppressed", () => {
   const src =
     "/*\n  legacy: crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })\n*/\nexport {};";

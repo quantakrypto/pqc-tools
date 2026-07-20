@@ -34,6 +34,19 @@ test("C#: RSA.Create / ECDsa / ECDiffieHellman / DSA classify correctly", () => 
   assert.deepEqual(run("A.cs", "var a = Aes.Create();"), []);
 });
 
+test("C#: certificate PINNING does not fire the TLS cert-validation-disabled rule", () => {
+  // Regression: pinning compares the presented cert to a known one and returns the
+  // result — it is NOT `=> true`. The old regex matched any `ServerCertificateCustom
+  // ValidationCallback =` and flagged a security control as a vulnerability.
+  const pinning =
+    "handler.ServerCertificateCustomValidationCallback = (m, cert, chain, errors) => cert.Thumbprint == Pinned;";
+  assert.equal(rule(run("Pin.cs", pinning), "csharp-tls-cert-validation"), undefined);
+  // But an actual disable (`=> true`) still fires.
+  const disabled =
+    "handler.ServerCertificateCustomValidationCallback = (m, cert, chain, errors) => true;";
+  assert.ok(rule(run("Bad.cs", disabled), "csharp-tls-cert-validation"));
+});
+
 test("Rust: rsa / p256 ecdsa+ecdh / dalek ed25519+x25519", () => {
   assert.equal(
     rule(run("m.rs", "let k = RsaPrivateKey::new(rng, 2048);"), "rust-rsa")?.algorithm,

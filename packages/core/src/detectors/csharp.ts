@@ -27,8 +27,11 @@ const RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bne
 //   - SslProtocols.Ssl3 / .Tls / .Tls11 → deprecated SSL 3.0 / TLS 1.0 / 1.1.
 // `SslProtocols.Tls` (no suffix) is the legacy TLS 1.0 constant; `Tls12`/`Tls13`
 // are excluded by the trailing \b (the following digit is a word char).
+// Only the genuinely-permissive forms: the built-in accept-any validator, or a
+// callback assigned an always-`true` lambda. A callback assigned a NAMED validator
+// method is typically certificate PINNING (stricter than default) and must NOT fire.
 const RE_CS_TLS_CERT_VALIDATION =
-  /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=/g;
+  /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=\s*[^;\n]{0,80}=>\s*true\b/g;
 const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
 // Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
 // alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but

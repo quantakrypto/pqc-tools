@@ -211,6 +211,20 @@ const PEM_RULES: PemRule[] = [
   },
 ];
 
+/**
+ * True when what follows the begin marker looks like a REAL PEM block rather than a
+ * bare `-----BEGIN …-----` header string literal (as appears in PEM parsers, tests,
+ * and i18n messages: `PEM_HEADER = "-----BEGIN RSA PRIVATE KEY-----"`). A genuine
+ * block has EITHER a base64 body (a run of ≥24 base64 chars — the strong signal for a
+ * real, long key) OR a matching `-----END …-----` marker within a short window (which
+ * covers short/placeholder bodies while still rejecting a lone header string that has
+ * neither). Tolerates leading whitespace / encrypted-PEM `Proc-Type:` header lines.
+ */
+function hasBase64Body(content: string, from: number): boolean {
+  const window = content.slice(from, from + 800);
+  return /[A-Za-z0-9+/]{24,}={0,2}/.test(window) || /-----END [A-Z0-9 ]+-----/.test(window);
+}
+
 /** Detects PEM key/certificate material in arbitrary files. */
 export const pemDetector: Detector = {
   id: "pem-material",
@@ -227,6 +241,11 @@ export const pemDetector: Detector = {
     const findings: Finding[] = [];
     for (const rule of PEM_RULES) {
       eachMatch(rule.re, content, (m) => {
+        // Require an actual base64 body after the marker, so a bare
+        // `-----BEGIN RSA PRIVATE KEY-----` string literal in a PEM parser / test /
+        // i18n message does NOT get reported as an embedded key. A real PEM block has
+        // a run of base64 within the next few hundred chars.
+        if (!hasBase64Body(content, m.index + m[0].length)) return;
         findings.push(
           findingFromRule(rule.meta, {
             file,

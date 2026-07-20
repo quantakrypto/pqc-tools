@@ -16,7 +16,7 @@
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
 import {
-  ANALYZABLE_SOURCE_EXTENSIONS,
+  JWT_HOST_EXTENSIONS,
   DOC_EXTENSIONS,
   eachMatch,
   enclosingObject,
@@ -77,12 +77,12 @@ export const joseDetector: Detector = {
   scope: "config",
   language: "any",
   rules: JOSE_RULES.map((r) => r.meta),
-  // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config, and in
-  // application SOURCE files the language-agnostic JOSE token rules in source.ts
-  // (`jose-rsa-oaep` / `jose-ecdh-es`) own these tokens — so restrict this config
-  // detector to non-doc, non-source files (config / JSON / YAML).
-  appliesTo: (f) =>
-    !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, ANALYZABLE_SOURCE_EXTENSIONS),
+  // Prose examples (a README showing `"alg":"RSA-OAEP"`) are not JOSE config. In the
+  // JS/TS/Python/Go/Ruby source files that source.ts's `jose-rsa-oaep`/`jose-ecdh-es`
+  // token rules actually cover (JWT_HOST_EXTENSIONS), defer to them to avoid a
+  // double-count — but STILL run on other source languages (Java/C#/Rust/PHP/Elixir/
+  // C/C++), which source.ts does not cover for these tokens.
+  appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS) && !hasExtension(f, JWT_HOST_EXTENSIONS),
   detect({ file, content }): Finding[] {
     // Fast reject: no JOSE key-management alg token present.
     if (

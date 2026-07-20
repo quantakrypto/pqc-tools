@@ -113,6 +113,18 @@ test("in a packed JWKS, each key is classified by its OWN object (no window cont
   );
 });
 
+test("a brace inside a JSON string value does not mis-scope the key (string-aware)", () => {
+  // Regression: enclosingObject was brace-only, so a `}` or `{` inside a string value
+  // (here in `kid`) truncated the scanned object and could drop the key's own
+  // `use`/`alg`, flipping a signing RSA JWK back to HNDL. String-aware scanning keeps
+  // the whole object in view.
+  const jwk = '{"kty":"RSA","kid":"tenant-{prod}/rotation-2026","use":"sig","alg":"RS256"}';
+  const f = rule(run("k.json", jwk), "jwk-rsa");
+  assert.ok(f, "RSA JWK detected despite braces in the kid string");
+  assert.equal(f.category, "signature", "own use:sig/alg:RS256 still classifies it as signing");
+  assert.equal(f.hndl, false);
+});
+
 test("an explicit `use:enc` on an RSA JWK stays HNDL even if a sig alg is present", () => {
   // A contradictory key still errs toward the harvestable (enc) classification.
   const f = rule(run("k.json", '{"kty":"RSA","use":"enc","alg":"RS256"}'), "jwk-rsa");
