@@ -43,8 +43,8 @@ test("KeyPairSpec (GenerateDataKeyPair) and legacy CustomerMasterKeySpec are cau
 
 test("cloud-KMS does NOT double-count the Terraform (snake_case) spec on a .tf file", () => {
   // Terraform's `customer_master_key_spec` is snake_case; the KMS SDK detector's
-  // fast-reject is case-sensitive on the PascalCase field, so only the Terraform
-  // rule fires — not both.
+  // field regex matches only the camel/PascalCase forms (no underscores), so it
+  // never matches the snake_case spelling — only the Terraform rule fires, not both.
   const findings = run(
     "main.tf",
     'resource "aws_kms_key" "k" {\n  customer_master_key_spec = "RSA_3072"\n}',
@@ -64,6 +64,47 @@ test("a symmetric KMS key (default) and unrelated JSON produce no KMS findings",
   );
   assert.deepEqual(
     run("cfg.json", '{ "name": "svc", "KeySpecVersion": 2 }').filter((f) =>
+      f.ruleId.startsWith("cloud-kms-"),
+    ),
+    [],
+  );
+});
+
+test("AWS CDK ENUM forms (kms.KeySpec.RSA_2048 / acm.KeyAlgorithm.EC_*) are caught", () => {
+  // The enum-member form has no quoted value, so the SDK/JSON rule misses it.
+  assert.equal(
+    rule(
+      run("stack.ts", "new kms.Key(this, 'K', { keySpec: kms.KeySpec.RSA_2048 });"),
+      "cloud-kms-rsa",
+    )?.algorithm,
+    "RSA",
+  );
+  assert.equal(
+    rule(run("stack.ts", "keySpec: kms.KeySpec.ECC_NIST_P256"), "cloud-kms-ec")?.algorithm,
+    "ECDH",
+  );
+  assert.ok(
+    rule(
+      run("stack.py", "acm.Certificate(self, 'C', key_algorithm=acm.KeyAlgorithm.EC_prime256v1)"),
+      "cloud-kms-ec",
+    ),
+    "ACM KeyAlgorithm.EC_* enum flagged",
+  );
+});
+
+test("Pulumi camelCase customerMasterKeySpec (quoted) is caught", () => {
+  assert.equal(
+    rule(
+      run("index.ts", 'new aws.kms.Key("k", { customerMasterKeySpec: "RSA_2048" });'),
+      "cloud-kms-rsa",
+    )?.algorithm,
+    "RSA",
+  );
+});
+
+test("a bare `keySpec` variable (not a KMS/ACM value) does not fire", () => {
+  assert.deepEqual(
+    run("a.ts", "const keySpec = getUserPref(); log(keySpec);").filter((f) =>
       f.ruleId.startsWith("cloud-kms-"),
     ),
     [],
