@@ -24,16 +24,17 @@ with **zero runtime dependencies** (Node built-ins only).
 
 | Tool | What it does | Get it |
 |---|---|---|
-| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **10 languages** (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/OpenSSL) and prints a readiness score. SARIF / JSON / CBOM output, baselines, incremental & parallel scans. Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
+| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **13 languages** (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart) and prints a readiness score. SARIF / JSON / CBOM / evidence (ISO 27001 A.8.24) / OpenVEX output, baselines, incremental & parallel scans. Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
 | **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
 | **[Sieve](packages/sieve)** (`@quantakrypto/sieve`) | Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA (FIPS 205) implementations, driven over a JSON stdin/stdout protocol. | `npx @quantakrypto/sieve --help` |
 | **[Action](packages/action)** (`@quantakrypto/action`) | GitHub Action that runs qScan in CI, uploads SARIF, annotates the diff, and fails the build only on **new** quantum-vulnerable crypto. | `uses: quantakrypto/pqc-tools/packages/action@v1` |
 | **[agent](packages/agent)** (`@quantakrypto/agent`) | Optional, zero-dependency BYOK (bring-your-own-key) LLM client (native `fetch`; Anthropic + OpenAI-compatible adapters) that powers qScan `--triage` and `qremediate --llm`. Networked, key-holding — kept isolated (see also qProbe). | `npm i @quantakrypto/agent` |
 | **[qProbe](packages/qprobe)** (`@quantakrypto/qprobe`) | Actively probes **live TLS/SSH endpoints you own** for post-quantum readiness — PQC-hybrid key exchange (X25519MLKEM768) and classical certificate posture. Gated behind an ownership attestation; reports, never modifies ("engine disposes"). See [THREAT-MODEL](packages/qprobe/THREAT-MODEL.md). | `npx @quantakrypto/qprobe --i-own-this host` |
 
-All four of qScan, MCP, the Action, and agent share the engine in
+All of qScan, MCP, the Action, agent, and qProbe share the engine in
 **[`@quantakrypto/core`](packages/core)** (`npm i @quantakrypto/core`) — detectors,
-the vulnerable-dependency DB, the readiness score, SARIF/JSON/CBOM reporting, and the
+the vulnerable-dependency DB, the readiness score, SARIF/JSON/CBOM/evidence/OpenVEX
+reporting, and the
 offline agent-plane primitives (context redactor, `verify_fix` gate, codemods, patch
 policy). Sieve is standalone: it tests *other* implementations and implements no
 crypto itself.

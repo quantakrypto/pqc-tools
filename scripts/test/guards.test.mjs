@@ -256,3 +256,36 @@ test("offline-boundary scans WORKFLOWS for auto-merge (ADR-0005 covers CI too)",
   // A benign workflow line is not flagged.
   assert.deepEqual(scanWorkflowForAutoMerge(".github/workflows/ci.yml", "- run: npm test\n"), []);
 });
+
+test("offline-boundary resists formatter/obfuscation bypasses (audit C1-C3, H1-H3, M6)", () => {
+  const has = (pkg, code, rule) =>
+    scanFileForViolations(pkg, "packages/" + pkg + "/src/x.ts", code).some((v) => v.rule === rule);
+  // C1: a Prettier-wrapped multi-line static import is still caught.
+  assert.ok(
+    has("core", 'import {\n  proposeFix,\n} from "@quantakrypto/agent";\n', "agent-import"),
+  );
+  // C2: side-effect import and re-export both load the agent → caught.
+  assert.ok(has("core", 'import "@quantakrypto/agent";\n', "agent-import"));
+  assert.ok(has("core", 'export { proposeFix } from "@quantakrypto/agent";\n', "agent-import"));
+  // C3: a `//` inside a URL string no longer masks the real fetch() after it.
+  assert.ok(has("core", 'const u = "https://d.example"; fetch(evil);\n', "outbound-network"));
+  // H1: a fetch() inside a template `${…}` interpolation is live code → caught.
+  assert.ok(has("core", "const r = `x: ${await fetch(evil)}`;\n", "outbound-network"));
+  // H2: bracket + destructured process.env key reads are caught.
+  assert.ok(has("mcp", 'const k = process.env["ANTHROPIC_API_KEY"];\n', "llm-key-read"));
+  assert.ok(has("mcp", "const { OPENAI_API_KEY } = process.env;\n", "llm-key-read"));
+  // H3: importing an outbound Node network module in the offline trio is caught.
+  assert.ok(has("core", 'import https from "node:https";\n', "outbound-network"));
+  // M6: `gh pr merge` inside a COMMENT is NOT a violation (only real commands are).
+  assert.ok(!has("core", "// do not run gh pr merge here\n", "auto-merge"));
+});
+
+test("offline-boundary does not false-positive on legitimate offline-trio patterns", () => {
+  const scan = (pkg, code) => scanFileForViolations(pkg, "packages/" + pkg + "/src/x.ts", code);
+  // The MCP legitimately runs a LOCAL http server (inbound) — node:http is allowed.
+  assert.deepEqual(scan("mcp", 'import { createServer } from "node:http";\n'), []);
+  // A redaction regex that MATCHES the token "fetch(" as a string is not a call.
+  assert.deepEqual(scan("core", 'const RE = "\\\\bfetch\\\\(";\n'), []);
+  // qscan reaching the agent via dynamic import() is the sanctioned path.
+  assert.deepEqual(scan("qscan", 'const a = await import("@quantakrypto/agent");\n'), []);
+});

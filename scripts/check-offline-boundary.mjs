@@ -1,23 +1,32 @@
 #!/usr/bin/env node
 // Enforce ADR-0005 (docs/adr/0005-byok-agent-two-planes.md): the BYOK/LLM plane
 // is fenced off from the deterministic engine. This is the CI gate the ADR calls
-// for ("this gate does not exist yet"). It asserts, by source scan:
+// for. It asserts, by source scan:
 //
 //   1. Agent plane. Only `@quantakrypto/agent` is the networked/keyed LLM plane.
-//      `core`, `mcp`, `sieve`, `action`, `qprobe` must NOT import it at all;
-//      `qscan` may reach it ONLY via a dynamic `import()` (so an offline run never
-//      loads networked code) — a STATIC import is a violation.
+//      `core`, `mcp`, `sieve`, `action`, `qprobe` must NOT reference it in ANY
+//      import/export/require form; `qscan` may reach it ONLY via a dynamic
+//      `import()` (so an offline run never loads networked code) — a static /
+//      side-effect / re-export import is a violation.
 //   2. Offline trio. `core`, `mcp`, `sieve` stay strictly offline + key-free: no
-//      outbound `fetch(` / WebSocket / XHR / sendBeacon, and no LLM API-key reads.
-//      (The `action` talks to the GitHub API and `qprobe` is a live prober, so
-//      they are legitimately networked and are exempt from the outbound-call rule;
-//      neither may read an LLM key, though.)
-//   3. No auto-merge, ever. No `gh pr merge` / `--admin` in any package or workflow.
+//      outbound `fetch(`/WebSocket/XHR/sendBeacon, no import of an outbound Node
+//      network module (node:https/http2/dgram, undici), and no LLM API-key read
+//      (dot, bracket, or destructured `process.env`). `action` (GitHub API) and
+//      `qprobe` (live prober) are legitimately networked and exempt from the
+//      outbound rule; neither may read an LLM key.
+//   3. No auto-merge, ever. No `gh pr merge` / `gh … --admin` in any package or
+//      workflow.
 //
-// Zero-dependency: a masked line scan (comments + string literals are blanked so a
-// token that only appears inside a regex/string/comment — e.g. core's redaction
-// patterns that MATCH `fetch(` — is not mistaken for a real call). Import checks
-// run on the raw text because the module specifier is itself a string literal.
+// Zero-dependency. Robustness (the previous line-by-line + sequential-regex
+// version was bypassable by Prettier-formatted multi-line imports and by tokens
+// after a `//`-containing URL string): a single-pass lexer classifies every
+// character as code / string / comment (recursing into template `${…}` as code),
+// and detection runs over the WHOLE file with index→line mapping. Import and
+// key-read checks run on raw text (their evidence lives in a string literal or a
+// property name); outbound-call checks run on code-only text (so a `fetch(` token
+// inside a regex/string/comment is not a real call); auto-merge runs on
+// comment-stripped text (so `exec("gh pr merge")` is caught but a `// gh pr merge`
+// note is not).
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,26 +40,144 @@ const AGENT_ALLOWED = new Set(["agent", "qscan"]);
 /** Packages allowed to read an LLM API key (agent uses it; qscan injects it for BYOK). */
 const KEY_ALLOWED = new Set(["agent", "qscan"]);
 
-const RE_AGENT_STATIC = /import\s[\s\S]*?from\s*['"]@quantakrypto\/agent['"]/;
-const RE_AGENT_DYNAMIC = /(?:import|require)\s*\(\s*['"]@quantakrypto\/agent['"]\s*\)/;
-const RE_OUTBOUND = /\bfetch\s*\(|\bnew\s+WebSocket\b|\bXMLHttpRequest\b|\bnavigator\.sendBeacon\b/;
-const RE_LLM_KEY = /process\.env\.(?:QK_LLM_API_KEY|[A-Z0-9_]*_API_KEY)\b/;
-// Auto-merge lives in shell strings (`exec("gh pr merge …")`) or REST calls, so it
-// is matched on RAW text — masking would blank the very string we want to catch.
-const RE_AUTOMERGE = /gh\s+pr\s+merge\b|gh\b[^\n]*--admin\b|\/pulls\/[^/\s]+\/merge\b/;
+// Agent-plane references (matched on RAW text — the specifier is a string literal).
+const RE_AGENT_STATIC =
+  /(?:^|[\n;{}])\s*(?:import|export)\s[^;]*?['"]@quantakrypto\/agent['"]|(?:^|[\n;{}])\s*import\s*['"]@quantakrypto\/agent['"]/g;
+const RE_AGENT_DYNAMIC = /(?:import|require)\s*\(\s*['"]@quantakrypto\/agent['"]\s*\)/g;
+// Outbound network CALLS (matched on CODE-only text).
+const RE_OUTBOUND_CALL =
+  /\bfetch\s*\(|\bnew\s+WebSocket\b|\bXMLHttpRequest\b|\bnavigator\.sendBeacon\b/g;
+// Outbound Node network MODULE imports (matched on RAW text). node:http / node:net
+// are allowed — the MCP serves a local HTTP endpoint; these have no server use.
+const RE_OUTBOUND_MODULE =
+  /(?:from|import|require)\s*\(?\s*['"](?:node:)?(?:https|http2|dgram)['"]|['"]undici['"]/g;
+// LLM API-key reads (matched on RAW text — the bracket/destructure forms hide the
+// key name inside a string that masking would erase).
+const RE_KEY_DOT = /process\.env\.(?:QK_LLM_API_KEY|[A-Z0-9_]*_API_KEY)\b/g;
+const RE_KEY_BRACKET = /process\.env\[\s*['"](?:QK_LLM_API_KEY|[A-Z0-9_]*_API_KEY)['"]\s*\]/g;
+const RE_KEY_DESTRUCTURE =
+  /\{[^}]*\b(?:QK_LLM_API_KEY|[A-Z0-9_]*_API_KEY)\b[^}]*\}\s*=\s*process\.env\b/g;
+// Auto-merge (matched on COMMENT-stripped text — strings kept, comments removed).
+const RE_AUTOMERGE = /\bgh\b[^\n]*\bpr\s+merge\b|\bgh\b[^\n]*--admin\b|\/pulls\/[^/\s]+\/merge\b/g;
 
-/** Blank out line + block comments and string/template literals (length preserved). */
-export function maskCode(text) {
-  let out = text
-    // Block comments (incl. multi-line).
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    // Line comments.
-    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
-  // String + template literals (same-line, tolerant of escapes).
-  out = out.replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, (m) =>
-    m.replace(/[^\n]/g, " "),
-  );
+/**
+ * Classify every character of `text` as "code" | "string" | "comment" with a
+ * single left-to-right pass. Template literals are strings; their `${…}`
+ * interpolations are code (recursively). Handles escapes and nested braces.
+ */
+function classify(text) {
+  const n = text.length;
+  const cls = new Array(n).fill("code");
+  const tmpl = []; // stack of { depth } — depth 0 means "in the template string part"
+  let i = 0;
+  while (i < n) {
+    const inTemplateString = tmpl.length > 0 && tmpl[tmpl.length - 1].depth === 0;
+    const c = text[i];
+    const d = text[i + 1];
+    if (inTemplateString) {
+      if (c === "\\") {
+        cls[i] = "string";
+        if (i + 1 < n) cls[i + 1] = "string";
+        i += 2;
+        continue;
+      }
+      if (c === "`") {
+        cls[i] = "string";
+        tmpl.pop();
+        i++;
+        continue;
+      }
+      if (c === "$" && d === "{") {
+        cls[i] = "code";
+        cls[i + 1] = "code";
+        tmpl[tmpl.length - 1].depth = 1;
+        i += 2;
+        continue;
+      }
+      cls[i] = "string";
+      i++;
+      continue;
+    }
+    // Line comment.
+    if (c === "/" && d === "/") {
+      let j = i;
+      while (j < n && text[j] !== "\n") cls[j++] = "comment";
+      i = j;
+      continue;
+    }
+    // Block comment.
+    if (c === "/" && d === "*") {
+      cls[i] = "comment";
+      cls[i + 1] = "comment";
+      let j = i + 2;
+      while (j < n && !(text[j] === "*" && text[j + 1] === "/")) cls[j++] = "comment";
+      if (j < n) {
+        cls[j] = "comment";
+        cls[j + 1] = "comment";
+        j += 2;
+      }
+      i = j;
+      continue;
+    }
+    // Single/double-quoted string.
+    if (c === "'" || c === '"') {
+      const q = c;
+      cls[i] = "string";
+      let j = i + 1;
+      while (j < n) {
+        if (text[j] === "\\") {
+          cls[j] = "string";
+          if (j + 1 < n) cls[j + 1] = "string";
+          j += 2;
+          continue;
+        }
+        if (text[j] === q || text[j] === "\n") {
+          if (text[j] === q) cls[j++] = "string";
+          break;
+        }
+        cls[j++] = "string";
+      }
+      i = j;
+      continue;
+    }
+    // Template literal start.
+    if (c === "`") {
+      cls[i] = "string";
+      tmpl.push({ depth: 0 });
+      i++;
+      continue;
+    }
+    // Brace tracking while inside an interpolation.
+    if (tmpl.length > 0) {
+      const top = tmpl[tmpl.length - 1];
+      if (c === "{") top.depth++;
+      else if (c === "}") top.depth = Math.max(0, top.depth - 1);
+    }
+    cls[i] = "code";
+    i++;
+  }
+  return cls;
+}
+
+/** Build a variant of `text` keeping only the requested classes (others → spaces). */
+function project(text, cls, keep) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    out += keep.has(cls[i]) || text[i] === "\n" ? text[i] : " ";
+  }
   return out;
+}
+
+/** Comments + string literals blanked (code kept). Exported for the guard tests. */
+export function maskCode(text) {
+  return project(text, classify(text), new Set(["code"]));
+}
+
+/** 1-indexed line number of a character offset. */
+function lineOf(text, index) {
+  let line = 1;
+  for (let i = 0; i < index && i < text.length; i++) if (text[i] === "\n") line++;
+  return line;
 }
 
 /**
@@ -59,44 +186,72 @@ export function maskCode(text) {
  * Exported so the guard tests can drive it with known-bad fixtures.
  */
 export function scanFileForViolations(pkg, relFile, text) {
+  const cls = classify(text);
+  const codeOnly = project(text, cls, new Set(["code"]));
+  const noComments = project(text, cls, new Set(["code", "string"]));
+  const lines = text.split("\n");
   const violations = [];
-  const masked = maskCode(text);
-  const rawLines = text.split("\n");
-  const maskedLines = masked.split("\n");
-  const flag = (rule, i, lineText) =>
+  const flag = (rule, index) => {
+    const line = lineOf(text, index);
     violations.push({
       rule,
       pkg,
       file: relFile,
-      line: i + 1,
-      snippet: lineText.trim().slice(0, 120),
+      line,
+      snippet: (lines[line - 1] ?? "").trim().slice(0, 120),
     });
+  };
+  const scan = (re, src, rule) => {
+    re.lastIndex = 0;
+    for (let m = re.exec(src); m; m = re.exec(src)) flag(rule, m.index);
+  };
 
-  // (1) Agent-plane import + (3) auto-merge — checked on RAW text (both live in
-  // string literals: the module specifier and the shell command respectively).
-  rawLines.forEach((line, i) => {
-    if (RE_AGENT_STATIC.test(line) && !AGENT_ALLOWED.has(pkg)) {
-      flag("agent-import", i, line);
-    } else if (RE_AGENT_STATIC.test(line) && pkg === "qscan") {
-      flag("agent-static-import", i, line); // qscan must use dynamic import()
-    }
-    if (RE_AGENT_DYNAMIC.test(line) && !AGENT_ALLOWED.has(pkg)) {
-      flag("agent-import", i, line);
-    }
-    if (RE_AUTOMERGE.test(line)) flag("auto-merge", i, line);
-  });
+  // (1) Agent plane — RAW whole-file text.
+  if (!AGENT_ALLOWED.has(pkg)) {
+    scan(RE_AGENT_STATIC, text, "agent-import");
+    scan(RE_AGENT_DYNAMIC, text, "agent-import");
+  } else if (pkg === "qscan") {
+    scan(RE_AGENT_STATIC, text, "agent-static-import");
+  }
 
-  // (2) Outbound calls / LLM-key reads — checked on MASKED text so a token that
-  // only appears inside a comment/regex/string is not mistaken for a real call.
-  maskedLines.forEach((line, i) => {
-    if (OFFLINE_PKGS.has(pkg) && RE_OUTBOUND.test(line)) flag("outbound-network", i, rawLines[i]);
-    if (!KEY_ALLOWED.has(pkg) && RE_LLM_KEY.test(line)) flag("llm-key-read", i, rawLines[i]);
-  });
+  // (2) Offline trio — outbound calls (code-only), outbound modules + key reads (raw).
+  if (OFFLINE_PKGS.has(pkg)) {
+    scan(RE_OUTBOUND_CALL, codeOnly, "outbound-network");
+    scan(RE_OUTBOUND_MODULE, text, "outbound-network");
+  }
+  if (!KEY_ALLOWED.has(pkg)) {
+    scan(RE_KEY_DOT, text, "llm-key-read");
+    scan(RE_KEY_BRACKET, text, "llm-key-read");
+    scan(RE_KEY_DESTRUCTURE, text, "llm-key-read");
+  }
+
+  // (3) Auto-merge — comment-stripped text (strings kept).
+  scan(RE_AUTOMERGE, noComments, "auto-merge");
 
   return violations;
 }
 
-/** Recursively list `.ts` / `.mjs` / `.js` source files under `dir`. */
+/** Scan a workflow file for the auto-merge rule (ADR-0005 covers CI too). */
+export function scanWorkflowForAutoMerge(relFile, text) {
+  const cls = classify(text);
+  const noComments = project(text, cls, new Set(["code", "string"]));
+  const lines = text.split("\n");
+  const violations = [];
+  RE_AUTOMERGE.lastIndex = 0;
+  for (let m = RE_AUTOMERGE.exec(noComments); m; m = RE_AUTOMERGE.exec(noComments)) {
+    const line = lineOf(text, m.index);
+    violations.push({
+      rule: "auto-merge",
+      pkg: "workflow",
+      file: relFile,
+      line,
+      snippet: (lines[line - 1] ?? "").trim().slice(0, 120),
+    });
+  }
+  return violations;
+}
+
+/** Recursively list `.ts` / `.mjs` / `.js` source files under `dir` (excluding tests). */
 function sourceFiles(dir) {
   const out = [];
   if (!existsSync(dir)) return out;
@@ -105,28 +260,11 @@ function sourceFiles(dir) {
     if (statSync(abs).isDirectory()) {
       if (name === "node_modules" || name === "dist") continue;
       out.push(...sourceFiles(abs));
-    } else if (/\.(ts|mjs|js)$/.test(name) && !/\.test\.ts$/.test(name)) {
+    } else if (/\.(ts|mjs|js)$/.test(name) && !/\.(test|spec)\.(ts|mjs|js)$/.test(name)) {
       out.push(abs);
     }
   }
   return out;
-}
-
-/** Scan a workflow file's RAW text for the auto-merge rule (ADR-0005 covers workflows). */
-export function scanWorkflowForAutoMerge(relFile, text) {
-  const violations = [];
-  text.split("\n").forEach((line, i) => {
-    if (RE_AUTOMERGE.test(line)) {
-      violations.push({
-        rule: "auto-merge",
-        pkg: "workflow",
-        file: relFile,
-        line: i + 1,
-        snippet: line.trim().slice(0, 120),
-      });
-    }
-  });
-  return violations;
 }
 
 /** Walk every workspace's `src/` plus the CI workflows and return all violations. */
@@ -142,7 +280,6 @@ export function findOfflineBoundaryViolations(root = ROOT) {
       }
     }
   }
-  // ADR-0005's no-auto-merge rule covers workflows too, not just package source.
   const wfDir = join(root, ".github", "workflows");
   if (existsSync(wfDir)) {
     for (const name of readdirSync(wfDir)) {
@@ -158,9 +295,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const violations = findOfflineBoundaryViolations();
   if (violations.length > 0) {
     console.error("✗ ADR-0005 offline-boundary violated:");
-    for (const v of violations) {
-      console.error(`  - [${v.rule}] ${v.file}:${v.line}  ${v.snippet}`);
-    }
+    for (const v of violations) console.error(`  - [${v.rule}] ${v.file}:${v.line}  ${v.snippet}`);
     console.error(
       "\nThe LLM/agent plane must stay fenced off: only @quantakrypto/agent is networked+keyed " +
         "(qscan reaches it via dynamic import), core/mcp/sieve stay offline+key-free, and nothing auto-merges.",

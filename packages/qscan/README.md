@@ -24,10 +24,13 @@ step.
 Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
 **Go**, **Java/Kotlin/Scala** (JCA + BouncyCastle), **C#/.NET**, **Rust**, **Ruby**,
 **PHP** (openssl / phpseclib3 / libsodium), **Elixir** (`:crypto` / X509 / JOSE),
-and **C/C++** (OpenSSL, Mbed TLS, wolfSSL) source. PEM key material, SSH keys, TLS/certificate
-config, and dependency manifests for **six ecosystems** — npm (plus
-`yarn.lock` / `pnpm-lock.yaml`), PyPI, Cargo, Go modules, Maven, and RubyGems —
-are detected in **any** file regardless of language.
+**C/C++** (OpenSSL, Mbed TLS, wolfSSL), **Swift** (CryptoKit / Security),
+**Objective-C** (Security `SecKey*`), and **Dart/Flutter** (pointycastle /
+`cryptography`) source — **13 languages**. PEM key material, SSH keys (including
+SSH-CA certificates), TLS/certificate config, DKIM, SPIFFE/SPIRE, and dependency
+manifests for **seven ecosystems** — npm (plus `yarn.lock` / `pnpm-lock.yaml`),
+PyPI, Cargo, Go modules, Maven, RubyGems, and NuGet — are detected in **any**
+file regardless of language.
 
 qScan is **honest about coverage**: if a scan walks files but finds none in a
 supported source language, it says so and will **not** present a bare `100/100`
@@ -109,7 +112,7 @@ with `--config <path>`, or disable discovery with `--no-config-file`. See
 
 ```
 qScan — quantum-vulnerable cryptography report
-root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.4.2
+root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.5.0
 
 3 findings  (2 high, 1 medium)
 2 exposed to harvest-now-decrypt-later (HNDL).

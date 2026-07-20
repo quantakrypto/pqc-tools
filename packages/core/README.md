@@ -58,7 +58,7 @@ interface ScanOptions {
   exclude?: string[];           // extra exclude patterns (substring/prefix)
   noDefaultIgnores?: boolean;   // disable node_modules/.git/dist/… ignores
   source?: boolean;             // scan source files (default true)
-  dependencies?: boolean;       // scan manifests/lockfiles across 6 ecosystems (default true)
+  dependencies?: boolean;       // scan manifests/lockfiles across 7 ecosystems (default true)
   config?: boolean;             // scan PEM/TLS/cert config (default true)
   maxFileSize?: number;         // bytes; default 2 MiB (manifests are exempt)
   scanMinified?: boolean;       // scan minified/generated files (default false: skip them)
@@ -139,7 +139,7 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 | `ssh-cert` | config | SSH public keys (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`) and X.509 certificate signature algorithms (`sha256WithRSAEncryption`, `ecdsa-with-SHA256`, …) |
 
 The rows above cover JavaScript/TypeScript plus the language-agnostic PEM/SSH/TLS
-surfaces. Eleven further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
+surfaces. Twelve further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
 detection to other ecosystems (each is a single umbrella detector):
 
 | Detector | Scope | Language |
@@ -207,16 +207,17 @@ const result = await scan({ root: ".", detectors: registry.all() });
 
 ### `vulnerableDependencies: VulnerableDependency[]`
 
-Curated database (**61 entries**) of packages whose purpose is classical
-asymmetric crypto, spanning **six ecosystems** — npm, PyPI, Cargo, Go modules,
-Maven, and RubyGems (`VulnerableDependency.ecosystem`). The npm subset includes
+Curated database (**77 entries**) of packages whose purpose is classical
+asymmetric crypto, spanning **seven ecosystems** — npm, PyPI, Cargo, Go modules,
+Maven, RubyGems, and NuGet (`VulnerableDependency.ecosystem`). The npm subset includes
 `node-forge`, `elliptic`, `jsrsasign`, `node-rsa`, `ursa`, `sshpk`,
 `jsonwebtoken`, `jose`, `jws`, `eccrypto`, `secp256k1`, `tweetnacl`, `ed25519`,
 `@noble/curves`, `@noble/secp256k1`, `@noble/ed25519`, `paseto`, `bcrypto`,
 `ecpair`, `keypair`. `scan()` matches these against each ecosystem's manifests
 and lockfiles — `package.json` / `package-lock.json` / `yarn.lock` /
 `pnpm-lock.yaml`, `requirements.txt` / `pyproject.toml` / `Pipfile`, `Cargo.toml`,
-`go.mod`, `pom.xml` / `build.gradle`, `Gemfile` / `*.gemspec` — and emits
+`go.mod`, `pom.xml` / `build.gradle`, `Gemfile` / `*.gemspec`, `*.csproj` /
+`packages.config` / `directory.packages.props` — and emits
 `category: "dependency"` findings located at the manifest.
 
 ### `buildInventory(findings: Finding[]): CryptoInventory`
@@ -275,9 +276,30 @@ const { newFindings, suppressed } = applyBaseline(result.findings, baseline);
 ### `toCbom(result): CycloneDxBom`
 
 A CycloneDX 1.6 **cryptographic bill of materials** (CBOM): one
-`cryptographic-asset` component per distinct (algorithm, primitive) pair, with
-occurrence evidence and `quantumVulnerable` / `harvestNowDecryptLater` flags.
-Deterministic output.
+`cryptographic-asset` component per distinct (assetType, algorithm, discriminator),
+with occurrence evidence and `quantumVulnerable` / `harvestNowDecryptLater` flags.
+Each finding is classified into its proper CycloneDX `assetType` — `algorithm`
+(crypto usage), `certificate` (X.509), `related-crypto-material` (private/public
+key material), or `protocol` (TLS). Deterministic output.
+
+### `toOpenVex(result, opts?): OpenVexDocument`
+
+An **OpenVEX 0.2.0** document: one statement per rule (a synthetic `QK-<ruleId>`
+vulnerability, since PQC findings have no CVE), every affected `file:line` product,
+`status: "affected"`, the rule's remediation as `action_statement`, and any
+`--triage` verdict in `status_notes`. Deterministic output; feeds VEX pipelines.
+
+### Evidence chain — `buildReadinessReport` / `signReadinessReport` / `verifyReadinessReport`
+
+The ISO/IEC 27001 A.8.24 readiness report (see
+[docs/compliance/iso27001-a8.24-evidence.md](../../docs/compliance/iso27001-a8.24-evidence.md)):
+
+- `buildReadinessReport(result, opts?)` — bundles the scan result, inventory, CBOM,
+  and a **deterministic** `attestation.contentHash` (excludes the volatile scan time).
+- `signReadinessReport(report, { signer?, timestamper? })` — orchestrates an EXTERNAL
+  signer/timestamper over the `contentHash` (ADR-0004; the tool implements no crypto).
+- `verifyReadinessReport(report)` — recomputes the content hash to detect tampering
+  with any attested field, returning `{ valid, computedHash, claimedHash, reason? }`.
 
 ### CWE tagging
 
@@ -299,14 +321,15 @@ Tool version surfaced in reports (kept in sync with `package.json`).
 | `changedFiles` | fn | Git-aware changed-files list for incremental scans |
 | `detectFile` | fn | Pure per-file detect (used by workers / tests) |
 | `compareFindings` | fn | Stable finding comparator (file → line → ruleId) |
-| `mergeChunkResults`, `chunkByBytes` | fn | Pure parallel merge / byte-chunking helpers |
-| `walkFiles`, `isBinaryPath`, `isGeneratedPath`, `looksMinified` | fn | Walker + file-classification helpers |
+| `walkFiles`, `isBinaryPath`, `looksMinified` | fn | Walker + file-classification helpers |
 | `detectors` | const | Built-in detector array (mirrors `defaultRegistry.all()`) |
-| `DetectorRegistry`, `defaultRegistry`, `detectorScope` | class/const/fn | Detector plugin point |
+| `DetectorRegistry`, `defaultRegistry` | class/const | Detector plugin point |
 | `buildInventory` | fn | Aggregate findings → `CryptoInventory` |
-| `vulnerableDependencies` | const | Curated quantum-vulnerable npm DB |
+| `vulnerableDependencies` | const | Curated quantum-vulnerable dependency DB (7 ecosystems) |
 | `toSarif`, `toJson`, `formatSummary` | fn | Reporters (SARIF 2.1.0 / JSON / human) |
-| `toCbom` | fn | CycloneDX 1.6 CBOM export |
+| `toCbom` | fn | CycloneDX 1.6 CBOM export (assetType-classified) |
+| `toOpenVex` | fn | OpenVEX 0.2.0 export |
+| `buildReadinessReport`, `signReadinessReport`, `verifyReadinessReport` | fn | ISO A.8.24 evidence chain (build / sign / verify) |
 | `remediationFor`, `remediationForTier`, `TIER_PARAMS` | fn/const | PQC remediation (family + CNSA tier) |
 | `STATEFUL_HBS_NOTE`, `statefulHbsApplies` | const/fn | SP 800-208 LMS/XMSS guidance |
 | `fingerprintFinding`, `baselineFromFindings`, `applyBaseline`, `loadBaseline`, `saveBaseline`, `BASELINE_VERSION` | fn/const | Canonical baseline |
