@@ -1,9 +1,12 @@
 /**
- * S2: a stray, non-protocol line on the SUT's stdout (a banner, a log line,
- * progress noise) must NOT poison the runner. Previously any undecodable line
- * triggered `failAll`, rejecting every in-flight and future request; and stdout
- * had no per-line cap, so a runaway line could be buffered without bound. These
- * tests spawn tiny SUTs that exercise both behaviors.
+ * Runner resilience against a misbehaving SUT, exercised with tiny spawned
+ * probe processes:
+ *   - S2: a stray, non-protocol stdout line (banner, log, progress noise) or an
+ *     oversize unterminated line is sidelined, not made fatal — previously any
+ *     undecodable line triggered `failAll` and stdout had no per-line cap.
+ *   - crash/timeout: a SUT that never answers rejects with TimeoutError; a SUT
+ *     that exits (or fails to spawn) rejects the in-flight send with a
+ *     SutCrashError carrying the exit reason + stderr, and poisons later sends.
  */
 
 import { test } from "node:test";
@@ -12,7 +15,18 @@ import { join } from "node:path";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-import { Runner } from "../src/runner.js";
+import { Runner, SutCrashError, TimeoutError } from "../src/runner.js";
+import type { RequestInput } from "../src/protocol.js";
+
+/** A canonical, cheap verify request used to drive the runner in these tests. */
+const VERIFY: RequestInput = {
+  family: "ml-dsa",
+  param: "ml-dsa-65",
+  op: "verify",
+  pk: "",
+  msg: "",
+  sig: "",
+};
 
 /** Write a probe .mjs SUT to a temp dir and return its path. */
 function writeProbe(body: string): string {
@@ -107,6 +121,105 @@ test("an oversized stdout line is sidelined, not buffered or made fatal", async 
     });
     assert.equal(resp.ok, true);
     assert.ok("valid" in resp && resp.valid === false, "valid response survives the oversize line");
+  } finally {
+    await runner.close();
+  }
+});
+
+/* --------------------------- crash / timeout ------------------------------ */
+
+test("a request to a SUT that never answers rejects with TimeoutError", async () => {
+  // The SUT reads a line but deliberately never replies. With a short timeout,
+  // send() must reject with a TimeoutError carrying the request + timeout.
+  const probe = writeProbe(
+    [
+      "import { createInterface } from 'node:readline';",
+      "const rl = createInterface({ input: process.stdin });",
+      "rl.on('line', () => { /* swallow the request, never respond */ });",
+    ].join("\n"),
+  );
+  const runner = new Runner({ command: [process.execPath, probe], timeoutMs: 150 });
+  try {
+    await assert.rejects(
+      () => runner.send(VERIFY),
+      (err: unknown) => {
+        assert.ok(err instanceof TimeoutError, "rejects with TimeoutError");
+        assert.equal(err.timeoutMs, 150);
+        assert.equal(err.request.op, "verify");
+        assert.match(err.message, /within 150ms/);
+        return true;
+      },
+    );
+  } finally {
+    await runner.close();
+  }
+});
+
+test("a SUT that exits mid-request rejects the in-flight send with SutCrashError", async () => {
+  // The SUT prints a diagnostic to stderr, then exits non-zero on the first
+  // request without answering. The in-flight send() must reject with a
+  // SutCrashError that captures the exit reason and the SUT's stderr.
+  const probe = writeProbe(
+    [
+      "import { createInterface } from 'node:readline';",
+      "const rl = createInterface({ input: process.stdin });",
+      "rl.on('line', () => {",
+      "  process.stderr.write('fatal: unsupported parameter set\\n');",
+      "  process.exit(3);",
+      "});",
+    ].join("\n"),
+  );
+  const runner = new Runner({ command: [process.execPath, probe], timeoutMs: 10_000 });
+  try {
+    await assert.rejects(
+      () => runner.send(VERIFY),
+      (err: unknown) => {
+        assert.ok(err instanceof SutCrashError, "rejects with SutCrashError");
+        assert.match(err.message, /exited with code 3|exited via signal/);
+        assert.match(err.stderr, /unsupported parameter set/, "SUT stderr is attached");
+        return true;
+      },
+    );
+  } finally {
+    await runner.close();
+  }
+});
+
+test("spawning a nonexistent SUT binary rejects with SutCrashError", async () => {
+  const runner = new Runner({
+    command: ["/nonexistent/quantakrypto-sut-does-not-exist", "--stdio"],
+    timeoutMs: 10_000,
+  });
+  try {
+    await assert.rejects(
+      () => runner.send(VERIFY),
+      (err: unknown) => {
+        assert.ok(err instanceof SutCrashError, "spawn failure surfaces as SutCrashError");
+        assert.match(err.message, /failed to spawn SUT|exited/);
+        return true;
+      },
+    );
+  } finally {
+    await runner.close();
+  }
+});
+
+test("once a SUT has crashed, every later send rejects with the same fatal error", async () => {
+  // After the first crash, the runner is poisoned: subsequent sends fail fast
+  // with the stored fatal error rather than hanging until timeout.
+  const probe = writeProbe(
+    [
+      "import { createInterface } from 'node:readline';",
+      "const rl = createInterface({ input: process.stdin });",
+      "rl.on('line', () => process.exit(1));",
+    ].join("\n"),
+  );
+  const runner = new Runner({ command: [process.execPath, probe], timeoutMs: 10_000 });
+  try {
+    await assert.rejects(() => runner.send(VERIFY), SutCrashError);
+    // The process is gone; a follow-up send must reject promptly (fail-fast),
+    // again as a SutCrashError — not hang or throw a generic error.
+    await assert.rejects(() => runner.send(VERIFY), SutCrashError);
   } finally {
     await runner.close();
   }

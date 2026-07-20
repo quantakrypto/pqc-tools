@@ -145,6 +145,66 @@ export function buildReadinessReport(
   } as ReadinessReport;
 }
 
+/** The result of {@link verifyReadinessReport}. */
+export interface VerifyReadinessResult {
+  /** True iff the recomputed body hash equals the hash claimed in the attestation. */
+  valid: boolean;
+  /** The hash recomputed over the report's CURRENT body. */
+  computedHash: string;
+  /** The hash claimed in the report's attestation (`attestation.contentHash`). */
+  claimedHash: string;
+  /** A short human reason; present only when `valid` is false. */
+  reason?: string;
+}
+
+/**
+ * Recompute the deterministic content hash over a readiness report's body and
+ * compare it to the hash the attestation claims. Detects tampering with ANY
+ * hashed field — a finding, the inventory, a policy verdict, or subject/tool
+ * metadata: editing it after the fact changes the recomputed hash, so `valid`
+ * becomes false.
+ *
+ * By construction the scan timestamp, the CBOM envelope, and the attestation
+ * block itself are EXCLUDED from the hash (see {@link buildReadinessReport}), so
+ * touching those does not fail verification — their integrity follows from their
+ * hashed inputs. The body is reconstructed from the report's OWN stored fields
+ * (including `tool.version`), so a report built by an older qScan still verifies.
+ *
+ * This checks the INTEGRITY hash only. It does NOT validate the detached
+ * signature or RFC-3161 timestamp: those are opaque tokens from an external
+ * signer (ADR-0004) and are verified with that signer's own tooling.
+ */
+export function verifyReadinessReport(report: ReadinessReport): VerifyReadinessResult {
+  const hashableBody = {
+    reportType: report.reportType,
+    specVersion: report.specVersion,
+    subject: {
+      repository: report.subject.repository,
+      commit: report.subject.commit,
+      scannedRoot: report.subject.scannedRoot,
+    },
+    tool: { name: report.tool.name, version: report.tool.version },
+    inventory: report.inventory,
+    findings: report.findings,
+    ...(report.policyMapping ? { policyMapping: report.policyMapping } : {}),
+  };
+  const computedHash =
+    "sha256:" +
+    createHash("sha256")
+      .update(JSON.stringify(canonicalize(hashableBody)))
+      .digest("hex");
+  const claimedHash = report.attestation.contentHash;
+  if (computedHash === claimedHash) {
+    return { valid: true, computedHash, claimedHash };
+  }
+  return {
+    valid: false,
+    computedHash,
+    claimedHash,
+    reason: "content-hash mismatch: the report body was modified after it was built",
+  };
+}
+
 /**
  * An EXTERNAL signer/timestamper the tool orchestrates. Per ADR-0004 the tool
  * implements no cryptography: it hands the payload to an operator-provided signer

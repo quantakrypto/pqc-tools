@@ -84,6 +84,7 @@
     "TriageVerdict",
     "VERSION",
     "VerifiedPatch",
+    "VerifyReadinessResult",
     "VerifyResult",
     "VulnerableDependency",
     "applyBaseline",
@@ -136,6 +137,7 @@
     "toJson",
     "toSarif",
     "verifyFix",
+    "verifyReadinessReport",
     "vulnerableDependencies",
     "walkFiles",
     "withWorktree"

@@ -7,8 +7,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildReadinessReport, buildInventory, signReadinessReport } from "../src/index.js";
-import type { EvidenceSigner, Finding, ScanResult } from "../src/index.js";
+import {
+  buildReadinessReport,
+  buildInventory,
+  signReadinessReport,
+  verifyReadinessReport,
+} from "../src/index.js";
+import type { EvidenceSigner, Finding, ReadinessReport, ScanResult } from "../src/index.js";
 
 function resultWith(finishedAt: string): ScanResult {
   const finding: Finding = {
@@ -112,4 +117,77 @@ test("signReadinessReport awaits an ASYNC signer (KMS/TSA-over-HTTP shape)", asy
   const signed = await signReadinessReport(base, { signer: asyncSigner });
   assert.equal(signed.attestation.signature, `ASYNC(${base.attestation.contentHash})`);
   assert.equal(signed.attestation.signedWith, "kms");
+});
+
+/* ----------------------------- verification ------------------------------- */
+
+/** Deep-clone a report so a tamper test never mutates the original. */
+function clone(r: ReadinessReport): ReadinessReport {
+  return JSON.parse(JSON.stringify(r)) as ReadinessReport;
+}
+
+test("verifyReadinessReport accepts an untampered report", () => {
+  const r = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), {
+    repository: "quantakrypto/demo",
+    commit: "abc",
+  });
+  const v = verifyReadinessReport(r);
+  assert.equal(v.valid, true);
+  assert.equal(v.computedHash, r.attestation.contentHash);
+  assert.equal(v.claimedHash, r.attestation.contentHash);
+  assert.equal(v.reason, undefined);
+});
+
+test("verifyReadinessReport still accepts a report after it is signed", async () => {
+  // Signing mutates only the (excluded) attestation block, so verification of the
+  // integrity hash must still pass on the signed artifact.
+  const base = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "c1" });
+  const signed = await signReadinessReport(base, { signer: fakeSigner("openssl") });
+  assert.equal(verifyReadinessReport(signed).valid, true);
+});
+
+test("verifyReadinessReport REJECTS a report whose finding was tampered with", () => {
+  const r = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "abc" });
+  // Silently downgrade the recorded finding's severity while leaving the claimed
+  // contentHash in place — the classic "edit the evidence" attack.
+  const tampered = clone(r);
+  assert.equal(tampered.findings[0]?.severity, "high");
+  tampered.findings[0]!.severity = "low";
+  const v = verifyReadinessReport(tampered);
+  assert.equal(v.valid, false);
+  assert.notEqual(v.computedHash, v.claimedHash);
+  assert.equal(v.claimedHash, r.attestation.contentHash, "the stale claimed hash is preserved");
+  assert.match(v.reason ?? "", /mismatch/i);
+});
+
+test("verifyReadinessReport REJECTS a tampered inventory or subject commit", () => {
+  const r = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "abc" });
+
+  const inv = clone(r);
+  inv.inventory.readinessScore = 100;
+  assert.equal(verifyReadinessReport(inv).valid, false, "inventory is covered by the hash");
+
+  const commit = clone(r);
+  commit.subject.commit = "def";
+  assert.equal(verifyReadinessReport(commit).valid, false, "subject commit is covered by the hash");
+});
+
+test("verifyReadinessReport IGNORES changes to excluded fields (scan time, CBOM, attestation)", () => {
+  const r = buildReadinessReport(resultWith("2026-01-01T00:00:01Z"), { commit: "abc" });
+
+  const time = clone(r);
+  time.subject.scanTimeUtc = "2030-12-31T23:59:59Z";
+  assert.equal(verifyReadinessReport(time).valid, true, "scan time is excluded from the hash");
+
+  const cbom = clone(r);
+  cbom.cbom = { tampered: true };
+  assert.equal(verifyReadinessReport(cbom).valid, true, "CBOM envelope is excluded from the hash");
+
+  const att = clone(r);
+  att.attestation.signature = "forged-signature";
+  assert.equal(
+    verifyReadinessReport(att).valid,
+    true,
+    "attestation block is excluded from the hash",
+  );
 });

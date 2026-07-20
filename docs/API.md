@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 139 exported symbols.
+Public entry: `packages/core/src/index.ts` — 141 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -98,6 +98,7 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `TriageVerdict` | type |  |
 | `VERSION` | value |  |
 | `VerifiedPatch` | type |  |
+| `VerifyReadinessResult` | type |  |
 | `VerifyResult` | type |  |
 | `VulnerableDependency` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `applyBaseline` | value |  |
@@ -150,6 +151,7 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `toJson` | value |  |
 | `toSarif` | value |  |
 | `verifyFix` | value |  |
+| `verifyReadinessReport` | value |  |
 | `vulnerableDependencies` | value |  |
 | `walkFiles` | value |  |
 | `withWorktree` | value |  |
