@@ -6,6 +6,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — coverage: Objective-C, Dart, DKIM, SSH-CA, SPIFFE/SPIRE
+
+Five new detectors close the coverage gaps that were tracked as post-1.0:
+
+- **Objective-C** (`objc-crypto`, `.m`/`.mm`) — Apple Security-framework `SecKey*`
+  RSA/EC keygen, RSA/ECDSA signing, RSA encryption, ECDH key agreement. Sibling of
+  the Swift pack; gated to `.m`/`.mm` so it never double-scans C/C++ `.h` headers.
+- **Dart / Flutter** (`dart-crypto`, `.dart`) — pointycastle and `package:cryptography`
+  RSA/ECDSA/ECDH/Ed25519/X25519.
+- **DKIM** (`dkim-crypto`) — classical email-signing keys/algorithms in DNS zone
+  files and OpenDKIM config (`k=rsa`/`k=ed25519`, `a=rsa-sha256`, RFC 6376/8463).
+- **SSH certificate authority** (`ssh-ca-crypto`) — the OpenSSH `*-cert-v01@openssh.com`
+  CA-signed host/user certificate surface (distinct from SSH key-exchange).
+- **SPIFFE / SPIRE** (`spire-crypto`) — classical `ca_key_type`/`svid_key_type`
+  (`rsa-*`, `ec-p256/384`) for X.509-SVID workload identities.
+
+Objective-C and Dart bring the analyzable source languages to **13**. All five
+add positive + negative + comment/doc-suppression tests; the precision/recall
+benchmark is unaffected (F1 = 1.000, zero false positives on the negative set).
+
 ### Added — CI enforcement of the offline/agent boundary (ADR-0005)
 
 - New guard `scripts/check-offline-boundary.mjs` (wired into `ci.yml` and

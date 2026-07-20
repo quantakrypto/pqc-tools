@@ -52,6 +52,10 @@ const C_LIKE: readonly string[] = [
   ".scala",
   ".sc",
   ".swift",
+  // Objective-C (.m/.mm) and Dart (.dart) both use C-style `//` + `/* */`.
+  ".m",
+  ".mm",
+  ".dart",
 ];
 
 /** Hash-style (`#`) comment languages, by extension. */

@@ -138,6 +138,8 @@ export type DetectorLanguage =
   | "elixir"
   | "c"
   | "swift"
+  | "objc"
+  | "dart"
   | "any";
 
 /**

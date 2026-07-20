@@ -16,11 +16,12 @@ Audit sources: [security](audits/security.md) · [cryptography](audits/cryptogra
 > GitHub Action, not npm). Last published line: **0.4.4**; **0.5.0** is tagged and
 > pending publish.
 >
-> - **Detectors:** **11 source languages** — JS/TS, Python, Go, Java/Kotlin/Scala,
->   C#, Rust, Ruby, PHP, Elixir, C/C++, Swift — plus PEM/keystore/OpenPGP key
->   material and ~20 config-scope infra detectors (Terraform, Bicep, Pulumi,
->   CloudFormation, cloud KMS, k8s, mesh, DNSSEC, Vault, database, messaging, VPN,
->   Ansible, supply-chain, CI/CD, secrets, age, JWK, …).
+> - **Detectors:** **13 source languages** — JS/TS, Python, Go, Java/Kotlin/Scala,
+>   C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart — plus
+>   PEM/keystore/OpenPGP key material and config-scope infra detectors (Terraform,
+>   Bicep, Pulumi, CloudFormation, cloud KMS, k8s, mesh, DNSSEC, Vault, database/TDE,
+>   messaging, VPN, Ansible, supply-chain, CI/CD, secrets, age, JWK, XML-DSig/SAML,
+>   PKCS#11/HSM, DKIM, SSH-CA, SPIFFE/SPIRE, …).
 > - **`qprobe`** — a live-endpoint prober (TLS/SSH/SMTP/IMAP/POP3/Postgres, behind an
 >   ownership-attestation gate) that checks what an endpoint actually negotiates
 >   (e.g. X25519MLKEM768), complementing the static scan.
@@ -54,9 +55,11 @@ landed that the old roadmap treated as **future** or **deferred**:
      redacted before any egress**, `verify_fix` on every patch, no auto-merge,
      triage never suppresses / never changes exit code.
 
-2. **Six more detector languages** — v0.2 shipped JS/TS only and listed "add a
+2. **Twelve more detector languages** — v0.2 shipped JS/TS only and listed "add a
    language (Python/Go/Java)" as future work (P1-4). The `DetectorRegistry` now
-   carries Python, Go, Java, C#, Rust, Ruby, and C/C++.
+   carries Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++,
+   Swift, Objective-C, and Dart — plus config-scope protocol/identity detectors
+   for DKIM, SSH certificate authorities, and SPIFFE/SPIRE.
 
 3. **Published + distributable** — §5 "release readiness (deferred)" is **done**:
    npm publish under `@quantakrypto` with provenance, the Action `dist/`

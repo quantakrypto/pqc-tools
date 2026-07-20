@@ -139,7 +139,7 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 | `ssh-cert` | config | SSH public keys (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`) and X.509 certificate signature algorithms (`sha256WithRSAEncryption`, `ecdsa-with-SHA256`, …) |
 
 The rows above cover JavaScript/TypeScript plus the language-agnostic PEM/SSH/TLS
-surfaces. Seven further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
+surfaces. Eleven further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
 detection to other ecosystems (each is a single umbrella detector):
 
 | Detector | Scope | Language |
@@ -150,7 +150,12 @@ detection to other ecosystems (each is a single umbrella detector):
 | `csharp-crypto` | source | C#/.NET (`RSA`, `ECDsa`, `ECDiffieHellman`, `DSA`) |
 | `rust-crypto` | source | Rust (`rsa`, `p256`/`k256` ECDSA, `x25519-dalek`, `ed25519-dalek`) |
 | `ruby-crypto` | source | Ruby (`OpenSSL::PKey::{RSA,EC,DSA,DH}`) |
+| `php-crypto` | source | PHP (`openssl_pkey_new`, phpseclib `RSA`/`EC`/`DSA`) |
+| `elixir-crypto` | source | Elixir/Erlang (`:crypto`, `:public_key` RSA/ECDSA/EdDSA) |
 | `c-crypto` | source | C/C++ (OpenSSL `EVP_PKEY_*` / `RSA_*` / `EC_*` / `DSA_*` / `DH_*`) |
+| `swift-crypto` | source | Swift (CryptoKit + Apple Security `SecKey*`) |
+| `objc-crypto` | source | Objective-C (`.m`/`.mm`, Apple Security `SecKey*`) |
+| `dart-crypto` | source | Dart/Flutter (pointycastle, `cryptography` — RSA/EC/Ed25519/X25519) |
 
 `defaultRegistry` is a `DetectorRegistry` preloaded with these built-ins. The
 registry is the plugin point:

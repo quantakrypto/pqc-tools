@@ -22,6 +22,8 @@ import { phpDetector } from "./detectors/php.js";
 import { elixirDetector } from "./detectors/elixir.js";
 import { cDetector } from "./detectors/c.js";
 import { swiftDetector } from "./detectors/swift.js";
+import { objcDetector } from "./detectors/objc.js";
+import { dartDetector } from "./detectors/dart.js";
 import { pemDetector } from "./detectors/pem.js";
 import { jwkDetector } from "./detectors/jwk.js";
 import { terraformDetector } from "./detectors/terraform.js";
@@ -34,6 +36,9 @@ import { messagingDetector } from "./detectors/messaging.js";
 import { databaseDetector } from "./detectors/database.js";
 import { xmldsigDetector } from "./detectors/xmldsig.js";
 import { pkcs11Detector } from "./detectors/pkcs11.js";
+import { dkimDetector } from "./detectors/dkim.js";
+import { sshCaDetector } from "./detectors/ssh-ca.js";
+import { spireDetector } from "./detectors/spire.js";
 import { cloudformationDetector } from "./detectors/cloudformation.js";
 import { bicepDetector } from "./detectors/bicep.js";
 import { pulumiDetector } from "./detectors/pulumi.js";
@@ -138,11 +143,11 @@ export class DetectorRegistry {
 /**
  * The built-in detectors, in run order: the JS/TS source + language-agnostic config
  * detectors, the per-language source packs (Python, Go, Java/Kotlin/Scala, C#, Rust,
- * Ruby, PHP, Elixir, C/C++, Swift), the ~20 infrastructure/config detectors
- * (Terraform, Bicep, Pulumi, CloudFormation, cloud-KMS, k8s, mesh, DNSSEC, Vault,
- * database/TDE, messaging, VPN, Ansible, supply-chain, CI/CD, secrets, age, keystore,
- * OpenPGP, JWK, XML-DSig/SAML, PKCS#11/HSM), and the stateful-HBS (SP 800-208)
- * detector. The manifest (dependency)
+ * Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart), the infrastructure/config
+ * detectors (Terraform, Bicep, Pulumi, CloudFormation, cloud-KMS, k8s, mesh, DNSSEC,
+ * Vault, database/TDE, messaging, VPN, Ansible, supply-chain, CI/CD, secrets, age,
+ * keystore, OpenPGP, JWK, XML-DSig/SAML, PKCS#11/HSM, DKIM, SSH-CA, SPIFFE/SPIRE),
+ * and the stateful-HBS (SP 800-208) detector. The manifest (dependency)
  * scanner is handled separately by `scan()`.
  *
  * This is the single source of truth for the default detector set: both
@@ -161,6 +166,8 @@ export const builtinDetectors: Detector[] = [
   elixirDetector,
   cDetector,
   swiftDetector,
+  objcDetector,
+  dartDetector,
   pemDetector,
   jwkDetector,
   terraformDetector,
@@ -173,6 +180,9 @@ export const builtinDetectors: Detector[] = [
   databaseDetector,
   xmldsigDetector,
   pkcs11Detector,
+  dkimDetector,
+  sshCaDetector,
+  spireDetector,
   cloudformationDetector,
   bicepDetector,
   pulumiDetector,

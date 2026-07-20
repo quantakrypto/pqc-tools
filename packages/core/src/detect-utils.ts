@@ -249,6 +249,12 @@ export const C_EXTENSIONS: readonly string[] = [".c", ".h", ".cc", ".cpp", ".cxx
 /** Swift source extensions handled by the CryptoKit / Security-framework detector. */
 export const SWIFT_EXTENSIONS: readonly string[] = [".swift"];
 
+/** Objective-C implementation extensions (`.h` is owned by the C pack). */
+export const OBJC_EXTENSIONS: readonly string[] = [".m", ".mm"];
+
+/** Dart / Flutter source extensions. */
+export const DART_EXTENSIONS: readonly string[] = [".dart"];
+
 /**
  * Prose/documentation extensions. The language-agnostic *token* detectors (SSH
  * public keys, TLS cipher suites, certificate signature algorithms) must not run
@@ -307,6 +313,8 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...ELIXIR_EXTENSIONS,
   ...C_EXTENSIONS,
   ...SWIFT_EXTENSIONS,
+  ...OBJC_EXTENSIONS,
+  ...DART_EXTENSIONS,
 ];
 
 /**
@@ -315,7 +323,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
  * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
  */
 export const ANALYZABLE_LANGUAGES_LABEL =
-  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift";
+  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {
