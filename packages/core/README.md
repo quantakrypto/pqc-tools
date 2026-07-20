@@ -165,7 +165,17 @@ const result = await scan({ root: ".", detectors: registry.all() });
 `DetectorRegistry` exposes `register(d)`, `get(id)`, `has(id)`, `all()` and
 `clone()`. Ids must be unique (duplicate registration throws).
 
-#### Adding a detector / language
+> **Public plugin surface vs. internal helpers.** The stable, frozen way to add a
+> detector from *outside* this package is the `Detector` interface plus the
+> `scan({ detectors })` / `DetectorRegistry` hook shown above — build your rule
+> metadata with the public `RuleMeta` type and return `Finding[]`. The lexical
+> conveniences the in-repo detectors use (`findingFromRule`, `eachMatch`, the
+> comment maskers, `hasExtension`, …) are **internal** and intentionally *not*
+> part of the frozen API: they churn with the scanner internals. The step-by-step
+> guide below is for **in-repo contributors** (it edits `registry.ts`,
+> `detect-utils.ts`, `comments.ts`), who can import those helpers directly.
+
+#### Adding a detector / language (in-repo contributors)
 
 1. Create `src/detectors/<lang>.ts` exporting one or more `Detector`s. Set
    `language` (a member of `DetectorLanguage` in `types.ts` — add a new one for a new
