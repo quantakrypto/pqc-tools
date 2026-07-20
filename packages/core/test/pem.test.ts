@@ -119,6 +119,18 @@ test("a real key embedded in a single quoted string with \\n escapes still fires
   assert.ok(f, "embedded escaped single-line key still fires");
 });
 
+test("a GCP service-account key (long single-line \\n-escaped body) is detected", () => {
+  // Regression: a long body (>800-char window) with `\n` ESCAPES pushes the -----END
+  // marker out of range and the whole physical line is never pure base64 — the escaped-
+  // newline base64 run is what keeps this high-value target detected.
+  const body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSj" + "A".repeat(1700);
+  const json = `{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----\\n${body}\\n-----END PRIVATE KEY-----\\n"}`;
+  assert.ok(
+    run("sa.json", json).find((x) => x.ruleId === "pem-pkcs8-private-key"),
+    "long single-line service-account key is detected",
+  );
+});
+
 test("a real PEM block with only a short/placeholder body still fires (END marker)", () => {
   // The END-marker fallback keeps recall for short fixtures/bodies that lack a long
   // base64 run (the strong signal reserved for real long keys).

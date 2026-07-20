@@ -214,20 +214,24 @@ const PEM_RULES: PemRule[] = [
 /**
  * True when what follows the begin marker looks like a REAL PEM block rather than a
  * `-----BEGIN …-----` header STRING LITERAL (as appears in PEM parsers, tests, and
- * i18n messages). `from` points just past the begin marker. Two accepting signals:
+ * i18n messages). `from` points just past the begin marker. Three accepting signals:
  *
- *  (a) a full LINE of base64 (≥24 chars, optional `=` padding) — real PEM bodies are
- *      line-wrapped base64; requiring the whole line to be base64 stops a long
- *      camelCase identifier on a code line from validating a bare header constant.
- *  (b) a matching `-----END …-----` marker with NO double-quote between it and the
- *      begin marker. This admits short/placeholder bodies (`x`, `abc`, `MIIB` in
- *      tests, or a real key embedded in a single quoted string with `\n` escapes)
+ *  (a) a full LINE of base64 (≥24 chars, optional `=` padding) — real multi-line PEM
+ *      bodies are line-wrapped base64; requiring the whole line to be base64 stops a
+ *      long camelCase identifier on a code line from validating a bare header constant.
+ *  (b) an ESCAPED-newline base64 run (`\n<base64>`, a LITERAL backslash-n) — a key
+ *      embedded in a single-line JSON/.env string (GCP service accounts, `PRIVATE_KEY=
+ *      "…\n…"`), whose body can run past the window before its `-----END`. The literal
+ *      `\n` escape distinguishes it from a source constant, which has a REAL newline.
+ *  (c) a matching `-----END …-----` marker with NO double-quote between it and the
+ *      begin marker. This admits short/placeholder bodies (`x`, `abc`, `MIIB` in tests)
  *      while rejecting a parser's PAIRED header/footer constants, whose intervening
  *      `";` … `= "` always contains a `"` — a char a real PEM body never holds.
  */
 function hasBase64Body(content: string, from: number): boolean {
   const window = content.slice(from, from + 800);
   if (/^[ \t]*[A-Za-z0-9+/]{24,}={0,2}[ \t]*$/m.test(window)) return true;
+  if (/\\n[A-Za-z0-9+/]{24,}/.test(window)) return true;
   const end = window.search(/-----END [A-Z0-9 ]+-----/);
   return end >= 0 && !window.slice(0, end).includes('"');
 }

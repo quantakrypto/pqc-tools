@@ -74,6 +74,18 @@ test("legacy PHP extensions (.php3/.php4/.php5) strip commented-out crypto", () 
   assert.equal(has(scan1("legacy.php5", "openssl_sign($d, $s, $k);"), "php-openssl-sign"), true);
 });
 
+test("a standalone JWT alg is NOT over-suppressed by a distant unrelated JWK", () => {
+  // Regression: the enclosingObject fallback must be a bounded ±window, so a top-level
+  // `"RS256"` isn't suppressed just because a `"kty"` appears far below it.
+  const py =
+    'ALGORITHM = "RS256"\n' + "# padding line\n".repeat(40) + 'JWK = {"kty": "RSA", "n": "abc"}';
+  assert.equal(
+    has(scan1("a.py", py), "jwt-classical-alg"),
+    true,
+    "the standalone RS256 usage still fires despite a distant JWK",
+  );
+});
+
 test("identifier-form JWT alg constants inside a string literal are suppressed", () => {
   // A Java/C#/Rust error message that NAMES (and rejects) the alg is prose, not usage.
   assert.equal(

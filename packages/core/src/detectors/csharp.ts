@@ -30,8 +30,14 @@ const RE_CS_DSA = /\bDSA\.Create\s*\(|\bnew\s+DSACryptoServiceProvider\s*\(|\bne
 // Only the genuinely-permissive forms: the built-in accept-any validator, or a
 // callback assigned an always-`true` lambda. A callback assigned a NAMED validator
 // method is typically certificate PINNING (stricter than default) and must NOT fire.
+// An accept-any server-certificate callback: the BouncyCastle helper, or a
+// ServerCertificateCustomValidationCallback that unconditionally yields `true` — as an
+// expression lambda (`=> true`), a block-body lambda (`=> { return true; }`), or a
+// `delegate { return true; }`. Requiring a literal `true` (not just any `=>`) keeps
+// certificate PINNING — which returns a comparison, `=> cert.Thumbprint == pinned` —
+// from being flagged as a disabled validator.
 const RE_CS_TLS_CERT_VALIDATION =
-  /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=\s*[^;\n]{0,80}=>\s*true\b/g;
+  /\bDangerousAcceptAnyServerCertificateValidator\b|ServerCertificateCustomValidationCallback\s*=\s*(?:[^;\n]{0,80}=>\s*(?:true\b|\{\s*return\s+true\b)|delegate\s*(?:\([^)]{0,80}\))?\s*\{\s*return\s+true\b)/g;
 const RE_CS_TLS_LEGACY_VERSION = /\bSslProtocols\.(?:Tls|Tls11|Ssl3)\b/g;
 // Identifier-form JWT/JOSE signature algorithms (audit F7). The quoted-string
 // alg token ("RS256") is caught by the language-agnostic jwt-jose detector, but

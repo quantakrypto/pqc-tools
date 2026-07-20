@@ -403,10 +403,13 @@ export function enclosingObject(content: string, index: number, maxSpan = 4000):
       enclosingOpen = stack[stack.length - 1];
     }
   }
-  // No complete enclosing object in range: return from its open (if found) to hi, or
-  // a bounded ±window as a last resort.
+  // No complete enclosing object in range: if we found an (unclosed) enclosing open
+  // brace, return from it to hi. Otherwise the token is not inside any object (top-level
+  // token / brace-less config like YAML) — return a bounded ±250 window, NOT the full
+  // forward span, so a `"kty"` far AFTER the token can't pull an unrelated JWK into
+  // scope and over-suppress a legitimate standalone finding.
   if (enclosingOpen >= 0) return content.slice(enclosingOpen, hi);
-  return content.slice(Math.max(0, index - 250), hi);
+  return content.slice(Math.max(0, index - 250), Math.min(content.length, index + 250));
 }
 
 /**

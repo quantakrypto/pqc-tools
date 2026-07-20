@@ -230,6 +230,48 @@ test("C#: SecurityAlgorithms.RsaSha256Signature (SigningCredentials constant) is
   );
 });
 
+test("C#: block-body and delegate accept-any cert validators are flagged; pinning is not", () => {
+  const cb = "handler.ServerCertificateCustomValidationCallback";
+  assert.ok(
+    rule(run("A.cs", `${cb} = (m,c,ch,e) => { return true; };`), "csharp-tls-cert-validation"),
+    "block-body => { return true; } is flagged",
+  );
+  assert.ok(
+    rule(run("B.cs", `${cb} = delegate { return true; };`), "csharp-tls-cert-validation"),
+    "delegate { return true; } is flagged",
+  );
+  assert.equal(
+    rule(
+      run("C.cs", `${cb} = (m,c,ch,e) => { return c.Thumbprint == Pinned; };`),
+      "csharp-tls-cert-validation",
+    ),
+    undefined,
+    "block-body pinning (returns a comparison) is NOT flagged",
+  );
+});
+
+test("C: a real RSA/ECDSA sign survives in a file that also uses HMAC (per-match guard)", () => {
+  const mixed =
+    "EVP_PKEY *mk = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, len);\n" +
+    "EVP_DigestSignInit(c1, NULL, EVP_sha256(), NULL, mk);\n" +
+    "int pad;\n".repeat(60) +
+    "EVP_DigestSignInit(c2, NULL, EVP_sha256(), NULL, rsa_pkey);";
+  assert.ok(rule(run("m.c", mixed), "c-evp-sign"), "the RSA sign far from the HMAC setup fires");
+  // HMAC-only file stays silent.
+  const hmacOnly =
+    "EVP_PKEY *mk = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, len);\n" +
+    "EVP_DigestSignInit(c1, NULL, EVP_sha256(), NULL, mk);";
+  assert.equal(rule(run("h.c", hmacOnly), "c-evp-sign"), undefined);
+});
+
+test("TLS weak cipher: hardened full-suite exclusions are not flagged; enabled ones are", () => {
+  const weak = (s: string) =>
+    rule(run("t.ts", `const o = { ciphers: '${s}' };`), "tls-weak-cipher");
+  assert.ok(weak("ECDHE-RSA-RC4-SHA:HIGH"), "an enabled weak suite fires");
+  assert.equal(weak("HIGH:!ECDHE-RSA-RC4-SHA"), undefined, "an excluded full suite (!) does not");
+  assert.equal(weak("HIGH:!aNULL:!MD5:!RC4"), undefined, "a hardened exclusion list does not");
+});
+
 test("Rust: qualified x448::Secret is caught", () => {
   assert.ok(rule(run("m.rs", "use x448::Secret;"), "rust-x448"), "x448::Secret flagged");
 });
@@ -265,4 +307,13 @@ test("no double-count: subtle RSA-OAEP is owned by webcrypto, not jose-rsa-oaep"
   const found = run("a.ts", src);
   assert.ok(rule(found, "webcrypto-classical"), "webcrypto fires");
   assert.equal(rule(found, "jose-rsa-oaep"), undefined, "jose-rsa-oaep defers near a subtle call");
+});
+
+test("RSA1_5 near a subtle call still fires (webcrypto does not match RSA1_5)", () => {
+  // Only RSA-OAEP is deferred to webcrypto; RSA1_5 must not be dropped, since
+  // webCryptoDetector's regex has no RSA1_5 alternative.
+  const src =
+    'const k = await crypto.subtle.importKey("jwk", jwk, alg, false, ["decrypt"]);\n' +
+    'const header = { alg: "RSA1_5", enc: "A128CBC-HS256" };';
+  assert.ok(rule(run("j.ts", src), "jose-rsa-oaep"), "RSA1_5 legacy key transport still flagged");
 });

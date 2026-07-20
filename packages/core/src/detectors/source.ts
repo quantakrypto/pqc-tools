@@ -226,13 +226,15 @@ const RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
 // Hardened cipher regex: bounded spans (no unbounded `[^'"`]*` straddling the
 // alternation), single-quote-style anchoring removed in favour of {0,256} bounds
 // so worst-case backtracking is linear in the bound, not the file (P0-6).
-// The two lookbehinds skip OpenSSL EXCLUSION syntax — `!MD5` / `:-RC4` DISABLE those
-// ciphers, so a hardened list like `...:!aNULL:!MD5:!RC4` must not be flagged as weak
-// (audit: crypto #7). `(?<!!)` drops the `!` form; `(?<![:'"`,\s]-)` drops a `-` ONLY
-// when it sits at a list-element boundary (an actual exclusion operator), so the
-// intra-name hyphen in a real weak suite like `ECDHE-RSA-RC4-SHA` STILL matches.
+// Skip OpenSSL EXCLUSION syntax — `!MD5` / `:-RC4` / `!ECDHE-RSA-RC4-SHA` DISABLE
+// those ciphers, so a hardened list must not be flagged as weak (audit: crypto #7). The
+// single variable-length lookbehind walks back over the suite-name chars to the
+// ELEMENT boundary (`:` / quote / comma / start) and rejects the match when that
+// element begins with `!` or `-` — covering both a bare `!RC4` and a full-suite
+// `!ECDHE-RSA-RC4-SHA`. The intra-name hyphen in a genuinely-enabled `ECDHE-RSA-RC4-SHA`
+// (no leading `!`/`-`) still matches.
 const RE_TLS_WEAK_CIPHER =
-  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<!!)(?<![:'"`,\s]-)(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![:'"`,]\s*[!-][\w-]{0,64})(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
 
 /* -------------------------------------------------------------------------- */
 /* Node.js `crypto` module                                                    */
@@ -873,7 +875,9 @@ const jwtDetector: Detector = {
     // JOSE RSA key transport (RSA-OAEP / RSA1_5) — classical RSA encryption, HNDL.
     eachMatch(RE_JOSE_KEM, content, (m) => {
       if (inJwk(m.index)) return; // jwk-rsa owns a JWK's own alg
-      if (nearSortedCall(subtleCalls, m.index, 400)) return; // webcrypto owns it
+      // webCryptoDetector's regex matches `RSA-OAEP` but NOT `RSA1_5`, so only defer the
+      // OAEP form near a subtle call — deferring RSA1_5 would drop it entirely.
+      if (m[1].startsWith("RSA-OAEP") && nearSortedCall(subtleCalls, m.index, 400)) return;
       findings.push(
         findingFromRule(
           RULE_JOSE_RSA_OAEP,

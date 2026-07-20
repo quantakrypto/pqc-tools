@@ -524,10 +524,24 @@ export const cDetector: Detector = {
     add(RE_C_EVP_CRYPT, RULE_C_EVP_CRYPT);
     // `EVP_DigestSign*` also drives HMAC/CMAC (a symmetric MAC keyed by
     // `EVP_PKEY_new_mac_key(EVP_PKEY_HMAC/CMAC, …)`), which is NOT a classical
-    // asymmetric signature. Suppress when the file sets up a MAC key.
-    const hasMacCtx =
-      /\bEVP_PKEY_(?:HMAC|CMAC)\b/.test(content) || content.includes("EVP_PKEY_new_mac_key");
-    if (!hasMacCtx) add(RE_C_EVP_SIGN, RULE_C_EVP_SIGN);
+    // asymmetric signature. Suppress a `DigestSign*` match ONLY when a MAC key setup
+    // sits just before it — per-match, so a real RSA/ECDSA sign elsewhere in the same
+    // file is still reported. `DigestVerify*` (no MAC form here) is never suppressed.
+    eachMatch(RE_C_EVP_SIGN, content, (m) => {
+      const isSign = m[0].includes("DigestSign");
+      if (isSign) {
+        const back = content.slice(Math.max(0, m.index - 300), m.index);
+        if (/EVP_PKEY_new_mac_key|EVP_PKEY_(?:HMAC|CMAC)\b/.test(back)) return;
+      }
+      findings.push(
+        findingFromRule(RULE_C_EVP_SIGN, {
+          file,
+          content,
+          index: m.index,
+          matchLength: m[0].length,
+        }),
+      );
+    });
     add(RE_C_SODIUM_BOX, RULE_C_SODIUM_BOX);
     add(RE_C_SODIUM_SIGN, RULE_C_SODIUM_SIGN);
     add(RE_C_ECDSA_VERIFY, RULE_C_ECDSA_VERIFY);
