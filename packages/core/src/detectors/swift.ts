@@ -17,10 +17,8 @@
  *  - … with `kSecAttrKeyTypeEC` / `kSecAttrKeyTypeECSECPrimeRandom`    → EC
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import { SWIFT_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
-
-const SWIFT_EXTENSIONS: readonly string[] = [".swift"];
 
 // CryptoKit P-curve keys, split by usage (Signing vs KeyAgreement). `SecureEnclave.`
 // may prefix the P-curve type, so it is allowed optionally.
@@ -64,7 +62,9 @@ const RULE_SWIFT_ED25519: RuleMeta = {
   title: "Swift CryptoKit Ed25519 signing key",
   description: "CryptoKit Curve25519.Signing.PrivateKey (Ed25519)",
   category: "signature",
-  severity: "medium",
+  // `low`, aligned with Ed25519 in every other source pack (go/rust/ruby/python/node)
+  // — the same primitive must not flip CI exit codes based on which language wrote it.
+  severity: "low",
   confidence: "high",
   algorithm: "EdDSA",
   hndl: false,

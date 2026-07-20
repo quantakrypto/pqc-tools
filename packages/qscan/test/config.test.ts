@@ -135,6 +135,41 @@ test("--no-config-file disables discovery", async () => {
   });
 });
 
+test("an auto-discovered config that WEAKENS the scan warns loudly (no silent softening)", async () => {
+  await withTempDir(async (dir) => {
+    // A hostile scanned repo could author this to suppress its own findings.
+    await writeConfig(dir, {
+      disabledRules: ["pem-rsa-private-key"],
+      severityThreshold: "critical",
+      exclude: ["src/**"],
+    });
+    const { options, explicit } = parse([dir]); // auto-discovered, no --config
+    const res = await resolveConfig(options, explicit);
+    // The weakening is still applied (non-breaking) BUT surfaced as warnings.
+    assert.equal(res.options.severityThreshold, "critical");
+    const joined = res.warnings.join(" | ");
+    assert.match(joined, /disabled 1 detection rule/);
+    assert.match(joined, /severity-threshold to "critical"/);
+    assert.match(joined, /excluded 1 path pattern/);
+    assert.match(joined, /--no-config-file/, "the warning points at the escape hatch");
+  });
+});
+
+test("an EXPLICIT --config that weakens the scan does NOT warn (operator's own choice)", async () => {
+  await withTempDir(async (dir) => {
+    const p = join(dir, "my.json");
+    await writeFile(p, JSON.stringify({ severityThreshold: "critical" }), "utf8");
+    const { options, explicit } = parse([dir, "--config", p]);
+    const res = await resolveConfig(options, explicit);
+    assert.equal(res.options.severityThreshold, "critical");
+    assert.equal(
+      res.warnings.some((w) => w.includes("severity-threshold")),
+      false,
+      "an explicitly-named config is trusted; no weakening warning",
+    );
+  });
+});
+
 test("--no-config (detector toggle) does NOT disable the config file", async () => {
   await withTempDir(async (dir) => {
     await writeConfig(dir, { maxFileSize: 555 });

@@ -18,8 +18,14 @@ const SIGN_MAX_BUFFER = 1 << 20; // 1 MiB — a signature / timestamp token is s
 
 /** Non-sensitive provenance label: the program name of the command (no args/paths). */
 function signerLabel(command: string): string {
-  const first = command.trim().split(/\s+/)[0] || "external-signer";
-  return first.replace(/^.*[/\\]/, ""); // basename, so a key path in args never leaks
+  // Skip any leading `KEY=value` env-assignment prefix (e.g. `AWS_SECRET=… cosign …`)
+  // so a secret in it never lands in the recorded `signedWith`, then take the program.
+  const prog =
+    command
+      .trim()
+      .split(/\s+/)
+      .find((t) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || "external-signer";
+  return prog.replace(/^.*[/\\]/, ""); // basename, so a key path in args never leaks
 }
 
 /** An EvidenceSigner that shells out to `command`, piping the payload on stdin. */

@@ -183,3 +183,14 @@ test("a signer command that fails is surfaced, not swallowed", async () => {
     "a non-zero signer exit must abort with a clear error",
   );
 });
+
+test("signer provenance label skips a leading env-assignment prefix (no secret leak)", async () => {
+  const { scanFn } = recordingScanner();
+  // A `KEY=value` prefix (e.g. a secret) must not land in the recorded provenance.
+  const run = await runQscan(
+    { path: ".", format: "evidence", sign: "TOKEN_SECRET=xyz cat" },
+    { scanFn },
+  );
+  const report = JSON.parse(run.report ?? "");
+  assert.equal(report.attestation.signedWith, "cat");
+});

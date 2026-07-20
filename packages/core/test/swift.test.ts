@@ -36,6 +36,8 @@ test("CryptoKit Curve25519 splits into Ed25519 (sign) vs X25519 (agreement)", ()
   const ed = rule(run("a.swift", "let k = Curve25519.Signing.PrivateKey()"), "swift-ed25519");
   assert.equal(ed?.algorithm, "EdDSA");
   assert.equal(ed?.hndl, false);
+  // `low`, aligned with Ed25519 in every other source pack (exit codes hinge on it).
+  assert.equal(ed?.severity, "low");
   const x = rule(run("a.swift", "let k = Curve25519.KeyAgreement.PrivateKey()"), "swift-x25519");
   assert.equal(x?.algorithm, "X25519");
   assert.equal(x?.hndl, true);

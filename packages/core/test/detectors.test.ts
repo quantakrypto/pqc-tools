@@ -187,6 +187,9 @@ test("WebCrypto detects modern curves (Ed25519 signature, X25519 key agreement)"
   assert.equal(x?.algorithm, "X25519");
   assert.equal(x?.category, "key-exchange");
   assert.equal(x?.hndl, true);
+  // Severity is `medium`, aligned with X25519/X448 key agreement in node/rust/go — the
+  // same primitive must not score differently across surfaces (exit codes hinge on it).
+  assert.equal(x?.severity, "medium");
 });
 
 test("source detectors run on .vue / .svelte single-file components", () => {

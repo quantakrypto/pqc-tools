@@ -229,12 +229,12 @@ const RE_TLS_REJECT = /rejectUnauthorized\s*:\s*false/g;
 // Skip OpenSSL EXCLUSION syntax — `!MD5` / `:-RC4` / `!ECDHE-RSA-RC4-SHA` DISABLE
 // those ciphers, so a hardened list must not be flagged as weak (audit: crypto #7). The
 // single variable-length lookbehind walks back over the suite-name chars to the
-// ELEMENT boundary (`:` / quote / comma / start) and rejects the match when that
-// element begins with `!` or `-` — covering both a bare `!RC4` and a full-suite
-// `!ECDHE-RSA-RC4-SHA`. The intra-name hyphen in a genuinely-enabled `ECDHE-RSA-RC4-SHA`
-// (no leading `!`/`-`) still matches.
+// ELEMENT boundary (`:` / whitespace / comma / quote / start) and rejects the match
+// when that element begins with `!` or `-` — covering a bare `!RC4`, a space-separated
+// `HIGH !RC4`, and a full-suite `!ECDHE-RSA-RC4-SHA`. The intra-name hyphen in a
+// genuinely-enabled `ECDHE-RSA-RC4-SHA` (no leading `!`/`-`) still matches.
 const RE_TLS_WEAK_CIPHER =
-  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![:'"`,]\s*[!-][\w-]{0,64})(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
+  /ciphers\s*:\s*['"`][^'"`\n]{0,256}?\b(?<![:'"`,\s]\s*[!-][\w-]{0,64})(RC4|DES|3DES|MD5|NULL|EXPORT|aNULL|eNULL)\b[^'"`\n]{0,256}?['"`]/gi;
 
 /* -------------------------------------------------------------------------- */
 /* Node.js `crypto` module                                                    */
@@ -566,7 +566,9 @@ const webCryptoDetector: Detector = {
         algorithm = name === "X448" ? "X448" : "X25519";
         category = "key-exchange";
         hndl = true;
-        severity = "low"; // modern but classical
+        // `medium`, aligned with X25519/X448 key agreement in node/rust/go — HNDL-exposed
+        // key agreement scores the same regardless of which surface uses it.
+        severity = "medium";
       } else if (name === "ED25519" || name === "ED448") {
         algorithm = "EdDSA";
         category = "signature";

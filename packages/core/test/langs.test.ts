@@ -270,6 +270,9 @@ test("TLS weak cipher: hardened full-suite exclusions are not flagged; enabled o
   assert.ok(weak("ECDHE-RSA-RC4-SHA:HIGH"), "an enabled weak suite fires");
   assert.equal(weak("HIGH:!ECDHE-RSA-RC4-SHA"), undefined, "an excluded full suite (!) does not");
   assert.equal(weak("HIGH:!aNULL:!MD5:!RC4"), undefined, "a hardened exclusion list does not");
+  // Space-separated exclusions (OpenSSL accepts space and comma separators too).
+  assert.equal(weak("HIGH !RC4"), undefined, "a space-separated exclusion does not fire");
+  assert.ok(weak("HIGH RC4-MD5"), "a space-separated ENABLED weak suite still fires");
 });
 
 test("Rust: qualified x448::Secret is caught", () => {

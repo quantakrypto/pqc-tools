@@ -57,7 +57,55 @@ export async function resolveConfig(
   }
 
   const merged = applyConfig(options, loaded.config, explicit);
-  return { options: merged, configPath: loaded.path, warnings: loaded.warnings };
+  // Security: an AUTO-DISCOVERED config (no explicit `--config`) can come from the
+  // scanned tree itself, so a hostile repo could silently WEAKEN its own scan
+  // (disable rules, raise the severity threshold, exclude files → flip exit 1→0).
+  // Never silently: warn loudly for each policy-weakening key it applied. An explicit
+  // `--config` is the operator's own choice and stays quiet. Use `--no-config-file`
+  // to ignore a discovered config entirely.
+  const warnings = [...loaded.warnings];
+  if (options.configFile === undefined) {
+    warnings.push(...weakeningWarnings(loaded.config, explicit));
+  }
+  return { options: merged, configPath: loaded.path, warnings };
+}
+
+/**
+ * Warnings for each SCAN-WEAKENING key an auto-discovered config actually applied
+ * (present in the file and not overridden by a CLI flag). These are the keys that can
+ * make a scan pass that would otherwise fail, so an operator scanning an untrusted
+ * tree must see them rather than have the verdict silently softened.
+ */
+function weakeningWarnings(
+  config: QuantakryptoFileConfig,
+  explicit: ReadonlySet<ConfigurableKey>,
+): string[] {
+  const w: string[] = [];
+  const applied = <K extends ConfigurableKey>(key: K): boolean => !explicit.has(key);
+  const note = (s: string) =>
+    w.push(
+      `auto-discovered config ${s} — a scanned repo may author this; re-run with --no-config-file to ignore it`,
+    );
+
+  if (config.disabledRules && config.disabledRules.length > 0) {
+    note(
+      `disabled ${config.disabledRules.length} detection rule(s): ${config.disabledRules.join(", ")}`,
+    );
+  }
+  if (config.severityThreshold !== undefined && applied("severityThreshold")) {
+    note(`set the failure severity-threshold to "${config.severityThreshold}"`);
+  }
+  if (config.exclude && config.exclude.length > 0) {
+    note(`excluded ${config.exclude.length} path pattern(s) from the scan`);
+  }
+  if (config.source === false && applied("source")) note("disabled source scanning");
+  if (config.dependencies === false && applied("dependencies"))
+    note("disabled dependency scanning");
+  if (config.config === false && applied("config")) note("disabled config-file scanning");
+  if (config.maxFileSize !== undefined && applied("maxFileSize")) {
+    note(`capped scanned file size at ${config.maxFileSize} bytes`);
+  }
+  return w;
 }
 
 /**

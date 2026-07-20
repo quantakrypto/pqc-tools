@@ -246,6 +246,9 @@ export const PHP_EXTENSIONS: readonly string[] = [".php", ".phtml", ".php3", ".p
 /** C / C++ source extensions handled by the OpenSSL detector. */
 export const C_EXTENSIONS: readonly string[] = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"];
 
+/** Swift source extensions handled by the CryptoKit / Security-framework detector. */
+export const SWIFT_EXTENSIONS: readonly string[] = [".swift"];
+
 /**
  * Prose/documentation extensions. The language-agnostic *token* detectors (SSH
  * public keys, TLS cipher suites, certificate signature algorithms) must not run
@@ -303,6 +306,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
   ...PHP_EXTENSIONS,
   ...ELIXIR_EXTENSIONS,
   ...C_EXTENSIONS,
+  ...SWIFT_EXTENSIONS,
 ];
 
 /**
@@ -311,7 +315,7 @@ export const ANALYZABLE_SOURCE_EXTENSIONS: readonly string[] = [
  * ANALYZABLE_SOURCE_EXTENSIONS} so a new language pack updates one place.
  */
 export const ANALYZABLE_LANGUAGES_LABEL =
-  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++";
+  "JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift";
 
 /** True when a path is in a source language the scanner can analyze for crypto. */
 export function isAnalyzableSource(filePath: string): boolean {
