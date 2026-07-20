@@ -23,6 +23,7 @@ import {
   STATEFUL_HBS_NOTE,
   toCbom,
   toJson,
+  toOpenVex,
   toSarif,
   mergeCboms,
 } from "@quantakrypto/core";
@@ -112,6 +113,15 @@ export function renderCbom(result: ScanResult, extra: readonly CycloneDxBom[] = 
   const scanBom = toCbom(result);
   const bom = extra.length > 0 ? mergeCboms([scanBom, ...extra]) : scanBom;
   return JSON.stringify(bom, null, 2);
+}
+
+/**
+ * Render an OpenVEX 0.2.0 document for the scan (pretty-printed, no trailing
+ * newline). Delegates to core's `toOpenVex` so the VEX shape stays consistent
+ * across the monorepo. Carries any `--triage` verdicts into `status_notes`.
+ */
+export function renderVex(result: ScanResult): string {
+  return JSON.stringify(toOpenVex(result), null, 2);
 }
 
 /**

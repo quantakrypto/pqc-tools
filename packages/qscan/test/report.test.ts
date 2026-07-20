@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderCbom, renderHuman, renderSarif } from "../src/index.js";
+import { renderCbom, renderHuman, renderSarif, renderVex } from "../src/index.js";
 import { ANALYZABLE_LANGUAGES_LABEL } from "@quantakrypto/core";
 import type { CycloneDxBom } from "@quantakrypto/core";
 import { makeFinding, makeResult } from "./helpers.js";
@@ -36,6 +36,17 @@ test("renderCbom merges an external CBOM into the scan CBOM (combined code + inf
     merged.components.some((c) => c["bom-ref"] === "infra-ecdsa-endpoint"),
     "the external infra component is present in the merged CBOM",
   );
+});
+
+test("renderVex emits an OpenVEX document with an affected statement per rule", () => {
+  const result = makeResult([makeFinding({ ruleId: "rsa-keygen", algorithm: "RSA" })]);
+  const doc = JSON.parse(renderVex(result)) as {
+    "@context": string;
+    statements: { vulnerability: { name: string }; status: string }[];
+  };
+  assert.equal(doc["@context"], "https://openvex.dev/ns/v0.2.0");
+  assert.equal(doc.statements[0]?.vulnerability.name, "QK-rsa-keygen");
+  assert.equal(doc.statements[0]?.status, "affected");
 });
 
 test("renderHuman warns when no analyzable source was scanned", () => {

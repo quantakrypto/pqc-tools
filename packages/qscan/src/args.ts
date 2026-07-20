@@ -34,11 +34,13 @@ export { meetsThreshold, SEVERITY_ORDER, severityRank };
 /**
  * Output formats qScan accepts on the command line. Extends core's
  * {@link ReportFormat} with `"cbom"` (a CycloneDX cryptographic bill of
- * materials), which qScan renders locally via core's `toCbom`.
+ * materials), `"evidence"` (ISO A.8.24 readiness report), and `"vex"` (an
+ * OpenVEX 0.2.0 document) — all rendered locally via core (`toCbom`,
+ * `buildReadinessReport`, `toOpenVex`).
  */
-export type QscanFormat = ReportFormat | "cbom" | "evidence";
+export type QscanFormat = ReportFormat | "cbom" | "evidence" | "vex";
 
-const FORMATS: readonly QscanFormat[] = ["human", "json", "sarif", "cbom", "evidence"];
+const FORMATS: readonly QscanFormat[] = ["human", "json", "sarif", "cbom", "evidence", "vex"];
 
 /** Fully-resolved options the CLI/programmatic runner operates on. */
 export interface QscanOptions {

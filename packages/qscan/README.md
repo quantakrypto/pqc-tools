@@ -14,7 +14,8 @@ step.
 - **CI-friendly.** Severity thresholds drive the exit code; baselines suppress
   known findings so the build only fails on *new* problems.
 - **Multiple formats.** `human` (default), `json`, SARIF 2.1.0 for code-scanning
-  dashboards, and a CycloneDX 1.6 **CBOM** for compliance tooling.
+  dashboards, a CycloneDX 1.6 **CBOM** for compliance tooling, an ISO 27001
+  A.8.24 **evidence** report, and an **OpenVEX** 0.2.0 document for VEX pipelines.
 - **Fast on big repos.** Optional worker-thread parallelism (`--parallel`) and
   git-aware incremental scanning (`--changed`).
 
@@ -56,7 +57,7 @@ qscan [path] [options]
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--format <human\|json\|sarif\|cbom>` | Output format. | `human` |
+| `--format <human\|json\|sarif\|cbom\|evidence\|vex>` | Output format. | `human` |
 | `--cbom` | Alias for `--format cbom` (CycloneDX 1.6 CBOM). | — |
 | `-o, --output <file>` | Write the report to a file instead of stdout. | stdout |
 | `--severity-threshold <level>` | Exit 1 if any finding is at/above this level. One of `critical`, `high`, `medium`, `low`, `info`. | `high` |
@@ -205,6 +206,25 @@ qscan . --format cbom -o qscan-cbom.json
 
 The output is deterministic (sorted components and occurrences, stable serial
 number), so re-running on an unchanged tree produces byte-identical CBOMs.
+
+## VEX (OpenVEX)
+
+Emit an **OpenVEX 0.2.0** document so the quantum-readiness posture flows into the
+same supply-chain pipeline that already ingests CVE-based VEX:
+
+```bash
+qscan . --format vex -o qscan.openvex.json
+```
+
+One statement per rule (a synthetic `QK-<ruleId>` vulnerability), listing every
+affected `file:line` product with `status: "affected"` and the rule's remediation
+as the `action_statement`. PQC findings have no CVE, so qScan mints a stable
+per-rule identifier rather than claiming one. qScan never reports `not_affected`
+— only an operator can attest a mitigation — so downgrading a statement is left to
+you to post-process. When `--triage` is also set, each verdict (exposure score /
+priority / rationale) is carried in the statement's `status_notes`. Output is
+deterministic (statements sorted by vulnerability, products deduped and sorted;
+the `@id` derives from the finding set).
 
 ## Triage (opt-in, BYOK)
 

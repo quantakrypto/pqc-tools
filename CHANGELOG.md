@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — OpenVEX export (`--format vex`)
+
+- `qscan --format vex` emits an **OpenVEX 0.2.0** document so the quantum-readiness
+  posture flows into the same supply-chain pipeline that ingests CVE-based VEX.
+  One statement per rule (a synthetic `QK-<ruleId>` vulnerability), every affected
+  `file:line` product, `status: "affected"`, remediation as `action_statement`,
+  and any `--triage` verdict in `status_notes`. Deterministic output. New
+  `@quantakrypto/core` API: `toOpenVex`, `OpenVexDocument`, `OpenVexStatement`,
+  `OpenVexOptions`; qScan re-exports `renderVex`.
+
 ### Added — evidence verification (`verifyReadinessReport`)
 
 - New `@quantakrypto/core` API `verifyReadinessReport(report)` closes the

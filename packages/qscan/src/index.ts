@@ -37,7 +37,7 @@ import { commandSigner } from "./sign.js";
 import { applyBaseline, readBaseline, saveBaseline } from "./baseline.js";
 import { defaultOptions, meetsThreshold } from "./args.js";
 import type { QscanOptions } from "./args.js";
-import { renderCbom, renderHuman, renderJson, renderSarif } from "./report.js";
+import { renderCbom, renderHuman, renderJson, renderSarif, renderVex } from "./report.js";
 
 export type { QscanOptions, ParsedArgs, ParsedRun, QscanFormat } from "./args.js";
 export type { Baseline } from "./baseline.js";
@@ -64,7 +64,7 @@ export {
   saveBaseline,
   writeBaseline,
 } from "./baseline.js";
-export { renderCbom, renderHuman, renderJson, renderSarif } from "./report.js";
+export { renderCbom, renderHuman, renderJson, renderSarif, renderVex } from "./report.js";
 export { HELP_TEXT, versionLine } from "./help.js";
 export {
   runRemediate,
@@ -379,6 +379,8 @@ export function renderReport(
       return renderSarif(result, { redactSnippets });
     case "cbom":
       return renderCbom(result, mergeCboms);
+    case "vex":
+      return renderVex(result);
     case "evidence": {
       // ISO A.8.24 readiness report; repo/commit come from CI env when present.
       // A `--policy` file adds the §4 conformant/violation/transition verdicts. The

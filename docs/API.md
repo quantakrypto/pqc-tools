@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 141 exported symbols.
+Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -51,6 +51,9 @@ Public entry: `packages/core/src/index.ts` — 141 exported symbols.
 | `FixProposal` | type |  |
 | `HybridStance` | type |  |
 | `LoadConfigResult` | type |  |
+| `OpenVexDocument` | type |  |
+| `OpenVexOptions` | type |  |
+| `OpenVexStatement` | type |  |
 | `PQC_STANDARDS` | value |  |
 | `PQC_TRANSITION_NOTE` | value |  |
 | `ParallelScanOptions` | interface | @quantakrypto/core — shared types (the locked public contract). |
@@ -149,6 +152,7 @@ Public entry: `packages/core/src/index.ts` — 141 exported symbols.
 | `statefulHbsApplies` | value |  |
 | `toCbom` | value |  |
 | `toJson` | value |  |
+| `toOpenVex` | value |  |
 | `toSarif` | value |  |
 | `verifyFix` | value |  |
 | `verifyReadinessReport` | value |  |
@@ -158,7 +162,7 @@ Public entry: `packages/core/src/index.ts` — 141 exported symbols.
 
 ## @quantakrypto/qscan
 
-Public entry: `packages/qscan/src/index.ts` — 54 exported symbols.
+Public entry: `packages/qscan/src/index.ts` — 55 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -208,6 +212,7 @@ Public entry: `packages/qscan/src/index.ts` — 54 exported symbols.
 | `renderJson` | value |  |
 | `renderReport` | function | @quantakrypto/qscan — programmatic API. |
 | `renderSarif` | value |  |
+| `renderVex` | value |  |
 | `resolveConfig` | value |  |
 | `runQscan` | function | @quantakrypto/qscan — programmatic API. |
 | `runRemediate` | value |  |

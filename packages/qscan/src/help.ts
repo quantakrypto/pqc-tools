@@ -17,9 +17,12 @@ ARGUMENTS
   path                          Directory or file to scan (default: ".")
 
 OPTIONS
-  --format <human|json|sarif|cbom|evidence>
+  --format <human|json|sarif|cbom|evidence|vex>
                                 Output format (default: human)
   --cbom                        Alias for --format cbom (CycloneDX CBOM)
+  --format vex                  OpenVEX 0.2.0 document — one statement per rule,
+                                status "affected", with remediation + any
+                                --triage verdict for supply-chain VEX pipelines
   --merge <cbom.json>           Merge an external CBOM (e.g. a qprobe endpoint
                                 CBOM) into the --cbom output via CycloneDX
                                 bom-link — one combined code + infra CBOM.
