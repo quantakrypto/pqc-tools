@@ -43,3 +43,5 @@ jobs:
         run: node scripts/check-zero-deps.mjs
       - name: Enforce SHA-pinned GitHub Actions
         run: node scripts/check-action-pins.mjs
+      - name: Enforce the offline/agent boundary (ADR-0005)
+        run: node scripts/check-offline-boundary.mjs

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 
 import { validateSarif } from "../validate-sarif.mjs";
 import { findUnpinnedActions } from "../check-action-pins.mjs";
+import { scanFileForViolations, maskCode } from "../check-offline-boundary.mjs";
 
 const SCRIPTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -171,4 +172,74 @@ test("check-zero-deps PASSES when only @quantakrypto/* deps and no lifecycle scr
     },
   });
   assert.equal(res.status, 0, `clean workspace should pass; stderr=${res.stderr}`);
+});
+
+/* ------------------------- check-offline-boundary (ADR-0005) -------------- */
+
+const rules = (vs) => vs.map((v) => v.rule).sort();
+
+test("offline-boundary FLAGS core importing the agent plane", () => {
+  const bad = 'import { proposeFix } from "@quantakrypto/agent";\nexport const x = 1;\n';
+  assert.deepEqual(rules(scanFileForViolations("core", "packages/core/src/x.ts", bad)), [
+    "agent-import",
+  ]);
+});
+
+test("offline-boundary FLAGS an outbound fetch() and an LLM key read in the offline trio", () => {
+  const net = "export async function f() { return fetch('https://evil'); }\n";
+  assert.ok(
+    scanFileForViolations("mcp", "packages/mcp/src/x.ts", net).some(
+      (v) => v.rule === "outbound-network",
+    ),
+  );
+  const key = "const k = process.env.ANTHROPIC_API_KEY;\n";
+  assert.ok(
+    scanFileForViolations("sieve", "packages/sieve/src/x.ts", key).some(
+      (v) => v.rule === "llm-key-read",
+    ),
+  );
+});
+
+test("offline-boundary requires qscan to reach the agent via DYNAMIC import only", () => {
+  const staticImp = 'import { proposeFix } from "@quantakrypto/agent";\n';
+  assert.deepEqual(rules(scanFileForViolations("qscan", "packages/qscan/src/x.ts", staticImp)), [
+    "agent-static-import",
+  ]);
+  const dynImp = 'const agent = await import("@quantakrypto/agent");\n';
+  assert.deepEqual(scanFileForViolations("qscan", "packages/qscan/src/x.ts", dynImp), []);
+});
+
+test("offline-boundary FLAGS an auto-merge anywhere", () => {
+  const merge = 'await exec("gh pr merge --admin --squash");\n';
+  assert.ok(
+    scanFileForViolations("action", "packages/action/src/x.ts", merge).some(
+      (v) => v.rule === "auto-merge",
+    ),
+  );
+});
+
+test("offline-boundary does NOT flag agent (its own network/key) or action's GitHub fetch", () => {
+  const agentCode =
+    "const k = process.env.OPENAI_API_KEY;\nawait fetch('https://api.openai.com');\n";
+  // In the agent package, key reads are allowed; outbound-network only applies to the offline trio.
+  assert.deepEqual(scanFileForViolations("agent", "packages/agent/src/x.ts", agentCode), []);
+  // The GitHub Action legitimately calls the GitHub API.
+  assert.deepEqual(
+    scanFileForViolations("action", "packages/action/src/x.ts", "await fetch(url);\n"),
+    [],
+  );
+});
+
+test("offline-boundary masking ignores tokens inside comments and string literals", () => {
+  // core's redaction patterns MATCH `fetch(` as a token inside a regex string, and
+  // comments mention the agent — neither is a real call/import.
+  const masked = maskCode(
+    'const RE = "\\\\bfetch\\\\(";\n// see @quantakrypto/agent for the networked plane\n',
+  );
+  assert.doesNotMatch(masked, /fetch\s*\(/, "the string token is blanked");
+  assert.deepEqual(
+    scanFileForViolations("core", "packages/core/src/redact.ts", 'const RE = "\\\\bfetch\\\\(";\n'),
+    [],
+    "a fetch token inside a string is not a violation",
+  );
 });

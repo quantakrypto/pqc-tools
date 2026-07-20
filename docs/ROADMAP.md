@@ -106,6 +106,11 @@ running against this list; findings will be folded in.
     "crypto-verified, not security-reviewed" framing (F1), instruction/data
     separation via the provider system role (F2), spend caps (F3), and F5–F7. The
     THREAT-MODEL §4.6/§6.5 carries the verdicts.*
+  - *Status (2026-07-20): the two-plane boundary is now **CI-enforced** —
+    `scripts/check-offline-boundary.mjs` (in `ci.yml` + `supply-chain-audit.yml`)
+    asserts core/mcp/sieve stay offline + key-free, only `@quantakrypto/agent` is
+    networked (qscan reaches it via dynamic import), and nothing auto-merges. This
+    closes the ADR-0005 guardrail that was previously "not enforced by CI".*
 
 ### 🟠 High
 

@@ -6,6 +6,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — CI enforcement of the offline/agent boundary (ADR-0005)
+
+- New guard `scripts/check-offline-boundary.mjs` (wired into `ci.yml` and
+  `supply-chain-audit.yml`) enforces the two-plane architecture that was
+  previously convention-only: `core`/`mcp`/`sieve` stay strictly offline and
+  key-free (no `@quantakrypto/agent` import, no outbound `fetch(`/WebSocket/XHR,
+  no LLM API-key read), `qscan` reaches the agent **only** via a dynamic
+  `import()`, and **no package or workflow auto-merges** (`gh pr merge` /
+  `--admin`). Uses comment/string masking so a token that only appears inside a
+  regex or comment (e.g. core's own redaction patterns) is not a false positive.
+  Its reject logic is covered by known-bad fixtures in the guard-script tests.
+
 ### Changed — CBOM asset-type refinement
 
 - The CycloneDX CBOM now classifies each finding into its proper `assetType`

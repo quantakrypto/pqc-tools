@@ -69,9 +69,13 @@ imported by both planes.
 
 - **No new networked package, and no network/`fetch`/key access outside
   `@quantakrypto/agent`.** Per [ADR-0001](0001-zero-runtime-dependencies.md) this
-  should be **enforced by a CI check** (grep that core/mcp/sieve/action never
-  import `@quantakrypto/agent` and contain no `fetch(`/API-key reads) — *this gate
-  does not exist yet and is tracked in the ROADMAP.*
+  is **enforced by a CI check** — [`scripts/check-offline-boundary.mjs`](../../scripts/check-offline-boundary.mjs),
+  wired into `ci.yml` and `supply-chain-audit.yml`. It asserts (via a masked
+  source scan that ignores tokens inside comments/strings): core/mcp/sieve import
+  no `@quantakrypto/agent`, make no outbound `fetch(`/WebSocket/XHR call, and read
+  no LLM API key; `qscan` reaches the agent **only** via a dynamic `import()`; and
+  **no package or workflow auto-merges** (`gh pr merge` / `--admin`). Its own
+  reject logic is covered by known-bad fixtures in `scripts/test/guards.test.mjs`.
 - **Triage must never gain the ability to drop a finding or alter the exit code.**
 - **No auto-merge, ever.** No `gh pr merge` / `--admin` in any package.
 
