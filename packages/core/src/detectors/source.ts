@@ -1005,6 +1005,21 @@ const RE_CERT_SIG_ALG =
 const RE_SSH_KEX =
   /\b(diffie-hellman-group(?:1|14|15|16|17|18)(?:-sha1|-sha256|-sha512)?|diffie-hellman-group-exchange-sha(?:1|256)|ecdh-sha2-nistp(?:256|384|521)|curve25519-sha256)\b/g;
 
+/**
+ * True when the match at `index` sits inside a DOCUMENTATION field value — a
+ * `description` / `help` / `summary` / `doc` / `comment` / `note` assignment
+ * (`key = "…"` or `key: "…"`), as used by Terraform/Packer variable descriptions,
+ * JSON-schema docs, etc. Classical KEX/cipher algorithm names LISTED in such a field
+ * are prose ("acceptable values include ecdh-sha2-nistp256, …"), not an active
+ * setting, so a transport-token rule must not fire on them. Scans the current line's
+ * prefix only (cheap; the common single-line description case).
+ */
+function inDocFieldValue(content: string, index: number): boolean {
+  const lineStart = content.lastIndexOf("\n", index - 1) + 1;
+  const prefix = content.slice(lineStart, index);
+  return /\b(?:description|help|summary|doc|comment|note)\b\s*[:=]/i.test(prefix);
+}
+
 // A bare key-type token (`ssh-rsa`, `ssh-ed25519`, …) is real SSH crypto only
 // when it is EITHER (a) followed by base64 key material — an actual
 // authorized_keys / known_hosts entry — OR (b) one of ≥2 DISTINCT ssh key/host-key
@@ -1152,6 +1167,7 @@ const sshCertDetector: Detector = {
 
     // SSH key-exchange algorithm identifiers (finite-field DH / ECDH / X25519).
     eachMatch(RE_SSH_KEX, content, (m) => {
+      if (inDocFieldValue(content, m.index)) return; // names listed in a doc string
       const tok = m[1];
       const algorithm: Finding["algorithm"] = tok.startsWith("diffie-hellman")
         ? "DH"
@@ -1220,6 +1236,7 @@ const tlsClassicalKexDetector: Detector = {
   detect({ file, content }): Finding[] {
     const findings: Finding[] = [];
     eachMatch(RE_TLS_CLASSICAL_KEX, content, (m) => {
+      if (inDocFieldValue(content, m.index)) return; // names listed in a doc string
       const tok = m[0];
       const algorithm: Finding["algorithm"] = tok.includes("ECDH") ? "ECDH" : "DH";
       findings.push(
