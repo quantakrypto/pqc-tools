@@ -9,19 +9,28 @@ Audit sources: [security](audits/security.md) · [cryptography](audits/cryptogra
 
 ---
 
-> ## ✅ Current status — v0.4.2 (published)
+> ## ✅ Current status — v0.5.0 (tagged; 0.4.4 published)
 >
-> All five packages are live on npm at **0.4.2** with build provenance:
-> `@quantakrypto/`**core · qscan · mcp · sieve · agent**.
+> Seven packages: `@quantakrypto/`**core · qscan · mcp · sieve · agent · qprobe**
+> (published to npm with build provenance) plus the **action** (distributed as a
+> GitHub Action, not npm). Last published line: **0.4.4**; **0.5.0** is tagged and
+> pending publish.
 >
-> - **Detectors:** **9 source languages** — JS/TS, Python, Go, Java/Kotlin, C#,
->   Rust, Ruby, PHP, C/C++ — plus PEM key material and the config-scope infra
->   detectors (Terraform, cloud KMS, JWK, k8s, CI/CD, secrets, messaging, …).
-> - **Quality:** **593 tests** across the workspaces (core 259 · qscan 116 ·
->   mcp 94 · sieve 55 · action 50 · agent 19); precision/recall benchmark
->   **= 1.000**; build + ESLint + Prettier clean; **zero runtime dependencies**.
+> - **Detectors:** **11 source languages** — JS/TS, Python, Go, Java/Kotlin/Scala,
+>   C#, Rust, Ruby, PHP, Elixir, C/C++, Swift — plus PEM/keystore/OpenPGP key
+>   material and ~20 config-scope infra detectors (Terraform, Bicep, Pulumi,
+>   CloudFormation, cloud KMS, k8s, mesh, DNSSEC, Vault, database, messaging, VPN,
+>   Ansible, supply-chain, CI/CD, secrets, age, JWK, …).
+> - **`qprobe`** — a live-endpoint prober (TLS/SSH/SMTP/IMAP/POP3/Postgres, behind an
+>   ownership-attestation gate) that checks what an endpoint actually negotiates
+>   (e.g. X25519MLKEM768), complementing the static scan.
+> - **Quality:** **~930 tests** across the workspaces; precision/recall benchmark
+>   **= 1.000** (curated corpus) with a separate real-world recall-depth benchmark at
+>   **0.84** (per-language floors); a **frozen public API surface** with a drift gate
+>   (`api:check`); build + ESLint + Prettier clean; **zero runtime dependencies**.
 > - **Distribution:** the GitHub Action ships a committed `dist/` (usable via
->   `uses:`); packages published under the real `@quantakrypto` scope.
+>   `uses:`); packages published under the real `@quantakrypto` scope with reproducible
+>   builds.
 
 ### What shipped since the v0.2 audit
 

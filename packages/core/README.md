@@ -168,17 +168,27 @@ const result = await scan({ root: ".", detectors: registry.all() });
 #### Adding a detector / language
 
 1. Create `src/detectors/<lang>.ts` exporting one or more `Detector`s. Set
-   `language` (`"js" | "python" | "go" | "java" | "csharp" | "rust" | "ruby" | "c" | "any"`),
-   `scope` (`"source" | "config"`), an `appliesTo(path)` extension check, and a pure
-   `detect({ file, content })` returning `Finding[]` (use `makeFinding` from
-   `detect-utils` for consistent location/remediation/CWE handling).
-2. If the language uses new file extensions, ensure the walker treats them as
-   text (they are scanned unless listed as binary in `walk.ts`).
-3. For a new dependency ecosystem, extend `VulnerableDependency.ecosystem` and
-   add a manifest matcher in `dependencies.ts`.
-4. Register it: `defaultRegistry.register(myDetector)`, or pass
-   `{ detectors: [...] }` to `scan`. No edit to `scan()` is required — scope is
-   honoured from the detector's declared `scope`.
+   `language` (a member of `DetectorLanguage` in `types.ts` — add a new one for a new
+   language pack), `scope` (`"source" | "config"`), an `appliesTo(path)` extension
+   check, and a pure `detect({ file, content })` returning `Finding[]`. Build findings
+   with `findingFromRule(ruleMeta, at, overrides?)` (not `makeFinding`) so every rule's
+   metadata lives once in its `RuleMeta` catalog entry.
+2. Define `<LANG>_EXTENSIONS` in `detect-utils.ts` next to the other packs (do **not**
+   inline the list in the detector) and gate `appliesTo` on it.
+3. **Wire the new SOURCE language into coverage + comment handling** (skipping this is
+   how a pack half-lands): add the extensions to `ANALYZABLE_SOURCE_EXTENSIONS` and the
+   name to `ANALYZABLE_LANGUAGES_LABEL` (`detect-utils.ts`) so `analyzedFiles`/coverage
+   count it; and add them to the comment table in `comments.ts` (`C_LIKE` for
+   `//`+`/* */`, `HASH_LIKE` for `#`) so commented-out code is suppressed. A `config`
+   detector instead masks its own comment lines with `maskCommentLines` /
+   `maskBlockComments`.
+4. Register it in `builtinDetectors` (`registry.ts`) — the single source of truth the
+   default registry and public `detectors` export are built from. (Ad-hoc: pass
+   `{ detectors: [...] }` to `scan`.) No edit to `scan()` is needed; scope is honoured
+   from the detector's declared `scope`.
+5. Add tests: at least one positive per rule, one negative/FP-bait, and a gating test;
+   consider a labelled benchmark corpus fixture (`test/benchmark/`). For a new dependency
+   ecosystem, also extend `VulnerableDependency.ecosystem` + a matcher in `dependencies.ts`.
 
 ### `vulnerableDependencies: VulnerableDependency[]`
 

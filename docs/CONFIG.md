@@ -129,12 +129,20 @@ detector set by declared language (e.g. `["python","go"]`).
 - `baseline` in the config is equivalent to passing `--baseline` (resolved
   relative to the config file's directory); `--write-baseline` remains CLI-only
   (it is an action, not config state).
-- In CI, committing `quantakrypto.config.json` lets a local `qscan` run and CI share
-  one policy. The [Action](../packages/action/README.md) reuses `runQscan`; its
-  inputs still take precedence as "flags" in the §3 order. (Auto-discovery from
-  the Action's own inputs is a follow-on; the qScan CLI honors the file today.)
-- The MCP server, when scanning a workspace, can honor a discovered config via
-  the same `loadConfig` helper so an agent's view matches CI's.
+- **Only the `qscan` CLI reads `quantakrypto.config.json`.** The
+  [Action](../packages/action/README.md) calls `runQscan` with its own inputs and
+  does **not** auto-discover a config file, and the **MCP server does not read one
+  either**. This is deliberate, not a gap: both run over trees the operator may not
+  control (an untrusted fork PR; a hosted workspace), and a discovered config is
+  authored by whoever owns that tree — letting it change scan strictness there would
+  be a scan-integrity bypass. Config-as-shared-policy is a *trusted-local-operator*
+  feature.
+- **Auto-discovered vs explicit trust (CLI).** Because an auto-discovered config can
+  come from the scanned tree, the CLI **warns** for each policy-weakening key a
+  discovered config applies (disabled rules, a raised severity-threshold, excludes,
+  scope toggles, a size cap) and points at `--no-config-file` to ignore it. A config
+  named explicitly with `--config <path>` is the operator's own choice and applies
+  quietly. Use `--no-config-file` to scan an untrusted tree with zero config influence.
 
 ## 6. Validation
 
