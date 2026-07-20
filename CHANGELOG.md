@@ -69,6 +69,109 @@ now single-source:
   benchmarks unchanged (tuned P/R/F1 **1.000**, recall **0.847**); the real repo
   drops from 161 → 37 findings with the SSH FPs gone.
 
+### Added — new detector surfaces (Bicep, Swift, Pulumi)
+
+- **Azure Bicep** (`.bicep`) — the native Azure IaC DSL, distinct from the ARM/
+  CloudFormation JSON already covered (Bicep is the source, ARM JSON its compiled
+  output). Flags `Microsoft.KeyVault` `kty: 'RSA'/'EC'` keys (gated to the Key Vault
+  marker) and legacy `minimumTlsVersion: 'TLS1_0'/'TLS1_1'`.
+- **Swift / CryptoKit + Security framework** — P256/384/521 `Signing` vs
+  `KeyAgreement` (ECDSA / ECDH), `Curve25519` `Signing`/`KeyAgreement`
+  (Ed25519 / X25519), and `SecKeyCreateRandomKey` `kSecAttrKeyTypeRSA`/`EC`.
+  `.swift` added to the C-style comment table and to `DetectorLanguage`.
+- **Pulumi** — the `pulumi-tls` provider's `tls.PrivateKey` across TS/JS/Python/Go,
+  gated to a pulumi-tls marker, classifying the `algorithm` value (RSA/ECDSA/ED25519).
+- All three validated against real OSS repos with **zero false positives**, and
+  pinned by new labeled benchmark corpus cases.
+
+### Fixed — false-positive classes (comment/prose masking)
+
+- **Commented-out code fired detectors.** PHP (`.php`/`.php3-5`/`.phtml`), Scala
+  (`.scala`/`.sc`), Ruby/Elixir (`.rb`/`.ex`/`.exs`) and Swift were absent from the
+  comment tables, so a commented `// openssl_pkey_new(...)` scanned as live code.
+- **Config-format comments** now masked per detector: SQL `--`/`/* */`, ini `;`,
+  zone-file `;`, `named.conf` `//`, YAML/HCL `#`/`//`, and Jenkinsfile `//` — the
+  central stripper covers no config extension, so mesh, dnssec, cloudformation,
+  database, supply-chain, terraform, ansible, vault now mask their own comment lines.
+- **Bare PEM header string literals** (`PEM_HEADER = "-----BEGIN RSA PRIVATE
+  KEY-----"`) and a parser's paired header/footer constants no longer report as
+  embedded keys — a real block now needs a base64 body, an escaped-newline body
+  (GCP-style single-line `"…\n…"` keys), or a matching `-----END-----` with no quote
+  between the markers.
+- **Transport-KEX names in a doc string.** From a real-repo sweep
+  (terraform-aws-eks): `ssh-kex-classical`/`tls-classical-kex` fired on algorithm
+  names listed inside a Terraform/Packer `description = "…"` (6 hits on one line).
+  A `description`/`help`/`doc`/`comment` field value is now treated as prose.
+- **String-aware object scoping.** `enclosingObject` (used by the JWK/JOSE per-key
+  analysis) now honours JSON string values, so a brace inside a string can't
+  mis-scope a key; its brace-less fallback is a bounded ±window so a distant `"kty"`
+  can't over-suppress a standalone JWT/JOSE finding.
+
+### Fixed — cross-detector double-counts & language precision
+
+- **webcrypto × jose / jwk × jwt.** A quoted `RSA-OAEP`/`ECDH-ES` next to a
+  `subtle.*(` call is owned by the WebCrypto detector; an `alg` inside a JWK object
+  (a `"kty"` in scope) is owned by the JWK detector — the `jwt-jose` detector defers
+  in both cases (mirroring the existing `jose`→`jwk` guard). `RSA1_5` is still
+  reported (WebCrypto doesn't match it).
+- **Java**: ECIES (EC encryption, HNDL); `SSLContext.getInstance("TLSv1.1"/"SSLv2")`;
+  the `new X448KeyPairGenerator()`/`Ed448KeyPairGenerator`/`X448PrivateKeyParameters`
+  forms. **C#**: `SecurityAlgorithms.*Sha256Signature` constants; certificate
+  *pinning* no longer flagged as a disabled validator, while `=> true`,
+  `=> { return true; }`, and `delegate { return true; }` still are. **Rust**:
+  qualified `x448::Secret`. **Elixir**: `:crypto.compute_key` (the (EC)DH agreement
+  op) and JOSE OKP X25519/X448 as key agreement (not an EdDSA signature).
+- **C**: `EVP_PKEY_derive` on an HKDF/scrypt/TLS1-PRF context and `EVP_DigestSign*`
+  keyed by HMAC/CMAC are no longer flagged as asymmetric crypto (per-match, so a real
+  RSA/ECDSA operation in the same file still fires). Widened the legacy-TLS method
+  forms (`TLSv1_1_method`, `_client`/`_server`, `SSLv2_method`).
+- **`tls-weak-cipher`** now catches a weak cipher inside a hyphenated suite name
+  (`ECDHE-RSA-RC4-SHA`) without flagging a hardened full-suite exclusion
+  (`HIGH:!ECDHE-RSA-RC4-SHA`). Identifier-form JWT alg constants (Java/C#/Rust) are
+  string-literal-suppressed like the Go rule.
+- **False negatives closed**: DNSSEC lowercase mnemonics (BIND `dnssec-policy`);
+  terraform `tls_private_key` ED25519 and the modern `aws_kms_key key_spec` alias;
+  database `PGSSLMODE`/MySQL `ssl-mode`/YAML `sslmode:` forms; ansible
+  X25519/X448/Ed25519/DSA; CloudFront `SSLv3`; Consul agent config in `.json`;
+  RFC 9580 (v6) OpenPGP algorithm ids 25–28 (X25519/X448/Ed25519/Ed448); PKCS#12
+  BER indefinite-length (`0x80`, NSS/Firefox `.p12` exports).
+
+### Fixed — engine correctness
+
+- **Triage cap** now selects the top findings by **severity**, not file-path order —
+  a critical in a late-sorting file is no longer dropped from triage and sunk to the
+  bottom of the report.
+- **CBOM merge** no longer crashes on a legal CBOM with no `components`, nor on a
+  duplicate `bom-ref` whose copy lacks `cryptoProperties`. CBOM `serialNumber` is now
+  content-addressed over the finding set / occurrence evidence (was derived from the
+  finding *count*, so distinct scans could collide).
+- **Readiness score** is independent of file order and real/test interleaving — the
+  diminishing-returns counter is bucketed per (severity × test-path), so a directory
+  rename can no longer move the score.
+- **CLI**: an `ENOENT` reports the actual missing path (a `--policy` /
+  `--write-baseline` failure is no longer blamed on the scan path); `--merge` without
+  `--format cbom` is now a loud error instead of silently dropping the merge files.
+- **sieve KAT**: an unverifiable vector (no seed/coins) is a *skip*, not a match — it
+  no longer inflates the "N/N matched" count into a false conformance pass.
+
+### Changed — dead-code removal & API surface
+
+- Removed three unused exported symbols (`ToolInputSchema`, `SuccessResponse`,
+  `writeLine`) and the dead `JsonValue` type; fixed two unreachable/redundant
+  branches (cosign `sign-blob` alternation, a redundant `CustomerMasterKeySpec`
+  fast-reject conjunct). Narrowed the visibility of **71** internal-only symbols
+  (used within a single file, not part of any package's public API). No behavior
+  change; the build's `declaration` emit + `noUnusedLocals` verify nothing external
+  depended on them.
+
+### Testing
+
+- Real-repo validation sweep (gin, gorilla/mux, flask, terraform-aws-eks, express,
+  helm/charts): the only false-positive class found (transport-KEX in a doc string)
+  is fixed above; everything else was legitimate. Benchmark corpus expanded with 11
+  labeled cases (positives + negative baits) for the new surfaces; suite at **916**
+  passing, precision/recall gates and the zero-FP negative set held throughout.
+
 ## [0.4.4] — 2026-07-19
 
 ### Added — infrastructure post-quantum readiness
