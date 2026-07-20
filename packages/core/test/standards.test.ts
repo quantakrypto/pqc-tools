@@ -13,8 +13,8 @@ import {
   PQC_TRANSITION_NOTE,
   STATEFUL_HBS_NOTE,
   TIER_PARAMS,
-  standardsReviewStatus,
 } from "../src/index.js";
+import { standardsReviewStatus } from "../src/standards.js";
 
 test("CNSA tier params in remediation match the standards source of truth", () => {
   // If someone changes a tier target in remediation.ts (or the manifest) without

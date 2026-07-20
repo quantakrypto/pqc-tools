@@ -56,13 +56,14 @@ export type {
 // Scan cancellation / work-budget errors.
 export { AbortError, BudgetExceededError } from "./errors.js";
 
-// Parallel scanning (worker_threads pool) + pure merge/chunk helpers.
-export { scanParallel, mergeChunkResults, chunkByBytes } from "./parallel.js";
-export type { ScanChunk, ChunkResult, SizedFile } from "./parallel.js";
+// Parallel scanning (worker_threads pool). The chunk/merge helpers and their
+// SizedFile/ChunkResult types are internal plumbing (not part of the public API).
+export { scanParallel } from "./parallel.js";
+export type { ScanChunk } from "./parallel.js";
 
-// Detector registry (plugin point) + helpers + the rule catalog.
-export { DetectorRegistry, defaultRegistry, detectorScope } from "./registry.js";
-export type { RuleCatalogEntry } from "./registry.js";
+// Detector registry (plugin point). `detectorScope` and the rule-catalog type are
+// internal.
+export { DetectorRegistry, defaultRegistry } from "./registry.js";
 
 // Canonical baseline (shared by qScan + the Action).
 export {
@@ -83,7 +84,7 @@ export { loadConfig, ConfigError, CONFIG_FILENAME } from "./config.js";
 export type { QuantakryptoFileConfig, LoadConfigResult } from "./config.js";
 
 // Filesystem walker (relative POSIX paths, default ignores, size/binary filters).
-export { walkFiles, isBinaryPath, isGeneratedPath, looksMinified } from "./walk.js";
+export { walkFiles, isBinaryPath, looksMinified } from "./walk.js";
 
 // Analyzable-language coverage (which source languages the scanner inspects).
 export {
@@ -123,7 +124,7 @@ export type {
 } from "./evidence.js";
 
 // Cryptography policy → per-finding verdicts (A.8.24 evidence §4).
-export { buildPolicyMapping, parseCryptoPolicy, verdictForAlgorithm } from "./policy.js";
+export { buildPolicyMapping, parseCryptoPolicy } from "./policy.js";
 export type { CryptoPolicy, PolicyVerdict, PolicyMapping, PolicyFindingVerdict } from "./policy.js";
 
 // Remediation lookup (family + tier-aware) and stateful-HBS guidance.
@@ -138,7 +139,7 @@ export {
 export type { SecurityTier } from "./remediation.js";
 
 // Post-quantum standards source of truth + review cadence.
-export { PQC_STANDARDS, standardsReviewStatus } from "./standards.js";
+export { PQC_STANDARDS } from "./standards.js";
 export type { PqcStandards, StandardsCitation, StandardsReviewStatus } from "./standards.js";
 
 // CWE identifier constants.

@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { DetectorRegistry, defaultRegistry, detectorScope, detectors } from "../src/index.js";
+import { DetectorRegistry, defaultRegistry, detectors } from "../src/index.js";
+import { detectorScope } from "../src/registry.js";
 import type { Detector } from "../src/index.js";
 
 const fakeDetector: Detector = {

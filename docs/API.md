@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 139 exported symbols.
+Public entry: `packages/core/src/index.ts` — 130 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -28,7 +28,6 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `CWE_RISKY_PRIMITIVE` | value |  |
 | `CWE_WEAK_STRENGTH` | value |  |
 | `CbomComponent` | type |  |
-| `ChunkResult` | type |  |
 | `Codemod` | type |  |
 | `Confidence` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `ConfigError` | value |  |
@@ -72,7 +71,6 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `RemediationResult` | type |  |
 | `ReportFormat` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `ReportOptions` | type |  |
-| `RuleCatalogEntry` | type |  |
 | `RuleMeta` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `SEVERITY_ORDER` | value |  |
 | `STATEFUL_HBS_NOTE` | value |  |
@@ -84,7 +82,6 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `SecurityTier` | type |  |
 | `Severity` | type | @quantakrypto/core — shared types (the locked public contract). |
 | `SignEvidenceOptions` | type |  |
-| `SizedFile` | type |  |
 | `SourceLocation` | interface | @quantakrypto/core — shared types (the locked public contract). |
 | `StandardsCitation` | type |  |
 | `StandardsReviewStatus` | type |  |
@@ -109,21 +106,18 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `buildTriageRequest` | value |  |
 | `changedFiles` | value |  |
 | `checkPatchPolicy` | value |  |
-| `chunkByBytes` | value |  |
 | `codemodFor` | value |  |
 | `codemodRegistry` | value |  |
 | `compareFindings` | value |  |
 | `configToggleCodemod` | value |  |
 | `defaultRegistry` | value |  |
 | `detectFile` | value |  |
-| `detectorScope` | value |  |
 | `detectors` | value |  |
 | `fingerprintFinding` | value |  |
 | `formatSummary` | value |  |
 | `formatTierGuidance` | value |  |
 | `isAnalyzableSource` | value |  |
 | `isBinaryPath` | value |  |
-| `isGeneratedPath` | value |  |
 | `isManifestFile` | value |  |
 | `languageToExtension` | value |  |
 | `loadBaseline` | value |  |
@@ -131,7 +125,6 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `looksMinified` | value |  |
 | `meetsThreshold` | value |  |
 | `mergeCboms` | value |  |
-| `mergeChunkResults` | value |  |
 | `parseCryptoPolicy` | value |  |
 | `remediateFindings` | value |  |
 | `remediationFor` | value |  |
@@ -143,12 +136,10 @@ Public entry: `packages/core/src/index.ts` — 139 exported symbols.
 | `scanParallel` | value |  |
 | `severityRank` | value |  |
 | `signReadinessReport` | value |  |
-| `standardsReviewStatus` | value |  |
 | `statefulHbsApplies` | value |  |
 | `toCbom` | value |  |
 | `toJson` | value |  |
 | `toSarif` | value |  |
-| `verdictForAlgorithm` | value |  |
 | `verifyFix` | value |  |
 | `vulnerableDependencies` | value |  |
 | `walkFiles` | value |  |

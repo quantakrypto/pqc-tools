@@ -9,14 +9,8 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
-import {
-  scan,
-  walkFiles,
-  looksMinified,
-  isGeneratedPath,
-  AbortError,
-  BudgetExceededError,
-} from "../src/index.js";
+import { scan, walkFiles, looksMinified, AbortError, BudgetExceededError } from "../src/index.js";
+import { isGeneratedPath } from "../src/walk.js";
 import type { Detector } from "../src/index.js";
 
 async function collect(iter: AsyncIterable<string>): Promise<string[]> {

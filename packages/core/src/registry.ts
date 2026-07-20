@@ -134,10 +134,13 @@ export class DetectorRegistry {
 }
 
 /**
- * The built-in detectors, in run order: the JS/TS source + config detectors,
- * then the per-language detectors (Python, Go, Java, C#, Rust, Ruby, C/C++),
- * then the language-agnostic PEM and stateful-HBS (SP 800-208) detectors. The
- * manifest (dependency) scanner is handled separately by `scan()`.
+ * The built-in detectors, in run order: the JS/TS source + language-agnostic config
+ * detectors, the per-language source packs (Python, Go, Java/Kotlin/Scala, C#, Rust,
+ * Ruby, PHP, Elixir, C/C++, Swift), the ~20 infrastructure/config detectors
+ * (Terraform, Bicep, Pulumi, CloudFormation, cloud-KMS, k8s, mesh, DNSSEC, Vault,
+ * database, messaging, VPN, Ansible, supply-chain, CI/CD, secrets, age, keystore,
+ * OpenPGP, JWK), and the stateful-HBS (SP 800-208) detector. The manifest (dependency)
+ * scanner is handled separately by `scan()`.
  *
  * This is the single source of truth for the default detector set: both
  * {@link defaultRegistry} and the public `detectors` export (re-exported from

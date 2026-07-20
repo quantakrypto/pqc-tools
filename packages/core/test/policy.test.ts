@@ -6,12 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  buildPolicyMapping,
-  buildReadinessReport,
-  parseCryptoPolicy,
-  verdictForAlgorithm,
-} from "../src/index.js";
+import { buildPolicyMapping, buildReadinessReport, parseCryptoPolicy } from "../src/index.js";
+import { verdictForAlgorithm } from "../src/policy.js";
 import type { CryptoPolicy, Finding, ScanResult } from "../src/index.js";
 
 function finding(over: Partial<Finding> = {}): Finding {

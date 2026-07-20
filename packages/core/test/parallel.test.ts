@@ -12,7 +12,8 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
-import { scanParallel, mergeChunkResults, chunkByBytes, scan } from "../src/index.js";
+import { scanParallel, scan } from "../src/index.js";
+import { mergeChunkResults, chunkByBytes } from "../src/parallel.js";
 import type { Finding } from "../src/index.js";
 
 function finding(file: string, line: number, ruleId: string): Finding {
