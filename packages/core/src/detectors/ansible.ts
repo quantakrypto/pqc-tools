@@ -123,7 +123,17 @@ export const ansibleDetector: Detector = {
     add(RE_ANSIBLE_RSA, RULE_ANSIBLE_RSA);
     add(RE_ANSIBLE_ECC, RULE_ANSIBLE_ECC);
     add(RE_ANSIBLE_EDDSA, RULE_ANSIBLE_EDDSA);
-    add(RE_ANSIBLE_XDH, RULE_ANSIBLE_XDH);
+    // Report the matched curve's own algorithm (X448 vs X25519) instead of the rule's
+    // default label.
+    eachMatch(RE_ANSIBLE_XDH, scan, (m) =>
+      findings.push(
+        findingFromRule(
+          RULE_ANSIBLE_XDH,
+          { file, content, index: m.index, matchLength: m[0].length },
+          m[0].includes("448") ? { algorithm: "X448" } : undefined,
+        ),
+      ),
+    );
     add(RE_ANSIBLE_DSA, RULE_ANSIBLE_DSA);
     return findings;
   },

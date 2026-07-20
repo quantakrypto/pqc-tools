@@ -98,6 +98,10 @@ test("weak sslmode is caught across PGSSLMODE / MySQL ssl-mode / YAML forms", ()
     rule(run("database.yml", "  sslmode: require\n"), "db-weak-sslmode"),
     "Rails YAML sslmode: require",
   );
+  assert.ok(
+    rule(run("app.yml", "ssl_mode: require\n"), "db-weak-sslmode"),
+    "underscore ssl_mode: require (gate and regex agree)",
+  );
   // verify-full (real verification) must NOT fire.
   assert.equal(rule(run(".env", "PGSSLMODE=verify-full\n"), "db-weak-sslmode"), undefined);
 });

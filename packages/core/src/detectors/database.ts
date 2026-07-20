@@ -88,7 +88,9 @@ export const databaseDetector: Detector = {
       );
     }
     const lc = content.toLowerCase();
-    if (lc.includes("sslmode") || lc.includes("ssl-mode")) {
+    // Cheap prefilter; matches the separators the RE_WEAK_SSLMODE regex accepts
+    // (`sslmode`, `ssl-mode`, `ssl_mode`) so no supported form is gated out.
+    if (lc.includes("sslmode") || lc.includes("ssl-mode") || lc.includes("ssl_mode")) {
       eachMatch(RE_WEAK_SSLMODE, scan, (m) =>
         findings.push(
           findingFromRule(RULE_WEAK_SSLMODE, {

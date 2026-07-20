@@ -26,6 +26,17 @@ test("community.crypto openssl_privatekey RSA / ECC classify correctly", () => {
   assert.equal(rule(run("play.yml", ecc), "ansible-openssl-ecc")?.algorithm, "ECDH");
 });
 
+test("openssl_privatekey X25519 / X448 report their own curve algorithm", () => {
+  const x25519 = "- community.crypto.openssl_privatekey:\n    type: X25519\n";
+  assert.equal(rule(run("play.yml", x25519), "ansible-openssl-xdh")?.algorithm, "X25519");
+  const x448 = "- community.crypto.openssl_privatekey:\n    type: X448\n";
+  assert.equal(
+    rule(run("play.yml", x448), "ansible-openssl-xdh")?.algorithm,
+    "X448",
+    "X448 reports X448, not the rule's default X25519 label",
+  );
+});
+
 test("gating: type: RSA with no community.crypto/openssl_privatekey marker does not fire", () => {
   assert.deepEqual(
     run("vars.yml", "database:\n  type: RSA\n").filter((f) => f.ruleId.startsWith("ansible-")),
