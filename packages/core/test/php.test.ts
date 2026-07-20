@@ -121,3 +121,18 @@ test("PHP detector is gated to .php and stays silent on clean/symmetric PHP", ()
     [],
   );
 });
+
+test("PHP JWT: firebase/php-jwt classical alg 'RS256' is flagged (shared jwt rule)", () => {
+  // PHP is now a JWT_HOST_EXTENSION, so the language-agnostic quoted-alg rule fires.
+  const f = run("auth.php", "<?php $t = \\Firebase\\JWT\\JWT::encode($p, $k, 'RS256');").find(
+    (x) => x.ruleId === "jwt-classical-alg",
+  );
+  assert.ok(f, "firebase/php-jwt RS256 is flagged as a classical JWT alg");
+  // A symmetric HS256 token must NOT fire.
+  assert.equal(
+    run("auth.php", "<?php $t = JWT::encode($p, $k, 'HS256');").find(
+      (x) => x.ruleId === "jwt-classical-alg",
+    ),
+    undefined,
+  );
+});

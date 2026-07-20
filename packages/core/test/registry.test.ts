@@ -129,3 +129,33 @@ test("ruleCatalog throws on a duplicate rule id across detectors", () => {
   const r = defaultRegistry.clone().register(dup);
   assert.throws(() => r.ruleCatalog(), /duplicate rule id/);
 });
+
+test("catalog invariant: hndl is consistent per (algorithm, category) — HNDL never under-reported", () => {
+  // The load-bearing correctness property (audit P0-4): whether a finding is
+  // harvest-now-decrypt-later exposed is determined by its (algorithm, category),
+  // NOT by which language pack emitted it. A key-exchange/ECDH rule with hndl:false
+  // silently under-reports quantum exposure. The `certificate` category is the sole
+  // exception — it deliberately mixes decrypt-capable private-key MATERIAL (hndl:true)
+  // with certs/public keys (hndl:false) — so it is excluded here.
+  const catalog = defaultRegistry.ruleCatalog().filter((r) => r.category !== "certificate");
+  const byKey = new Map<string, Map<boolean, string[]>>();
+  for (const r of catalog) {
+    const key = `${r.algorithm}|${r.category}`;
+    if (!byKey.has(key)) byKey.set(key, new Map());
+    const m = byKey.get(key)!;
+    if (!m.has(r.hndl)) m.set(r.hndl, []);
+    m.get(r.hndl)!.push(r.id);
+  }
+  const violations: string[] = [];
+  for (const [key, m] of byKey) {
+    if (m.size > 1) {
+      const detail = [...m.entries()].map(([h, ids]) => `hndl=${h}: ${ids.join(", ")}`).join(" | ");
+      violations.push(`${key} → ${detail}`);
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    `hndl must be uniform per (algorithm, category):\n${violations.join("\n")}`,
+  );
+});

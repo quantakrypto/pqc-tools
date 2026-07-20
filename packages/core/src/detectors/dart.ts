@@ -46,10 +46,14 @@ const RE_DART_RSA_KEYGEN = /\b(?:RSAKeyGenerator|RSAEngine)\b/g;
 // RSA signature schemes: pointycastle `RSASigner`/`PSSSigner`, cryptography
 // `RsaPss`/`RsaSsaPkcs1v15`. Distinct casing keeps these off the keygen rule.
 const RE_DART_RSA_SIGN = /\b(?:RSASigner|PSSSigner|RsaPss|RsaSsaPkcs1v15)\b/g;
-// ECDSA signing + EC key generation. pointycastle `ECDSASigner`/`ECKeyGenerator`,
-// cryptography `Ecdsa`. `\bEcdsa\b` requires a boundary, so `EcdsaP256`-style
-// concatenations (rare) and the all-caps `ECDSASigner` don't double-fire here.
-const RE_DART_ECDSA = /\b(?:ECDSASigner|ECKeyGenerator|Ecdsa)\b/g;
+// ECDSA SIGNING: pointycastle `ECDSASigner`, cryptography `Ecdsa`. `\bEcdsa\b`
+// requires a boundary, so `EcdsaP256`-style concatenations (rare) and the all-caps
+// `ECDSASigner` don't double-fire here. (EC keygen is a SEPARATE, HNDL-exposed rule.)
+const RE_DART_ECDSA = /\b(?:ECDSASigner|Ecdsa)\b/g;
+// EC KEY GENERATION (pointycastle `ECKeyGenerator`) is ambiguous — an EC key can
+// feed ECDSA signing OR ECDH agreement — so it is classified key-exchange/ECDH/
+// hndl:true (the fleet's HNDL-safe convention), NOT folded into the signing rule.
+const RE_DART_EC_KEYGEN = /\bECKeyGenerator\b/g;
 // ECDH key agreement: pointycastle `ECDHBasicAgreement`, cryptography `Ecdh`.
 // `\bEcdh\b` cannot match inside `Ecdsa` (different letters), so no overlap.
 const RE_DART_ECDH = /\b(?:ECDHBasicAgreement|Ecdh)\b/g;
@@ -93,7 +97,9 @@ const RULE_DART_RSA_SIGN: RuleMeta = {
   title: "Dart RSA signature",
   description: "pointycastle RSASigner/PSSSigner, cryptography RsaPss/RsaSsaPkcs1v15",
   category: "signature",
-  severity: "medium",
+  // `high`, consistent with every sibling pack's signature severity (go/java/php/
+  // objc/elixir RSA-sign) — the same primitive must not flip CI exit codes by language.
+  severity: "high",
   confidence: "high",
   algorithm: "RSA",
   hndl: false,
@@ -104,17 +110,34 @@ const RULE_DART_RSA_SIGN: RuleMeta = {
 };
 const RULE_DART_ECDSA: RuleMeta = {
   id: "dart-ecdsa",
-  title: "Dart ECDSA signature / EC key generation",
-  description: "pointycastle ECDSASigner/ECKeyGenerator, cryptography Ecdsa",
+  title: "Dart ECDSA signature",
+  description: "pointycastle ECDSASigner, cryptography Ecdsa",
   category: "signature",
   severity: "high",
   confidence: "high",
   algorithm: "ECDSA",
   hndl: false,
   cwe: CWE_BROKEN_CRYPTO,
-  message: "Classical ECDSA signing / EC key generation (Dart) is forgeable by a quantum attacker.",
+  message: "Classical ECDSA signing (Dart) is forgeable by a quantum attacker.",
   remediation:
     "Migrate to PQC signatures (ML-DSA-65, FIPS 204) as Dart crypto packages add support.",
+};
+const RULE_DART_EC_KEYGEN: RuleMeta = {
+  id: "dart-ec-keygen",
+  title: "Dart EC key generation",
+  description: "pointycastle ECKeyGenerator (ambiguous EC key: ECDSA or ECDH)",
+  // Ambiguous EC keygen → key-exchange/ECDH/hndl:true (fleet HNDL-safe convention),
+  // since the key may feed ECDH agreement (harvest-now-decrypt-later exposed).
+  category: "key-exchange",
+  severity: "high",
+  confidence: "high",
+  algorithm: "ECDH",
+  hndl: true,
+  cwe: CWE_BROKEN_CRYPTO,
+  message:
+    "EC key generation (Dart, pointycastle); an EC key can feed ECDH key agreement (harvest-now-decrypt-later exposed) as well as ECDSA signing, and is not quantum-safe.",
+  remediation:
+    "For key agreement migrate to hybrid X25519MLKEM768 (ML-KEM-768); for signatures ML-DSA-65 — as Dart crypto packages add support.",
 };
 const RULE_DART_ECDH: RuleMeta = {
   id: "dart-ecdh",
@@ -174,6 +197,7 @@ export const dartDetector: Detector = {
     RULE_DART_RSA_KEYGEN,
     RULE_DART_RSA_SIGN,
     RULE_DART_ECDSA,
+    RULE_DART_EC_KEYGEN,
     RULE_DART_ECDH,
     RULE_DART_ED25519,
     RULE_DART_X25519,
@@ -204,6 +228,7 @@ export const dartDetector: Detector = {
     add(RE_DART_RSA_KEYGEN, RULE_DART_RSA_KEYGEN);
     add(RE_DART_RSA_SIGN, RULE_DART_RSA_SIGN);
     add(RE_DART_ECDSA, RULE_DART_ECDSA);
+    add(RE_DART_EC_KEYGEN, RULE_DART_EC_KEYGEN);
     add(RE_DART_ECDH, RULE_DART_ECDH);
     add(RE_DART_ED25519, RULE_DART_ED25519);
     add(RE_DART_X25519, RULE_DART_X25519);

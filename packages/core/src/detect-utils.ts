@@ -291,6 +291,9 @@ export const JWT_HOST_EXTENSIONS: readonly string[] = [
   ...PYTHON_EXTENSIONS,
   ...GO_EXTENSIONS,
   ...RUBY_EXTENSIONS,
+  // PHP's firebase/php-jwt passes the alg as a quoted token (`'RS256'`, `'ES256'`),
+  // the same shape RE_JWT_ALG matches — so PHP files are in scope for it too.
+  ...PHP_EXTENSIONS,
 ];
 
 /**

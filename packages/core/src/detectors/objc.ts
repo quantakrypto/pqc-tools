@@ -77,18 +77,20 @@ const RULE_OBJC_SEC_EC: RuleMeta = {
   id: "objc-seckey-ec",
   title: "Objective-C Security-framework EC key",
   description: "SecKeyCreateRandomKey / SecKeyGeneratePair with kSecAttrKeyTypeECSECPrimeRandom",
-  category: "signature",
+  // An EC key at generation is AMBIGUOUS (it can feed ECDSA signing OR ECDH key
+  // agreement). The fleet convention (java-ec-keygen, python-ec-keygen, swift-sec-ec,
+  // cloud-kms-ec, …) classifies ambiguous EC keygen as key-exchange/ECDH/hndl:true —
+  // the HNDL-SAFE choice, so a possible key-agreement use is never under-reported.
+  category: "key-exchange",
   severity: "high",
   confidence: "high",
-  // EC keys feed BOTH ECDSA signatures and ECDH agreement; classified conservatively
-  // as signing (the default use of an EC key), hence hndl:false.
-  algorithm: "ECDSA",
-  hndl: false,
+  algorithm: "ECDH",
+  hndl: true,
   cwe: CWE_BROKEN_CRYPTO,
   message:
-    "Security-framework EC key (Objective-C); EC keys feed ECDSA signatures (and ECDH key agreement) and are not quantum-safe.",
+    "Security-framework EC key (Objective-C); EC keys feed ECDH key agreement (harvest-now-decrypt-later exposed) as well as ECDSA signatures, and are not quantum-safe.",
   remediation:
-    "Migrate to PQC as Apple's CryptoKit / Security add support: ML-DSA for signatures, ML-KEM for the ECDH key-agreement path.",
+    "Migrate to PQC as Apple's CryptoKit / Security add support: ML-KEM for the ECDH key-agreement path, ML-DSA for signatures.",
 };
 const RULE_OBJC_RSA_SIGN: RuleMeta = {
   id: "objc-rsa-sign",

@@ -27,15 +27,16 @@ test("RSA key generation via kSecAttrKeyTypeRSA is flagged (kem, hndl:true)", ()
   assert.equal(f?.severity, "high");
 });
 
-test("EC key generation via kSecAttrKeyTypeECSECPrimeRandom is flagged (signature, hndl:false)", () => {
+test("EC key generation via kSecAttrKeyTypeECSECPrimeRandom is flagged (key-exchange, hndl:true)", () => {
   const src =
     `NSDictionary *attrs = @{ (id)kSecAttrKeyType: (id)kSecAttrKeyTypeECSECPrimeRandom,\n` +
     `                         (id)kSecAttrKeySizeInBits: @256 };\n` +
     `SecKeyRef key = SecKeyCreateRandomKey((__bridge CFDictionaryRef)attrs, &error);`;
   const f = rule(run("keys.m", src), "objc-seckey-ec");
-  assert.equal(f?.algorithm, "ECDSA");
-  assert.equal(f?.category, "signature");
-  assert.equal(f?.hndl, false);
+  // Ambiguous EC keygen → key-exchange/ECDH/hndl:true (fleet HNDL-safe convention).
+  assert.equal(f?.algorithm, "ECDH");
+  assert.equal(f?.category, "key-exchange");
+  assert.equal(f?.hndl, true);
   // legacy kSecAttrKeyTypeEC alias also matches.
   assert.ok(
     rule(

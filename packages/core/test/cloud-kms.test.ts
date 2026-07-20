@@ -152,3 +152,19 @@ test("cloud-kms STILL fires in a .ts SDK file that merely mentions a CFN marker 
   );
   assert.equal(f?.algorithm, "RSA");
 });
+
+test("a commented-out KeySpec in YAML/JSON config is NOT flagged (comment masking)", () => {
+  // These config extensions aren't covered by the central source-comment stripper,
+  // so cloud-kms masks # and // comment lines itself.
+  assert.deepEqual(
+    run("kms.yaml", '# KeySpec: "RSA_2048"\nname: my-key\n').filter((f) =>
+      f.ruleId.startsWith("cloud-kms-"),
+    ),
+    [],
+  );
+  // A live (uncommented) YAML KeySpec still fires.
+  assert.ok(
+    rule(run("kms.yaml", 'keySpec: "RSA_2048"\n'), "cloud-kms-rsa"),
+    "a live YAML KeySpec is still detected",
+  );
+});

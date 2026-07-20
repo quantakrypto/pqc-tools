@@ -19,7 +19,14 @@
  * later exposed → hndl:true.
  */
 import type { Detector, Finding, RuleMeta } from "../types.js";
-import { DOC_EXTENSIONS, eachMatch, findingFromRule, hasExtension } from "../detect-utils.js";
+import {
+  DOC_EXTENSIONS,
+  eachMatch,
+  findingFromRule,
+  hasExtension,
+  maskBlockComments,
+  maskCommentLines,
+} from "../detect-utils.js";
 import { isCloudTemplateFile } from "./cloudformation.js";
 import { CWE_BROKEN_CRYPTO } from "../cwe.js";
 
@@ -109,9 +116,14 @@ export const cloudKmsDetector: Detector = {
     // the KMS key specs — defer so a KeySpec line is not counted twice. Gated to the
     // template extensions it scans, so an SDK call in a `.ts` stays covered here.
     if (isCloudTemplateFile(file, content)) return [];
+    // Mask comments before scanning so a commented-out `# KeySpec: "RSA_2048"` in a
+    // YAML/JSON/HCL config (which the central source-comment stripper doesn't cover)
+    // can't fire. Offsets are preserved, so the finding's snippet — built from the
+    // original `content` — stays exact.
+    const scan = maskCommentLines(maskBlockComments(content), ["#", "//"]);
     const findings: Finding[] = [];
     const add = (re: RegExp, rule: RuleMeta): void =>
-      eachMatch(re, content, (m) =>
+      eachMatch(re, scan, (m) =>
         findings.push(
           findingFromRule(rule, { file, content, index: m.index, matchLength: m[0].length }),
         ),

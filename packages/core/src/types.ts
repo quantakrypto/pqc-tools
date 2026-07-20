@@ -347,10 +347,11 @@ export interface ScanResult {
    */
   diagnostics?: ScanDiagnostics;
   /**
-   * Of `filesScanned`, how many were in a source language the scanner can
-   * actually analyze for inline crypto (JS/TS, Python, Go, Java). When this is 0 but
-   * `filesScanned` > 0, the readiness score reflects NO analyzable code — the
-   * crypto likely lives in an unsupported language (Go, Java, Rust, …) — and
+   * Of `filesScanned`, how many were in a source language the scanner can actually
+   * analyze for inline crypto (the 13 packs: JS/TS, Python, Go, Java/Kotlin/Scala,
+   * C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart). When this is 0
+   * but `filesScanned` > 0, the readiness score reflects NO analyzable code — the
+   * crypto likely lives in an unsupported language (Lua, Perl, …) — and
    * reporters surface that so a bare 100/100 can't read as "safe". Optional for
    * backward compatibility with hand-built results.
    */

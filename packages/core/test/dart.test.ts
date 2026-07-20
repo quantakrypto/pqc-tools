@@ -69,11 +69,13 @@ test("dart-ecdsa: ECDSASigner → ECDSA / signature / not hndl", () => {
   assert.equal(f.hndl, false);
 });
 
-test("dart-ecdsa: ECKeyGenerator (conservative) → ECDSA / signature", () => {
-  const f = only(run("eckeys.dart", "final gen = ECKeyGenerator();"), "dart-ecdsa");
-  assert.equal(f.algorithm, "ECDSA");
-  assert.equal(f.category, "signature");
-  assert.equal(f.hndl, false);
+test("dart-ec-keygen: ECKeyGenerator (ambiguous) → ECDH / key-exchange / hndl:true", () => {
+  // An EC key at generation can feed ECDH agreement, so it's classified HNDL-safe
+  // (key-exchange/ECDH/hndl:true), matching the fleet convention — NOT the sign rule.
+  const f = only(run("eckeys.dart", "final gen = ECKeyGenerator();"), "dart-ec-keygen");
+  assert.equal(f.algorithm, "ECDH");
+  assert.equal(f.category, "key-exchange");
+  assert.equal(f.hndl, true);
 });
 
 test("dart-ecdsa: cryptography Ecdsa → ECDSA / signature", () => {
