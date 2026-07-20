@@ -202,9 +202,13 @@ async function main(argv) {
   return 1;
 }
 
-main(process.argv.slice(2))
-  .then((code) => process.exit(code))
-  .catch((err) => {
-    process.stderr.write(`validate-sarif: fatal: ${err?.stack ?? err}\n`);
-    process.exit(2);
-  });
+// Only run the CLI when invoked directly — importing this module (e.g. to unit
+// test `validateSarif`) must NOT trigger a scan or call process.exit().
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main(process.argv.slice(2))
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      process.stderr.write(`validate-sarif: fatal: ${err?.stack ?? err}\n`);
+      process.exit(2);
+    });
+}
