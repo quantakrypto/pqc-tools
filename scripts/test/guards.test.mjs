@@ -20,7 +20,11 @@ import { fileURLToPath } from "node:url";
 
 import { validateSarif } from "../validate-sarif.mjs";
 import { findUnpinnedActions } from "../check-action-pins.mjs";
-import { scanFileForViolations, maskCode } from "../check-offline-boundary.mjs";
+import {
+  scanFileForViolations,
+  maskCode,
+  scanWorkflowForAutoMerge,
+} from "../check-offline-boundary.mjs";
 
 const SCRIPTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -242,4 +246,13 @@ test("offline-boundary masking ignores tokens inside comments and string literal
     [],
     "a fetch token inside a string is not a violation",
   );
+});
+
+test("offline-boundary scans WORKFLOWS for auto-merge (ADR-0005 covers CI too)", () => {
+  const wf = "jobs:\n  merge:\n    steps:\n      - run: gh pr merge --squash --admin\n";
+  const vs = scanWorkflowForAutoMerge(".github/workflows/bad.yml", wf);
+  assert.equal(vs.length, 1);
+  assert.equal(vs[0].rule, "auto-merge");
+  // A benign workflow line is not flagged.
+  assert.deepEqual(scanWorkflowForAutoMerge(".github/workflows/ci.yml", "- run: npm test\n"), []);
 });

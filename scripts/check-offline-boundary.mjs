@@ -112,16 +112,43 @@ function sourceFiles(dir) {
   return out;
 }
 
-/** Walk every workspace's `src/` and return all violations. */
-export function findOfflineBoundaryViolations(root = ROOT) {
-  const pkgsDir = join(root, "packages");
+/** Scan a workflow file's RAW text for the auto-merge rule (ADR-0005 covers workflows). */
+export function scanWorkflowForAutoMerge(relFile, text) {
   const violations = [];
-  if (!existsSync(pkgsDir)) return violations;
-  for (const pkg of readdirSync(pkgsDir)) {
-    const src = join(pkgsDir, pkg, "src");
-    for (const file of sourceFiles(src)) {
-      const rel = relative(root, file);
-      violations.push(...scanFileForViolations(pkg, rel, readFileSync(file, "utf8")));
+  text.split("\n").forEach((line, i) => {
+    if (RE_AUTOMERGE.test(line)) {
+      violations.push({
+        rule: "auto-merge",
+        pkg: "workflow",
+        file: relFile,
+        line: i + 1,
+        snippet: line.trim().slice(0, 120),
+      });
+    }
+  });
+  return violations;
+}
+
+/** Walk every workspace's `src/` plus the CI workflows and return all violations. */
+export function findOfflineBoundaryViolations(root = ROOT) {
+  const violations = [];
+  const pkgsDir = join(root, "packages");
+  if (existsSync(pkgsDir)) {
+    for (const pkg of readdirSync(pkgsDir)) {
+      const src = join(pkgsDir, pkg, "src");
+      for (const file of sourceFiles(src)) {
+        const rel = relative(root, file);
+        violations.push(...scanFileForViolations(pkg, rel, readFileSync(file, "utf8")));
+      }
+    }
+  }
+  // ADR-0005's no-auto-merge rule covers workflows too, not just package source.
+  const wfDir = join(root, ".github", "workflows");
+  if (existsSync(wfDir)) {
+    for (const name of readdirSync(wfDir)) {
+      if (!/\.ya?ml$/.test(name)) continue;
+      const rel = relative(root, join(wfDir, name));
+      violations.push(...scanWorkflowForAutoMerge(rel, readFileSync(join(wfDir, name), "utf8")));
     }
   }
   return violations;
