@@ -86,11 +86,15 @@ imported by both planes.
   full-file LLM rewrite, so an injected/hostile model could pass unrelated code
   through it; `--mode apply` then writes it unreviewed. LLM fixes are therefore
   **"crypto-verified, not security-reviewed"** and must be reviewed as a diff.
-  Bounding the blast radius and correcting the "verified fixes" wording are open. (F1)
+  *(F1) **Resolved**: a blast-radius guard now bounds a patch to the finding's file
+  set + dependency manifests, and the output framing says "crypto-verified, not
+  security-reviewed" honestly — see [ROADMAP §1](../ROADMAP.md).*
 - **On the MCP plane the gates are advisory** — the host agent writes files, so
   patch-policy/`verify_fix` are not enforced there. Documented, not code-guaranteed. (F5)
-- **No instruction/data separation** in the prompt (untrusted code shares the user
-  turn with the rubric) and **no per-run LLM call/spend ceiling**. (F2, F3)
+- *(F2, F3) **Resolved**: instruction/data separation now travels via the provider's
+  real `system` role (the rubric out-ranks the untrusted user turn, with an explicit
+  anti-injection preamble), and a per-run spend ceiling (`--max-findings`) caps LLM
+  calls. See [ROADMAP §1](../ROADMAP.md) and `packages/agent/src/loop.ts`.*
 
 ## Alternatives considered
 

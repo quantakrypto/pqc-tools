@@ -8,7 +8,7 @@ real-world code**.
 
 This benchmark fills that gap. It answers a harder question: *of the
 quantum-vulnerable cryptography that actually appears in idiomatic code across all
-eight supported languages, how much does the scanner catch?* The number is an
+eight benchmark-corpus languages, how much does the scanner catch?* The number is an
 honest lower bound, and the false negatives it enumerates are the actionable
 output — the roadmap for closing detector gaps.
 

@@ -277,7 +277,7 @@ comment; the build is **not** failed.
 
 ## 8. Run the packages' own automated test suite
 
-To confirm the whole toolset is internally healthy (the ~579 tests that gate CI):
+To confirm the whole toolset is internally healthy (the ~1063 tests that gate CI):
 
 ```bash
 git clone https://github.com/quantakrypto/pqc-tools && cd pqc-tools

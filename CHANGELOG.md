@@ -6,6 +6,23 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed — pre-release hardening (adversarial audit)
+
+- **Offline-boundary guard** was bypassable by ordinary formatter-produced code
+  (multi-line imports, side-effect/re-export imports, `//` inside a URL string,
+  `fetch()` in a template interpolation, bracket/destructured `process.env` key
+  reads, outbound Node modules). Rewritten with a single-pass code/string/comment
+  lexer and whole-file scanning; workflow auto-merge coverage added.
+- **SSH-CA** now flags the canonical `TrustedUserCAKeys`/`HostCertificate`/`ssh-keygen
+  -s` deployment (previously zero findings) and no longer fires on program source
+  files. **SPIRE** matches unquoted-YAML and JSON forms (missed every Helm/JSON
+  deployment). **DKIM** no longer false-positives on a bare `k=rsa` in prose.
+- **CBOM** schema validity: quantum-posture flags moved out of `cryptoProperties`
+  (which is `additionalProperties:false`) into component `properties[]`; the invalid
+  `keyagree` cryptoFunction is now `other`; the `certificate` category defaults to
+  `assetType: certificate` (ACM/Vault-PKI/SPIFFE-SVID were mislabelled).
+- **OpenVEX** product `@id` is now an IRI (`file:…#L…`).
+
 ### Added — coverage: Objective-C, Dart, DKIM, SSH-CA, SPIFFE/SPIRE
 
 Five new detectors close the coverage gaps that were tracked as post-1.0:

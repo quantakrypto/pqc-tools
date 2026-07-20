@@ -4,7 +4,7 @@
 >
 > _Banner added 2026-07-15._ This is a **point-in-time audit of v0.1.0**, kept for
 > historical reference. It is **out of date** — the code has since shipped through
-> **0.4.2**. For current status, read **[docs/ROADMAP.md](ROADMAP.md)**.
+> **0.5.0** (tagged; 0.4.4 published). For current status, read **[docs/ROADMAP.md](ROADMAP.md)**.
 >
 > Most of the **§7 roadmap table** below has since **shipped**, and several of the
 > defects this audit describes are now **fixed** — including the dead

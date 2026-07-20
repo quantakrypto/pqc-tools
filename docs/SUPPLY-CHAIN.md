@@ -11,7 +11,7 @@ buys several assurance checks for free; the gaps are process, not dependencies.
 
 ## 1. Targets vs. current status
 
-> **Status as of v0.4.2 (2026-07-15):** provenance is **live**; the remaining
+> **Status as of v0.5.0 (tagged; 0.4.4 published):** provenance is **live**; the remaining
 > gaps are the Scorecard workflow, `reuse lint` in CI, per-package `LICENSE` in
 > tarballs, and — most actionably — the **stale `v1` Action tag** (see §3).
 

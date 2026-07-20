@@ -14,7 +14,7 @@ All packages follow [Semantic Versioning 2.0.0](https://semver.org): `MAJOR.MINO
 - **PATCH** — backward-compatible bug fixes (including detection-accuracy fixes
   that do not change the data contract).
 
-### Pre-1.0 reality (today: all packages `0.4.2`)
+### Pre-1.0 reality (today: all packages `0.5.0` tagged; `0.4.4` published)
 
 Under SemVer's 0.x rule, **anything may change in a minor release** and the public
 API is explicitly **pre-stable**. We make **no compatibility promises before 1.0**

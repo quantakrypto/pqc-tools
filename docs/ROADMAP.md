@@ -25,7 +25,7 @@ Audit sources: [security](audits/security.md) · [cryptography](audits/cryptogra
 > - **`qprobe`** — a live-endpoint prober (TLS/SSH/SMTP/IMAP/POP3/Postgres, behind an
 >   ownership-attestation gate) that checks what an endpoint actually negotiates
 >   (e.g. X25519MLKEM768), complementing the static scan.
-> - **Quality:** **~985 tests** across the workspaces; precision/recall benchmark
+> - **Quality:** **~1063 tests** across the workspaces; precision/recall benchmark
 >   **= 1.000** (curated corpus) with a separate real-world recall-depth benchmark at
 >   **0.84** (per-language floors); a **frozen public API surface** with a drift gate
 >   (`api:check`); build + ESLint + Prettier clean; **zero runtime dependencies**.
@@ -209,7 +209,7 @@ Fold these recurring lenses in beyond one-off reviews:
 
 > The v0.2 roadmap below was the consolidated, prioritised plan distilled from the
 > multi-discipline audits in [`docs/audits/`](audits/). **Every P0/P1/P2 item was
-> implemented** (build clean, 307 tests at v0.2 → 593 now, ESLint + Prettier
+> implemented** (build clean, 307 tests at v0.2 → ~1063 now, ESLint + Prettier
 > clean, zero runtime deps). Retained verbatim as the record of what each item
 > entailed. The one item marked "deferred" at the time — publishing (§5) — has
 > since shipped (see "Current status" above).
