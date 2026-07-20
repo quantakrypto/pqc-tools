@@ -1,6 +1,6 @@
 {
   "name": "@quantakrypto/qscan",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "qScan — find quantum-vulnerable cryptography in any codebase (CLI). Zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
@@ -37,8 +37,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@quantakrypto/agent": "0.4.4",
-    "@quantakrypto/core": "0.4.4"
+    "@quantakrypto/agent": "0.5.0",
+    "@quantakrypto/core": "0.5.0"
   },
   "scripts": {
     "build": "tsc -b",

@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-20
+
 ### Fixed — detector precision (cross-detector double-counts)
 
 Several config detectors emitted a second finding for a line another detector
