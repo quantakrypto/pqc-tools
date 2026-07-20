@@ -1,0 +1,10 @@
+- name: mint keys
+  community.crypto.openssl_privatekey:
+    path: /etc/ssl/x25519.key
+    type: X25519
+- community.crypto.openssl_privatekey:
+    path: /etc/ssl/x448.key
+    type: X448
+- community.crypto.openssl_privatekey:
+    path: /etc/ssl/ed.key
+    type: Ed25519

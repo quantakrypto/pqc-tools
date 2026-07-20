@@ -1091,5 +1091,72 @@
         "hndl": false
       }
     ]
+  },
+  "positive/gcp-service-account-key.json": {
+    "category": "pem-embedded-key",
+    "expected": [
+      {
+        "ruleId": "pem-pkcs8-private-key",
+        "algorithm": "unknown",
+        "hndl": true
+      }
+    ]
+  },
+  "positive/terraform-ed25519.tf": {
+    "category": "iac-terraform",
+    "expected": [
+      {
+        "ruleId": "tf-ed25519-key",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/ansible-curves.yml": {
+    "category": "iac-ansible",
+    "expected": [
+      {
+        "ruleId": "ansible-openssl-xdh",
+        "algorithm": "X25519",
+        "hndl": true
+      },
+      {
+        "ruleId": "ansible-openssl-xdh",
+        "algorithm": "X448",
+        "hndl": true
+      },
+      {
+        "ruleId": "ansible-openssl-eddsa",
+        "algorithm": "EdDSA",
+        "hndl": false
+      }
+    ]
+  },
+  "positive/dnssec-lowercase.conf": {
+    "category": "dnssec",
+    "expected": [
+      {
+        "ruleId": "dnssec-rsa-sig",
+        "algorithm": "RSA",
+        "hndl": false
+      },
+      {
+        "ruleId": "dnssec-ecdsa-sig",
+        "algorithm": "ECDSA",
+        "hndl": false
+      }
+    ]
+  },
+  "negative/hcl-kex-description.tf": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/pem-parser-constants.ts": {
+    "category": "negative",
+    "expected": []
+  },
+  "negative/php-commented-crypto.php": {
+    "category": "negative",
+    "expected": []
   }
 }
