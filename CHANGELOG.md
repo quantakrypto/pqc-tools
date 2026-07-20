@@ -639,7 +639,7 @@ now single-source:
 
 ## [0.4.3] — 2026-07-15
 
-The **2026-07-15 5-lens audit** ([`docs/audits/2026-07-15-v0.4-review.md`](docs/audits/2026-07-15-v0.4-review.md))
+The **2026-07-15 5-lens audit**
 and its remediation, plus the detection-depth work that followed — the
 false-negative **recall benchmark** and the precision/recall fixes a **real-repo
 validation** run surfaced. Build clean; tuned benchmark precision/recall **1.000**
@@ -749,7 +749,7 @@ First published to npm under the `@quantakrypto` scope with build provenance.
 ### Fixed
 
 - `qremediate` now fully fixes files with multiple TLS issues in one pass; added
-  the end-to-end testing runbook ([`docs/how-to-test-0.4.md`](docs/how-to-test-0.4.md)).
+  the end-to-end testing runbook (`docs/how-to-test-0.4.md`).
 
 ## [0.4.0] — 2026-07-03
 
@@ -804,7 +804,7 @@ and the optional LLM agent line land together; still **zero runtime dependencies
 ## [0.2.0] — 2026-06-29
 
 The audit-hardening release. Implements the full P0/P1/P2 roadmap (see
-[`docs/ROADMAP.md`](docs/ROADMAP.md)). Build clean; **307 tests pass**; ESLint +
+`docs/ROADMAP.md`). Build clean; **307 tests pass**; ESLint +
 Prettier clean; still zero runtime dependencies.
 
 ### Added

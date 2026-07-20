@@ -21,7 +21,7 @@ Two temptations would each be a correctness lie:
    is missing — turning a SKIP into a fake PASS.
 
 The [COMPLIANCE.md](../COMPLIANCE.md) honesty rules and the
-[cryptography audit](../audits/cryptography.md) both treat this no-fabrication
+cryptography audit both treat this no-fabrication
 stance as a load-bearing property of the toolset's credibility.
 
 ## Decision
@@ -61,15 +61,14 @@ fields and emits notes for the rest; `vectors/` is tracked but ships only a
 README + `.gitkeep`. To make a passing `kat` run *traceable* to the exact
 authentic files used, Sieve should record vector **provenance** (source URL, hash,
 version) in its report — designed in
-[compliance/acvp-provenance.md](../compliance/acvp-provenance.md) and tracked as
-[ROADMAP COMPLIANCE #10](../ROADMAP.md). That provenance record strengthens this
+[compliance/acvp-provenance.md](../compliance/acvp-provenance.md) and tracked as That provenance record strengthens this
 ADR; it does not relax it.
 
 ## Guardrails this ADR protects (do not erode)
 
 - Sieve is **not** a CAVP/CMVP tool; a passing Sieve run is **not** a FIPS 140-3
   result. Module validation stays a lab/CMVP process.
-- Adding a new family (e.g. SLH-DSA / FIPS 205, [ROADMAP P2-8](../ROADMAP.md))
+- Adding a new family (e.g. SLH-DSA / FIPS 205)
   must follow the same rule: ship no vectors, load operator-supplied ACVP only.
 
 ## Alternatives considered

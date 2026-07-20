@@ -24,7 +24,7 @@ Format: a lightweight [MADR](https://adr.github.io/madr/)-style record.
 
 - [VERSIONING.md](../VERSIONING.md) — SemVer + deprecation policy (operationalises ADR-0002).
 - [CONFIG.md](../CONFIG.md) — the optional `quantakrypto.config.json` spec.
-- [ROADMAP.md](../ROADMAP.md) — open work, several items of which test these decisions.
+- [OBJECTIVES.md](../OBJECTIVES.md) — the toolchain's objectives, scope boundaries, and how these decisions fit together.
 
 ---
 

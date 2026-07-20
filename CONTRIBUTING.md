@@ -62,17 +62,18 @@ or skip the hook entirely for a WIP checkpoint with `git commit --no-verify`.
 3. Update the relevant package `README.md` and, if it changes a documented
    behaviour, `CHANGELOG.md`.
 4. Describe what changed and why; link any related item in
-   [`docs/ROADMAP.md`](docs/ROADMAP.md).
+   [`docs/OBJECTIVES.md`](docs/OBJECTIVES.md).
 
 ## Where to start
 
-The prioritised work is in [`docs/ROADMAP.md`](docs/ROADMAP.md), distilled from
-the discipline audits under [`docs/audits/`](docs/audits/). The P1 detector
-additions (new languages / algorithms) have **shipped** — the detector line now
-covers eight languages. Current open work (ROADMAP §1) is **cross-language
-detection parity** and growing the **false-negative corpus**, plus **hardening the
-opt-in agent line** (`--triage` / `qremediate`); test-coverage gaps remain a good
-first contribution.
+The toolchain's objectives, scope boundaries, and decisions are in
+[`docs/OBJECTIVES.md`](docs/OBJECTIVES.md), and the architecture rationale in the
+[ADRs](docs/adr/README.md). The detector line covers 14 source languages plus a
+broad config/infra surface; good contribution areas are **new detection surfaces**
+(a language or protocol pack), **growing the per-language recall corpus**, and
+**test-coverage gaps**. New detectors follow the pattern in
+[`packages/core/README.md`](packages/core/README.md) — a fast-reject gate, comment
+masking, tight `\b`-anchored regexes, and positive/negative/gating tests.
 
 ## Security
 

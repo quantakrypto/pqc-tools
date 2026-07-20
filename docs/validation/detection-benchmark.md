@@ -4,7 +4,7 @@ This document records how we **measure** the accuracy of qScan's crypto
 detectors against a known ground truth, the **current measured numbers**
 (precision / recall / F1, overall and per category), and — honestly — the
 **false positives and false negatives** the scanner currently produces. It is a
-companion to the [cryptography audit](../audits/cryptography.md), which reviews
+companion to the cryptography audit, which reviews
 detector design; this doc quantifies detector behaviour and locks it as a
 regression guard.
 

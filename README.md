@@ -124,17 +124,15 @@ npm test           # node:test across all packages
 The toolchain is intentionally tiny: TypeScript + `tsx` (to run `node:test` on
 `.ts`) are the only dev dependencies; there are **no runtime dependencies**.
 
-## Documentation, audits & compliance
+## Documentation & compliance
 
 Full documentation lives in **[`docs/`](docs/README.md)**:
 
-- **[Roadmap & status](docs/ROADMAP.md)** — the prioritised plan (P0/P1/P2) and
-  "what's missing", distilled from the audits. Most of it has shipped, so it now
-  reads as a status doc — what's done and what remains — rather than a worklist.
-- **Audits** (independent expert passes): [security](docs/audits/security.md) ·
-  [cryptography](docs/audits/cryptography.md) · [architecture](docs/audits/architecture.md) ·
-  [performance](docs/audits/performance.md) · [testing/devex](docs/audits/testing-devex.md) ·
-  [overview](docs/AUDIT.md).
+- **[Objectives & scope](docs/OBJECTIVES.md)** — what the toolchain is for, what
+  each library does, the load-bearing decisions, and the deliberate scope
+  boundaries. Start here.
+- **[Architecture decisions](docs/adr/README.md)** — the immutable "why" behind
+  each load-bearing choice (zero deps, shared core contract, two-plane agent, …).
 - **[Standards & compliance](docs/COMPLIANCE.md)** — what the tools touch and
   could align to: NIST FIPS 203/204/205, SP 800-208, CNSA 2.0, SARIF, CWE,
   ISO/IEC 27001 (A.8.24), Common Criteria, FIPS 140-3, EU DORA/NIS2, US

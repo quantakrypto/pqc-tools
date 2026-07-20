@@ -8,7 +8,7 @@
 ## Context
 
 `qscan` and the Action produce a human-facing readiness report. A recurring
-roadmap question (`docs/ROADMAP.md` §1 🟡) was whether to internationalise it —
+open question was whether to internationalise it —
 add message catalogs and translate the report into other locales.
 
 The forces at play:

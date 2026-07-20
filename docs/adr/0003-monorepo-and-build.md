@@ -46,7 +46,7 @@ contributors run three commands (`npm install` / `npm run build` / `npm test`).
   **freshness gate** (`action-bundle` in [ci.yml](../../.github/workflows/ci.yml))
   re-bundles and fails the build if the committed `dist/` drifts from source. (One
   release caveat remains — the moving `v1` tag is not yet re-pointed at the current
-  release, so it can lag `main`; see [ROADMAP §5](../ROADMAP.md).) This was a
+  release, so it can lag `main`; see [OBJECTIVES.md](OBJECTIVES.md).) This was a
   deliberate consequence of choosing a monorepo + a compiled action.
 - **Shared versioning discipline.** Independent publish + a shared contract means
   version bumps must follow [VERSIONING.md](../VERSIONING.md) so a core change and

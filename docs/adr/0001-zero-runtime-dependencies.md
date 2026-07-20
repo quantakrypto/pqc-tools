@@ -12,7 +12,7 @@ quantum-vulnerable cryptography lives and it runs in privileged contexts (CI wit
 write tokens, AI agents with filesystem access, a potential hosted MCP service).
 For such a tool, the **supply chain is part of the threat model**. The dominant
 class of JavaScript-ecosystem risk is transitive dependencies and npm lifecycle
-scripts (`postinstall`/`prepare`), as the [security audit §6](../audits/security.md)
+scripts (`postinstall`/`prepare`), as the security audit §6
 records. A scanner that itself drags in a deep dependency tree would undermine
 the assurance it sells.
 
@@ -46,7 +46,7 @@ a credible posture for the security claim the tools make.
 **Harder (costs accepted):** we re-implement and maintain functionality that
 mature libraries provide — JSON-RPC dispatch, Actions shims, arg parsers, SARIF.
 These hand-rolled parsers are an *input-handling* risk concentrated in our own
-code (which is why [ROADMAP P1-10](../ROADMAP.md) calls for fuzz targets over the
+code (which is why calls for fuzz targets over the
 four of them: Sieve protocol/base64, manifest JSON, SARIF, qScan args). We accept
 this tradeoff: a small amount of audited first-party parsing code is preferable to
 a large unaudited dependency tree.
@@ -64,5 +64,4 @@ invariant from eroding. The `runtime deps: 0` README badge is a public commitmen
   assurance property.
 - **Bundle dependencies at build time** (vendoring). Rejected for runtime code as
   unnecessary given the built-ins suffice; bundling *is* used for the Action's
-  `dist/` for a different reason (a `node20` action must run committed JS — see
-  [ROADMAP §5](../ROADMAP.md)).
+  `dist/` for a different reason (a `node20` action must run committed JS — see).

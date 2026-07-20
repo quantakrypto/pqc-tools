@@ -39,7 +39,7 @@ The locked contract is:
 - `remediationFor`, the `detectors` array, `vulnerableDependencies`, `VERSION`.
 
 Consumers must **reuse** core's primitives rather than re-derive them. (The
-[architecture audit](../audits/architecture.md) and [ROADMAP P1-1/P1-3](../ROADMAP.md)
+architecture audit and/P1-3
 flagged two violations here: the qScan/Action **baseline fingerprint schism** and
 the Action re-implementing `fingerprint`/`applyBaseline`/`renderReport` instead of
 importing `runQscan`. **Both are now closed** — the Action imports `runQscan` and the

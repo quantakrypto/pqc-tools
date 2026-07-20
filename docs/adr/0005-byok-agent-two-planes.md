@@ -18,7 +18,7 @@ secret** (the operator's API key), it **sends source context to a third party**,
 and — for remediation — it **writes code**. Bolted into the existing packages it
 would erode the property that makes the rest of the toolset easy to trust and to
 host (the MCP especially): *these tools do not phone home and do not hold keys.*
-The [security audit](../audits/security.md) covers the offline scanner; the
+The security audit covers the offline scanner; the
 [agent-line adversarial audit](../THREAT-MODEL.md) (2026-07-15) covers this plane
 and confirmed the invariants below hold in code (with the residual gaps noted).
 
@@ -79,7 +79,7 @@ imported by both planes.
 - **Triage must never gain the ability to drop a finding or alter the exit code.**
 - **No auto-merge, ever.** No `gh pr merge` / `--admin` in any package.
 
-## Known limitations (from the 2026-07-15 agent audit — tracked in [ROADMAP §1](../ROADMAP.md))
+## Known limitations (from the 2026-07-15 agent audit — recorded in this ADR)
 
 - **The `verify_fix` gate is *crypto-count* only** (target rule gone + no new
   *crypto* findings + fewer total). It does **not** validate the rest of a
@@ -88,13 +88,13 @@ imported by both planes.
   **"crypto-verified, not security-reviewed"** and must be reviewed as a diff.
   *(F1) **Resolved**: a blast-radius guard now bounds a patch to the finding's file
   set + dependency manifests, and the output framing says "crypto-verified, not
-  security-reviewed" honestly — see [ROADMAP §1](../ROADMAP.md).*
+  security-reviewed" honestly — see [OBJECTIVES.md](OBJECTIVES.md).*
 - **On the MCP plane the gates are advisory** — the host agent writes files, so
   patch-policy/`verify_fix` are not enforced there. Documented, not code-guaranteed. (F5)
 - *(F2, F3) **Resolved**: instruction/data separation now travels via the provider's
   real `system` role (the rubric out-ranks the untrusted user turn, with an explicit
   anti-injection preamble), and a per-run spend ceiling (`--max-findings`) caps LLM
-  calls. See [ROADMAP §1](../ROADMAP.md) and `packages/agent/src/loop.ts`.*
+  calls. See and `packages/agent/src/loop.ts`.*
 
 ## Alternatives considered
 

@@ -26,7 +26,7 @@ plan within **10 business days**. We will credit reporters who wish to be named.
 
 These are developer tools that read source code and (for Sieve) drive an
 external implementation. The most security-relevant surfaces — documented in
-[`docs/audits/security.md`](docs/audits/security.md) — are:
+the security review — are:
 
 - **`@quantakrypto/mcp` HTTP transport (`packages/mcp/src/http.ts`).** The hosted
   transport now **enforces** several controls in code: constant-time Bearer
@@ -49,5 +49,5 @@ external implementation. The most security-relevant surfaces — documented in
 ## Hardening status
 
 Known issues and their remediations are tracked in
-[`docs/ROADMAP.md`](docs/ROADMAP.md) (the **P0 — security & correctness** block).
+[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) (the boundary controls and their status).
 This file will be updated as those land.

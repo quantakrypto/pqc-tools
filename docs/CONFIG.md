@@ -1,6 +1,6 @@
 # `quantakrypto.config.json` — Configuration
 
-**Status: IMPLEMENTED** ([ROADMAP P2-9](ROADMAP.md)). This document describes the
+**Status: IMPLEMENTED**. This document describes the
 *optional* project configuration file that `qScan` and `@quantakrypto/core` consume.
 core's `loadConfig` reads + validates the file; qScan applies it under the
 precedence rule below. This page is both the spec and the reference; where the
@@ -10,9 +10,7 @@ is authoritative.
 ## 1. Motivation
 
 Today qScan is configured entirely by CLI flags ([qscan README](../packages/qscan/README.md)),
-and `ScanOptions` carries a few options that are not yet wired
-([ROADMAP P1-2](ROADMAP.md): `include` is unwireable, `maxFileSize`/`noDefaultIgnores`
-are dropped by `runQscan`). A committed config file lets a project encode its scan
+and `ScanOptions` carries a few options that are not yet wired. A committed config file lets a project encode its scan
 policy once — include/exclude globs, size limits, the severity gate, which
 detector families/languages to run, and a baseline path — so CI, the editor (MCP),
 and local runs agree without repeating long flag lists.
@@ -94,10 +92,10 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 | `include` | string[] | (all scannable) | `ScanOptions.include` | Substring/prefix/glob patterns (§4.2). Empty/omitted = scan everything not excluded. |
 | `exclude` | string[] | `[]` | `ScanOptions.exclude` | **Added to** the built-in default ignores unless `noDefaultIgnores`. |
 | `noDefaultIgnores` | bool | `false` | `ScanOptions.noDefaultIgnores` | Disables `node_modules`/`.git`/`dist`/… defaults. |
-| `maxFileSize` | int (bytes) | `2097152` | `ScanOptions.maxFileSize` | Files larger are skipped; the [perf](audits/performance.md)/[security](audits/security.md) 2 MiB cap rationale applies. |
+| `maxFileSize` | int (bytes) | `2097152` | `ScanOptions.maxFileSize` | Files larger are skipped; the perf/security 2 MiB cap rationale applies. |
 | `detectors.<family>` | bool | `true` | maps to `source`/`config`/`dependencies` scan toggles + per-family selection | Family names mirror `@quantakrypto/core`'s detector families and the `--no-source`/`--no-deps`/`--no-config` flags. Turning a family off is equivalent to its `--no-*` flag. |
 | `disabledRules` | string[] | `[]` | `ScanOptions.disabledRules` | Rule ids to suppress (e.g. `"node-crypto-ecdh"`, `"tls-weak-cipher"`). Finer-grained than `detectors.<family>`. See the catalog via `qscan list_rules` / the MCP `list_rules` tool. Unknown ids are harmless (never match). |
-| `languages` | string[] | (all built-in) | (forward-looking) | See §4.3 — has no effect until the detector-registry/plugin work ([ROADMAP P1-4](ROADMAP.md)) lands. |
+| `languages` | string[] | (all built-in) | (forward-looking) | See §4.3 — has no effect until the detector-registry/plugin work lands. |
 | `severityThreshold` | enum | `high` | `runQscan({severityThreshold})` | Drives the exit code. CLI `--severity-threshold` overrides. |
 | `baseline` | string (path) | none | `runQscan({baseline})` | Relative to the config file's directory. CLI `--baseline` overrides. |
 
@@ -119,7 +117,7 @@ under [ADR-0001](adr/0001-zero-runtime-dependencies.md)'s zero-dep rule.
 ### 4.3 `languages` (forward-looking)
 
 `languages` is specified now so the file format is stable, but it is **inert**
-until [ROADMAP P1-4](ROADMAP.md) makes detectors a real plugin point with a
+until makes detectors a real plugin point with a
 declared `language`/`scope` per detector. Until then, detector selection is via
 `detectors.<family>`. When the registry lands, `languages` filters the active
 detector set by declared language (e.g. `["python","go"]`).
@@ -160,5 +158,4 @@ detector set by declared language (e.g. `["python","go"]`).
 - Cascading/merged configs across directories.
 - A JSON Schema file artifact (the `$schema` URL above is a placeholder for when
   one is published).
-- Per-rule severity overrides and CWE mapping config (would pair with
-  [ROADMAP P2-6](ROADMAP.md) CWE tagging).
+- Per-rule severity overrides and CWE mapping config (would pair with CWE tagging).

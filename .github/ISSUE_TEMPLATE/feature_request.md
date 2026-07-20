@@ -15,4 +15,4 @@ labels: enhancement
 **Alternatives considered**
 
 **Notes**
-<!-- Does this relate to an item in docs/ROADMAP.md? Keep the zero-runtime-dependency rule in mind. -->
+<!-- Does this fit the objectives in docs/OBJECTIVES.md? Keep the zero-runtime-dependency rule in mind. -->

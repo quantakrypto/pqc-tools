@@ -10,7 +10,7 @@ and the declared `sourceUrl` — in the report's `provenance` block
 `sourceUrl: "unknown (operator-supplied)"` and `provenanceDeclared: false`, so a
 `kat` PASS says whether it is source-attributable. Strengthens (never relaxes)
 [ADR-0004](../adr/0004-sieve-no-fabricated-vectors.md) — Sieve still ships and
-fetches no vectors. [ROADMAP COMPLIANCE #10 / P2-8](../ROADMAP.md).
+fetches no vectors.
 
 It exists to strengthen — never relax —
 [ADR-0004](../adr/0004-sieve-no-fabricated-vectors.md): Sieve ships no vectors and

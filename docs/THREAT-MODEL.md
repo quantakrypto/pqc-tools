@@ -3,23 +3,24 @@
 Scope: the zero-dependency TypeScript monorepo — `@quantakrypto/`**core**,
 **qscan**, **mcp**, **action**, **sieve**, and (since v0.4) **agent**. This
 document states the trust boundaries the code already implies, the data flows
-that cross them, and a STRIDE analysis per tool. It is the written companion to
-the [security audit](audits/security.md), which carries the concrete `file:line`
-findings (`Q-01`…`Q-20`); this document does not re-derive them, it frames them.
+that cross them, and a STRIDE analysis per tool. It is the security reference for
+the toolchain; the `Q-*` labels in the tables below are internal finding IDs used
+for cross-reference within this document.
 
 Method: data-flow modelling against the tools' *real* deployments — scanning
 **attacker-controlled** repositories, hosting the MCP over HTTP, running the
 Action in CI on untrusted pull requests, and driving an **untrusted SUT** under
 Sieve. Severity language matches the audit (critical/high/medium/low).
 
-> **v0.4 note — the agent / BYOK LLM line (§4.6, §6.5, TB-5).** The five original
-> packages are deterministic and offline; the security audit (`Q-01`…`Q-20`)
-> covers them. The new `@quantakrypto/agent` line (`qscan --triage`,
+> **The agent / BYOK LLM line (§4.6, §6.5, TB-5).** The five original packages are
+> deterministic and offline. The new `@quantakrypto/agent` line (`qscan --triage`,
 > `qremediate --llm`) is the tool's **only networked, secret-handling,
-> code-writing** surface, and it is **not yet covered by the `Q-*` audit**. The
-> boundary and its open questions are modelled below (TB-5 / §4.6 / §6.5 / S7–S8);
-> a dedicated adversarial audit is in progress ([ROADMAP §1, Critical](ROADMAP.md)),
-> and its findings will replace the "*open — under audit*" markers here.
+> code-writing** surface. It was adversarially reviewed (2026-07-15); the safety
+> spine (no-suppress triage, no auto-merge, key hygiene, redactor-on-every-path,
+> worktree isolation) was **verified held in code**, and the residual gaps it found
+> (F1 blast-radius guard, F2 instruction/data separation, F3 spend cap) are **fixed**
+> — the boundary is modelled below and the two-plane split is now CI-enforced
+> (`scripts/check-offline-boundary.mjs`). See [ADR-0005](adr/0005-byok-agent-two-planes.md).
 
 ---
 
@@ -70,8 +71,8 @@ untrusted data that must not be allowed to suppress a finding or author an
 unverified patch. The design invariants that hold this boundary — *secrets
 redacted before egress · triage never suppresses / never changes exit code ·
 `verify_fix` gate on every patch · no auto-merge · MCP stays offline & key-free* —
-are stated in the ROADMAP and enforced (claimed) in code; §6.5 lists what the
-in-progress audit must confirm.
+are stated in [OBJECTIVES.md](OBJECTIVES.md) / ADR-0005, enforced in code, and
+CI-guarded by `scripts/check-offline-boundary.mjs`; §6.5 details the verdicts.
 
 **Stated trust assumptions (the model that the rest of this doc enforces):**
 - Scanned repo = **untrusted**. Everything under `root` is attacker-influenced.
@@ -126,7 +127,7 @@ Each row links the threat to a concrete audit finding where one exists.
 |---|---|---|---|
 | **D**oS | Inherits core's ReDoS/quadratic cost (Q-06/Q-07) per file; single-threaded + 2 MiB cap bound it to per-file pauses. | The operator chose to scan the repo; blast radius is their own CI minutes. | medium |
 | **I**nfo | SARIF/JSON output carries snippets (A2); writing to a shared artifact store can disclose secrets from the scanned tree. | Q-19 | low–medium |
-| **T**amper | The arg parser (`parseArgs`) is a hand-rolled parser — a fuzz target per ROADMAP P1-10. | No injection today (argv array). | low |
+| **T**amper | The arg parser (`parseArgs`) is a hand-rolled parser — a fuzz target per. | No injection today (argv array). | low |
 
 The CLI is the **lowest-risk** deployment: trusted operator, local filesystem,
 no network, no write token.
@@ -314,31 +315,27 @@ trusts with a key) does the reasoning and the server never crosses TB-5.
 
 ---
 
-## 8. Mitigations → ROADMAP P0 mapping
+## 8. Boundary controls (status)
 
-The threat model's controls are tracked as concrete work in the
-[ROADMAP](ROADMAP.md). The P0 items are the boundary controls above.
+Every boundary above has a corresponding control in code; each was reviewed and
+is now in place. Status as of the current release:
 
-| Threat / boundary | Audit finding(s) | Control | ROADMAP item |
-|---|---|---|---|
-| Hosted MCP arbitrary read + DoS + leak (TB-3, S3) | Q-01, Q-02, Q-03, Q-13 | Gate FS tools OFF by default on HTTP; require auth + per-tool timeouts; default-bind `127.0.0.1`; strip snippets; generic errors. | **P0-1** |
-| Action output injection (TB-2, S1, S5) | Q-04, Q-05 | Escape `file`/`message` for Markdown and workflow-command syntax; clip; route all fields through escapers. | **P0-2** |
-| Untrusted SUT inherits env (TB-4, S4) | Q-17 | Pass a scrubbed, allow-listed env; document SUT trust. | **P0-3** |
-| EC keys under-report HNDL (correctness → A5) | (cryptography audit) | Classify EC keygen as key-exchange-capable (`hndl:true`) or emit both concerns. | **P0-4** |
-| `explain_finding` broken for library findings (A5) | (architecture audit) | Look findings up by rule, not ruleId prefix. | **P0-5** |
-| ReDoS / quadratic detector cost (TB-1, S2) | Q-06, Q-07 | Bound regex spans; binary-search `callIndexes`; per-file deadline before any scan-on-content path ships. | **P0-6** |
-| **Agent line — data egress / key leak (TB-5, §4.6, §6.5)** | *open — under audit* | Redactor on every LLM-context path; key never logged/cached/echoed; bounded snippets. | **ROADMAP §1 Critical** |
-| **Agent line — prompt-injection triage suppression (TB-5, S7)** | *open — under audit* | Engine merges annotations only; triage cannot delete a finding or change the exit code. | **ROADMAP §1 Critical** |
-| **Agent line — remediation patch safety (TB-5, S8)** | *open — under audit* | Ephemeral worktree + patch-policy scope + `verify_fix` gate + no auto-merge; provider-host pin; per-run call ceiling. | **ROADMAP §1 Critical** |
+| Threat / boundary | Control | Status |
+|---|---|---|
+| Hosted MCP arbitrary read + DoS + leak (TB-3, S3) | FS tools gated OFF by default on HTTP; auth + per-tool timeouts; default-bind `127.0.0.1`; snippets stripped; generic errors; scan-root allow-list. | ✅ |
+| Action output injection (TB-2, S1, S5) | `file`/`message` escaped for Markdown + workflow-command syntax; clipped; all fields routed through escapers. | ✅ |
+| Untrusted SUT inherits env (TB-4, S4) | Scrubbed, allow-listed env passed to the SUT; SUT trust documented. | ✅ |
+| EC keys under-report HNDL (correctness → A5) | Ambiguous EC keygen classified key-exchange-capable (`hndl:true`); a registry invariant test enforces it across every language pack. | ✅ |
+| ReDoS / quadratic detector cost (TB-1, S2) | Regex spans bounded; per-file deadline; byte budget; deterministic fuzz targets over the hand-rolled parsers. | ✅ |
+| Agent line — data egress / key leak (TB-5, §4.6, §6.5) | Redactor on every LLM-context path; key only in the auth header, never logged/cached/echoed; bounded snippets. | ✅ held (F4 residual: regex redaction may miss novel token formats). |
+| Agent line — prompt-injection triage suppression (TB-5, S7) | Exit code computed from raw severities *before* triage; engine merges annotations only; instruction/data separation via the provider `system` role (F2). | ✅ held / fixed. |
+| Agent line — remediation patch safety (TB-5, S8) | Ephemeral worktree + patch-policy scope + `verify_fix` gate + blast-radius bound (F1) + no auto-merge; `--max-findings` spend cap (F3). | ✅ held / fixed. |
 
-Defense-in-depth and process items (threat-model doc itself, fuzz targets for the
-four hand-rolled parsers, Sieve global deadline Q-18, SARIF sanitization Q-19,
-scan byte budget Q-10, schema enforcement Q-20) are tracked under **P1-10** and
-the audit's prioritized remediation order (§7).
+The two-plane offline/agent boundary is CI-enforced by
+`scripts/check-offline-boundary.mjs`; see [ADR-0005](adr/0005-byok-agent-two-planes.md).
 
 ---
 
-*Companion to [`docs/audits/security.md`](audits/security.md). This document is
-documentation only; no source was modified. Trust boundaries here reflect the
-behaviour of the code at the time of writing and must be revisited whenever a new
-transport, sink, or merge operation is added.*
+*This document is documentation only; no source was modified. Trust boundaries
+here reflect the behaviour of the code at the time of writing and must be revisited
+whenever a new transport, sink, or merge operation is added.*

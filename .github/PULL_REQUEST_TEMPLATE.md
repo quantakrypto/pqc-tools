@@ -2,7 +2,7 @@
 
 ## What & why
 
-<!-- What does this change, and why? Link any docs/ROADMAP.md item. -->
+<!-- What does this change, and why? Link any related docs/OBJECTIVES.md item. -->
 
 ## Checklist
 
