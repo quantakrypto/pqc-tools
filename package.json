@@ -33,6 +33,8 @@
     "bench": "node scripts/bench.mjs",
     "validate:sarif": "node scripts/validate-sarif.mjs",
     "standards:check": "node scripts/standards-check.mjs",
+    "api:docs": "node scripts/gen-api-reference.mjs",
+    "api:check": "node scripts/gen-api-reference.mjs --check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

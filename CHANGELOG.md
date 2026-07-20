@@ -6,6 +6,19 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added — frozen public API surface + generated reference (1.0 gate)
+
+- **`docs/API.md`** (human reference) and **`docs/api-surface.json`** (the
+  machine-readable contract) are generated from each package's public entry point by
+  **`npm run api:docs`** (`scripts/gen-api-reference.mjs`, zero-dep). They enumerate
+  every SemVer-covered symbol across `@quantakrypto/`core · qscan · mcp · sieve ·
+  agent · qprobe (318 symbols today).
+- **`npm run api:check`** — a new CI gate (in the lint job) that fails if a package's
+  real exports drift from the frozen snapshot, so adding or removing a public symbol
+  is a deliberate, reviewed change rather than an accident. Closes the
+  [VERSIONING.md](docs/VERSIONING.md) "generated API reference + frozen surface" 1.0
+  requirement.
+
 ## [0.5.0] — 2026-07-20
 
 ### Fixed — detector precision (cross-detector double-counts)

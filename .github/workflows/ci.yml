@@ -59,6 +59,8 @@ jobs:
         run: npm run lint
       - name: Format check (prettier)
         run: npm run format:check
+      - name: Public API surface is frozen (no undocumented drift)
+        run: npm run api:check
 
   coverage:
     name: coverage (node 22, advisory)
