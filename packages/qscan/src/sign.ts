@@ -41,16 +41,23 @@ export function commandSigner(command: string): EvidenceSigner {
         timeout: SIGN_TIMEOUT_MS,
         maxBuffer: SIGN_MAX_BUFFER,
       });
+      // A command that exits before draining stdin makes spawnSync surface an EPIPE in
+      // res.error even though the child ran and returned an exit status (seen on Linux,
+      // not macOS). The exit status is the meaningful failure signal, so report a
+      // non-zero exit (or a terminating signal) FIRST, and only treat res.error as
+      // fatal when the child never produced a status (a real spawn failure, e.g. ENOENT).
+      if (res.status !== null && res.status !== 0) {
+        const detail = (res.stderr || "").trim().slice(0, 200);
+        throw new Error(
+          `--sign/--timestamp: command "${label}" exited ${res.status}${detail ? `: ${detail}` : ""}`,
+        );
+      }
+      if (res.signal) {
+        throw new Error(`--sign/--timestamp: command "${label}" terminated on ${res.signal}`);
+      }
       if (res.error) {
         throw new Error(
           `--sign/--timestamp: command "${label}" failed to run: ${res.error.message}`,
-        );
-      }
-      if (res.status !== 0) {
-        const how = res.status !== null ? `exited ${res.status}` : `terminated on ${res.signal}`;
-        const detail = (res.stderr || "").trim().slice(0, 200);
-        throw new Error(
-          `--sign/--timestamp: command "${label}" ${how}${detail ? `: ${detail}` : ""}`,
         );
       }
       const out = (res.stdout || "").trim();

@@ -11502,13 +11502,15 @@ function commandSigner(command) {
         timeout: SIGN_TIMEOUT_MS,
         maxBuffer: SIGN_MAX_BUFFER
       });
+      if (res.status !== null && res.status !== 0) {
+        const detail = (res.stderr || "").trim().slice(0, 200);
+        throw new Error(`--sign/--timestamp: command "${label}" exited ${res.status}${detail ? `: ${detail}` : ""}`);
+      }
+      if (res.signal) {
+        throw new Error(`--sign/--timestamp: command "${label}" terminated on ${res.signal}`);
+      }
       if (res.error) {
         throw new Error(`--sign/--timestamp: command "${label}" failed to run: ${res.error.message}`);
-      }
-      if (res.status !== 0) {
-        const how = res.status !== null ? `exited ${res.status}` : `terminated on ${res.signal}`;
-        const detail = (res.stderr || "").trim().slice(0, 200);
-        throw new Error(`--sign/--timestamp: command "${label}" ${how}${detail ? `: ${detail}` : ""}`);
       }
       const out = (res.stdout || "").trim();
       if (!out) {
