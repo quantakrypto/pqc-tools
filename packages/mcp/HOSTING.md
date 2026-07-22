@@ -5,6 +5,17 @@ service rather than a per-user local stdio process. The shipped `src/http.ts` is
 the minimal, working core of this design; everything below is the path from that
 scaffold to production.
 
+> **A production reference implementation of this design now exists — and it's
+> live.** [`quantakrypto/mcp-gateway`](https://github.com/quantakrypto/mcp-gateway)
+> runs at **`https://mcp.quantakrypto.com/mcp`** and realises §2–§7 below:
+> [Better Auth](https://better-auth.com) as the **OAuth 2.1** provider (§3, Google
+> + GitHub + email, 30-day tokens), accounts/sessions/tokens in Postgres (§2), and
+> the filesystem/network tools withheld over HTTP (§0). Connect a client with
+> `claude mcp add --transport http quantakrypto https://mcp.quantakrypto.com/mcp`.
+> Read that repo as the worked example of everything described here; the sections
+> below remain the reference for *why* each control exists (and for running your
+> own).
+
 ## 0. Safe-by-default posture (what `src/http.ts` enforces today)
 
 The stdio transport trusts the local user and is fully featured. The HTTP
@@ -142,7 +153,10 @@ stdio trusts the local user; a hosted endpoint must not.
 - **OAuth 2.1.** The MCP spec defines an OAuth flow for HTTP transports
   (Protected Resource Metadata + Authorization Server). For first-party clients,
   scoped API keys are simpler; add OAuth when third-party clients must connect on
-  a user's behalf.
+  a user's behalf. **This is what the hosted [`mcp-gateway`](https://github.com/quantakrypto/mcp-gateway)
+  does** — Better Auth publishes the discovery metadata and runs the
+  authorize/token endpoints, and the `/mcp` route validates the Bearer token in
+  the same process via `withMcpAuth`.
 - **mTLS / network policy.** For internal/enterprise deployments, terminate mTLS
   at the gateway and keep `/mcp` private.
 - Never log request bodies that may contain source code; treat scanned content

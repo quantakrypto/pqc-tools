@@ -10,7 +10,9 @@ cryptography and recommends NIST post-quantum / hybrid migrations, all backed by
   The only dependency is `@quantakrypto/core`.
 - **Two transports.** A `stdio` transport (the `quantakrypto-mcp` bin) for local agents
   like Claude, and a hostable `http` transport for running quantakrypto as a remote
-  service (see [HOSTING.md](./HOSTING.md)).
+  service (see [HOSTING.md](./HOSTING.md)). quantakrypto also runs a **hosted,
+  OAuth-gated instance at [`mcp.quantakrypto.com`](https://mcp.quantakrypto.com/mcp)**
+  you can connect to directly — see [Hosted HTTP server](#hosted-http-server-safe-by-default).
 - **Transport-agnostic core.** All protocol logic lives in a pure, unit-tested
   `McpServer` class; transports only do I/O.
 
@@ -190,6 +192,18 @@ the `initialize` capabilities, all offline/static):
   ready-made "scan → triage → remediate → verify, draft PR only" workflow.
 
 ## Hosted HTTP server (safe-by-default)
+
+> **Just want to use it?** quantakrypto runs a hosted, **OAuth-gated** instance at
+> **`https://mcp.quantakrypto.com/mcp`** — no install, no token to manage:
+> ```bash
+> claude mcp add --transport http quantakrypto https://mcp.quantakrypto.com/mcp
+> ```
+> It signs you in (Google / GitHub / email) and issues a 30-day token. Being
+> multi-tenant, it exposes only the content-based tools — the filesystem/network
+> tools (`scan_path`, `inventory_crypto`, `generate_cbom`, `plan_migration`,
+> `probe_endpoint`) are withheld; run the MCP **locally** for those. Source and
+> ops: [`quantakrypto/mcp-gateway`](https://github.com/quantakrypto/mcp-gateway).
+> The rest of this section is for running the **package's own** `http.ts` yourself.
 
 The same `McpServer` can be served over HTTP (a Streamable-HTTP-style JSON-RPC
 endpoint) for remote deployments. The stdio transport trusts the local user and
