@@ -1,0 +1,83 @@
+# Mirror the published artifacts to GitHub Packages so they show on the repo's
+# Packages tab: the MCP server container to ghcr.io, and the scoped npm packages
+# to npm.pkg.github.com. npmjs.com (npm) and Docker Hub (the Docker MCP catalog
+# image) stay the primary homes; this is an additional GitHub-native copy. Auth
+# is the built-in GITHUB_TOKEN, so there are no secrets to configure.
+#
+# NOTE: packages first created by a workflow are PRIVATE by default. After the
+# first successful run, set each package to Public once at
+# https://github.com/orgs/quantakrypto/packages (Package settings, Change
+# visibility). After that this stays green on every release.
+name: GitHub Packages
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  container-ghcr:
+    name: Push the MCP server image to ghcr.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push the image
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/mcp/package.json').version")"
+          image="ghcr.io/${{ github.repository }}"
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.description=quantakrypto MCP server: scans code for quantum-vulnerable cryptography and gives NIST post-quantum migration guidance." \
+            --label "org.opencontainers.image.licenses=Apache-2.0" \
+            -t "${image}:latest" -t "${image}:${version}" .
+          docker push "${image}:latest"
+          docker push "${image}:${version}"
+
+  npm-github-packages:
+    name: Publish npm packages to GitHub Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - name: Publish scoped packages (skip versions already there)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Point the @quantakrypto scope at GitHub Packages ONLY now, after
+          # install/build, so npm ci above still resolves deps from npmjs.
+          {
+            echo "@quantakrypto:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}"
+          } >>.npmrc
+          for dir in packages/*/; do
+            manifest="${dir}package.json"
+            [ -f "$manifest" ] || continue
+            if [ "$(node -p "require('./$manifest').private === true")" = "true" ]; then
+              echo "— ${dir%/} is private, skipping"
+              continue
+            fi
+            name="$(node -p "require('./$manifest').name")"
+            version="$(node -p "require('./$manifest').version")"
+            if npm view "${name}@${version}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "✓ ${name}@${version} already on GitHub Packages, skipping"
+            else
+              echo "→ publishing ${name}@${version} to GitHub Packages"
+              npm publish --workspace "${name}" --registry=https://npm.pkg.github.com
+            fi
+          done
