@@ -1,0 +1,39 @@
+# Publish packages/mcp/server.json to the official MCP Registry
+# (registry.modelcontextprotocol.io).
+#
+# Auth is GitHub Actions OIDC: the workflow runs inside the quantakrypto org, so
+# its OIDC token authorizes the `io.github.quantakrypto/*` namespace. No keys and
+# no interactive login are needed. npm package ownership is proven separately by
+# the `mcpName` field in the published @quantakrypto/mcp package (0.5.2+).
+#
+# Trigger it manually after a release that bumps the server.json version, or let
+# it run automatically on a published GitHub Release.
+name: MCP Registry
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # OIDC token for `mcp-publisher login github-oidc`
+
+jobs:
+  publish:
+    name: Publish server.json to the MCP Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install mcp-publisher (pinned)
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.0/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/mcp-publisher
+          mcp-publisher --version
+      - name: Authenticate via OIDC and publish
+        working-directory: packages/mcp
+        run: |
+          mcp-publisher login github-oidc
+          mcp-publisher publish
