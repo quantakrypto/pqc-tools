@@ -159,6 +159,16 @@ test("resources/list advertises the rule catalog and migration guide", async () 
   assert.ok(uris.includes("quantakrypto://guide/migration"));
 });
 
+test("resources/templates/list returns an empty list, not method-not-found", async () => {
+  const server = createQuantakryptoServer();
+  // We advertise the `resources` capability, so clients call this during
+  // discovery; it must succeed (empty) rather than -32601.
+  const res = expectSuccess(
+    await server.handle({ jsonrpc: "2.0", id: 91, method: "resources/templates/list" }),
+  );
+  assert.deepEqual(res.result, { resourceTemplates: [] });
+});
+
 test("resources/read returns the rule catalog JSON", async () => {
   const server = createQuantakryptoServer();
   const res = expectSuccess(

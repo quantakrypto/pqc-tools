@@ -141,6 +141,12 @@ export class McpServer {
         return this.onToolsCall(req.params, context);
       case "resources/list":
         return { resources: RESOURCES };
+      case "resources/templates/list":
+        // We advertise the `resources` capability, so spec-compliant clients
+        // (and MCP directory health checks) call this during discovery. We
+        // expose only fixed-URI resources, no URI templates → empty list, not a
+        // -32601 that trips those clients.
+        return { resourceTemplates: [] };
       case "resources/read":
         return this.onResourcesRead(req.params);
       case "prompts/list":
