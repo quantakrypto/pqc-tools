@@ -401,6 +401,14 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["X25519", "EdDSA"],
     severity: "low",
   },
+  {
+    name: "tink",
+    ecosystem: "pypi",
+    reason:
+      "Google Tink (Python) — classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+    severity: "high",
+  },
 
   // --- crates.io (Rust) ---
   {
@@ -513,6 +521,21 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["ECDSA", "ECDH"],
     severity: "medium",
   },
+  {
+    name: "github.com/tink-crypto/tink-go/v2",
+    ecosystem: "go",
+    reason:
+      "Google Tink (Go) — classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+    severity: "high",
+  },
+  {
+    name: "github.com/google/tink/go",
+    ecosystem: "go",
+    reason: "Google Tink (legacy Go module) — classical RSA/ECDSA/Ed25519 and ECIES hybrid.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+    severity: "high",
+  },
 
   // --- Maven (Java) ---
   {
@@ -558,6 +581,14 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     algorithms: ["RSA", "ECDSA"],
     severity: "medium",
     hndl: false,
+  },
+  {
+    name: "tink",
+    ecosystem: "maven",
+    reason:
+      "Google Tink (com.google.crypto.tink) — classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+    algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+    severity: "high",
   },
 
   // --- RubyGems ---

@@ -31,7 +31,7 @@ cryptodeps (csnp, part of the QRAMM ecosystem) is a dependency-and-import crypto
 | Dimension | quantakrypto/pqc-tools | cryptodeps (csnp) |
 |---|---|---|
 | What it is | PQC-readiness toolchain: scanner + CI gate + MCP + conformance harness + active prober | Dependency / import crypto scanner focused on quantum-vulnerable libraries |
-| Primary detection approach | 52 detectors emitting 297 rules (verified against `defaultRegistry`): regex-and-heuristic content detectors per language and per config surface, plus a curated 77-entry vulnerable-dependency catalog | Curated 1,100+ package database + per-ecosystem import-pattern matching + language-specific AST parsing + Go-only call-graph reachability |
+| Primary detection approach | 52 detectors emitting 297 rules (verified against `defaultRegistry`): regex-and-heuristic content detectors per language and per config surface, plus a curated 81-entry vulnerable-dependency catalog | Curated 1,100+ package database + per-ecosystem import-pattern matching + language-specific AST parsing + Go-only call-graph reachability |
 | Dependency-manifest coverage | 7 ecosystems: npm, PyPI, Cargo, Go modules, Maven, RubyGems, NuGet (verified in `dependencies.ts`) | Documented import patterns for Go, npm, Python, Java; broader package DB behind them |
 | Source-code coverage | 14 language packs (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo) | AST analysis for its documented ecosystems |
 | Reachability / call-graph | None. Detectors are pure per-file matchers (`Detector.detect` sees one file at a time). This is a real gap. | Go call-graph reachability determines which crypto is actually invoked. A genuine strength quantakrypto does not have. |
@@ -102,11 +102,13 @@ Marks reflect what quantakrypto actually detects and classifies, verified in cod
 | Ecosystem | quantakrypto catalog entries (verified) | Representative overlap with cryptodeps |
 |---|---|---|
 | npm | 35 | node-forge, elliptic, jsonwebtoken, jose, node-rsa, tweetnacl, ssh2 |
-| PyPI | 13 | cryptography, pycryptodome, pyjwt, python-jose, paramiko, pynacl, jwcrypto |
-| Go modules | 6 | golang.org/x/crypto, golang-jwt, go-jose |
-| Maven | 6 | BouncyCastle (bcprov), java-jwt, jjwt, nimbus-jose-jwt |
+| PyPI | 14 | cryptography, pycryptodome, pyjwt, python-jose, paramiko, pynacl, jwcrypto, tink |
+| Go modules | 8 | golang.org/x/crypto, golang-jwt, go-jose, tink-go |
+| Maven | 7 | BouncyCastle (bcprov), java-jwt, jjwt, nimbus-jose-jwt, tink |
 
-Total curated vulnerable-dependency catalog: 77 entries (npm 35, PyPI 13, Cargo 9, Go 6, Maven 6, RubyGems 4, NuGet 4).
+Total curated vulnerable-dependency catalog: 81 entries (npm 35, PyPI 14, Cargo 9, Go 8, Maven 7, RubyGems 4, NuGet 4).
+
+Every quantum-vulnerable public-key package cryptodeps documents is now in the catalog, including Google Tink (`com.google.crypto.tink` / `tink-crypto/tink-go` / PyPI `tink`), which is listed across all the ecosystems it ships in. See the note below for the one cryptodeps entry we deliberately leave out.
 
 ### Extras: what quantakrypto covers that cryptodeps' documented methodology does not
 
@@ -130,13 +132,12 @@ Total curated vulnerable-dependency catalog: 77 entries (npm 35, PyPI 13, Cargo 
 
 ### Where cryptodeps is stronger (honest)
 
-- **Package database is much larger.** cryptodeps ships 1,100+ curated packages; quantakrypto's catalog is 77 asymmetric-focused entries and leans on its source/config detectors to catch usage the catalog does not name.
+- **Package database is much larger.** cryptodeps ships 1,100+ curated packages; quantakrypto's catalog is 81 asymmetric-focused entries and leans on its source/config detectors to catch usage the catalog does not name.
 - **Go call-graph reachability.** cryptodeps can tell whether flagged crypto is actually reached, cutting false positives on dead or unused imports. quantakrypto has no reachability analysis in any language; every detector is a per-file matcher.
-- **Two specific packages we do not catalog.** `crypto-js` (npm, primarily symmetric/hash, so partly out of our asymmetric scope) and Google Tink (`com.google.crypto.tink`, Maven) are both absent from our catalog. cryptodeps lists them.
 
 Correction to a common assumption: **Nimbus JOSE+JWT is covered.** The Maven artifact `nimbus-jose-jwt` is present in our catalog (verified), as is BouncyCastle (`bcprov-jdk18on`). Neither is a gap.
 
-Note on password KDFs: Argon2, scrypt, PBKDF2, and bcrypt are intentionally out of scope. The `weak-hash-signature` detector documents this: password hashing is a different weakness (CWE-916, needs a slow KDF) and is not quantum-vulnerable, so it is not on the PQC migration path. cryptodeps lists these KDF packages; our exclusion is deliberate.
+Deliberate exclusions (symmetric, hash, and password hashing): `crypto-js`, Argon2, scrypt, PBKDF2, and bcrypt are intentionally out of the catalog. `crypto-js` exposes only symmetric ciphers (AES/DES/3DES/RC4), hashes (MD5/SHA), HMAC, and PBKDF2, with no asymmetric public-key surface; the password KDFs are a different weakness class (CWE-916, needs a slow KDF). None of them is quantum-vulnerable public-key cryptography, so none is on the PQC migration path. cryptodeps lists these packages because its catalog inventories all crypto; quantakrypto's catalog is scoped to quantum-vulnerable asymmetric crypto, so the exclusion is deliberate, not a gap. (Broken symmetric ciphers such as DES/3DES/RC4 are still flagged where they appear in TLS cipher-suite configuration, just not as library dependencies.)
 
 ## 1.4 Verdict
 
@@ -193,7 +194,7 @@ quantakrypto tracks a dated, cited standards snapshot in `packages/core/src/stan
 In rough priority order, drawn from the honest gap lists above.
 
 1. **Reachability analysis.** The single clearest capability cryptodeps has and quantakrypto lacks. A call-graph or import-usage reachability pass (starting with Go, then JS/TS and Python) would cut false positives on imported-but-unreached libraries.
-2. **Grow the dependency catalog.** Move from 77 curated entries toward cryptodeps-scale coverage, and add the specific missing names (Google Tink; crypto-js where its asymmetric uses matter).
+2. **Grow the dependency catalog.** Move from 81 curated entries toward cryptodeps-scale coverage. The named public-key packages cryptodeps documents are now all present (Google Tink was the last); the remaining growth is breadth across the long tail of smaller libraries.
 3. **CNSA 2.0 parameter-level policy.** Add a profile that asserts ML-KEM-1024 / ML-DSA-87 and flags sub-CNSA PQC choices, so a CNSA 2.0 readiness check becomes end-to-end pass/fail rather than report-footer guidance.
 4. **SLH-DSA and stateful-signature conformance.** Make the Sieve SLH-DSA (FIPS 205) battery functional and add a stateful-signature (SP 800-208) category with state-reuse and exhaustion checks.
 5. **Optional symmetric/hash breadth.** If parity with cryptodeps' full algorithm table is wanted, add an opt-in mode that inventories symmetric ciphers, HMAC, and general hashes (currently out of scope by the tool's asymmetric-plus-quantum-adjacent framing).

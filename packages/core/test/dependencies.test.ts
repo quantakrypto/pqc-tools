@@ -112,6 +112,27 @@ test("maven pom.xml artifactIds are matched", () => {
   assertFlags("pom.xml", pom, ["bcprov-jdk18on"]);
 });
 
+test("Google Tink is flagged across maven, go, and pypi manifests", () => {
+  const pom = [
+    "<project><dependencies><dependency>",
+    "  <groupId>com.google.crypto.tink</groupId>",
+    "  <artifactId>tink</artifactId>",
+    "</dependency></dependencies></project>",
+  ].join("\n");
+  assertFlags("pom.xml", pom, ["tink"]);
+
+  const gomod = ["module example.com/app", "require github.com/tink-crypto/tink-go/v2 v2.2.0"].join(
+    "\n",
+  );
+  assertFlags("go.mod", gomod, ["github.com/tink-crypto/tink-go/v2"]);
+
+  assertFlags("requirements.txt", "tink==1.11.0\n", ["tink"]);
+
+  // Tink does ECIES hybrid encryption → HNDL-exposed.
+  const f = scanManifest("requirements.txt", "tink==1.11.0\n")[0];
+  assert.equal(f.hndl, true);
+});
+
 test("rubygems Gemfile gem lines are matched", () => {
   const gemfile = [
     "source 'https://rubygems.org'",

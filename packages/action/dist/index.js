@@ -1016,6 +1016,13 @@ var init_dependencies = __esm({
         algorithms: ["X25519", "EdDSA"],
         severity: "low"
       },
+      {
+        name: "tink",
+        ecosystem: "pypi",
+        reason: "Google Tink (Python) \u2014 classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+        algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+        severity: "high"
+      },
       // --- crates.io (Rust) ---
       {
         name: "rsa",
@@ -1125,6 +1132,20 @@ var init_dependencies = __esm({
         algorithms: ["ECDSA", "ECDH"],
         severity: "medium"
       },
+      {
+        name: "github.com/tink-crypto/tink-go/v2",
+        ecosystem: "go",
+        reason: "Google Tink (Go) \u2014 classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+        algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+        severity: "high"
+      },
+      {
+        name: "github.com/google/tink/go",
+        ecosystem: "go",
+        reason: "Google Tink (legacy Go module) \u2014 classical RSA/ECDSA/Ed25519 and ECIES hybrid.",
+        algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+        severity: "high"
+      },
       // --- Maven (Java) ---
       {
         name: "bcprov-jdk18on",
@@ -1169,6 +1190,13 @@ var init_dependencies = __esm({
         algorithms: ["RSA", "ECDSA"],
         severity: "medium",
         hndl: false
+      },
+      {
+        name: "tink",
+        ecosystem: "maven",
+        reason: "Google Tink (com.google.crypto.tink) \u2014 classical RSA/ECDSA/Ed25519 signatures and ECIES hybrid encryption.",
+        algorithms: ["RSA", "ECDSA", "EdDSA", "ECIES"],
+        severity: "high"
       },
       // --- RubyGems ---
       {
