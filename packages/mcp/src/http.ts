@@ -260,7 +260,7 @@ export function authorizeRequest(
 ): AuthDecision {
   if (token.length === 0) return { authorized: true };
   const header = (authorizationHeader ?? "").trim();
-  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const match = /^Bearer\s+(\S.*)$/i.exec(header);
   const presented = match?.[1]?.trim();
   if (!presented) {
     return { authorized: false, status: 401, message: "missing bearer token" };
