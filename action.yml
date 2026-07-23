@@ -1,0 +1,84 @@
+# Root action metadata so the Action can be published to the GitHub Marketplace
+# (Marketplace only lists an action whose action.yml is at the repository root).
+# It reuses the SAME bundle as packages/action (main points at that dist), so
+# there is one source of truth for the code. Both entrypoints work:
+#   uses: quantakrypto/pqc-tools@v1                 (this file, Marketplace)
+#   uses: quantakrypto/pqc-tools/packages/action@v1 (unchanged)
+# Keep the inputs/outputs here in sync with packages/action/action.yml.
+name: "quantakrypto — Quantum Readiness Scan"
+description: >-
+  Fail CI when new quantum-vulnerable cryptography lands. Scans your codebase
+  with qScan, writes a SARIF report for GitHub code scanning, annotates
+  findings inline, and (optionally) comments a summary on the pull request.
+author: "quantakrypto"
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  mode:
+    description: >-
+      "scan" (default) writes a report and gates the build; "comment-plan" posts
+      a deterministic PQC migration plan as a PR comment and never fails the build.
+    required: false
+    default: "scan"
+  path:
+    description: "Directory (or file) to scan, relative to the repository root."
+    required: false
+    default: "."
+  severity-threshold:
+    description: >-
+      Minimum severity that counts as a failure: critical, high, medium, low,
+      or info. Findings strictly below this level never fail the build.
+    required: false
+    default: "high"
+  fail-on-findings:
+    description: >-
+      When "true", exit non-zero if any finding at or above the
+      severity-threshold is present. Set to "false" to report only.
+    required: false
+    default: "true"
+  format:
+    description: 'Report format written to "output". One of: sarif, json.'
+    required: false
+    default: "sarif"
+  output:
+    description: "Path of the report file to write (relative to the workspace)."
+    required: false
+    default: "quantakrypto.sarif.json"
+  baseline:
+    description: >-
+      Optional path to a baseline file (a previously written quantakrypto report).
+      Findings already present in the baseline are suppressed, so only NEW
+      quantum-vulnerable crypto fails the build.
+    required: false
+  comment-pr:
+    description: >-
+      When "true" and a github-token plus pull-request context are available,
+      post a summary comment on the pull request. Never fails the build.
+    required: false
+    default: "false"
+  github-token:
+    description: >-
+      Token used to comment on the pull request (only needed when
+      comment-pr is "true"). Typically the workflow's built-in GITHUB_TOKEN.
+    required: false
+  redact-snippets:
+    description: >-
+      When "true", omit the matched source snippet from every finding in the
+      written report. Snippets of sensitive findings (e.g. embedded key
+      material) are ALWAYS omitted regardless of this setting.
+    required: false
+    default: "false"
+
+outputs:
+  findings-count:
+    description: "Number of findings at or above the severity threshold (after baseline)."
+  sarif-file:
+    description: "Path of the report file that was written."
+  readiness-score:
+    description: "Post-quantum readiness score from 0 (worst) to 100 (no classical asymmetric crypto found)."
+
+runs:
+  using: "node20"
+  main: "packages/action/dist/index.js"
