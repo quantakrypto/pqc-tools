@@ -191,6 +191,13 @@ All added with positive + negative + doc-suppression tests; benchmark unaffected
   [VERSIONING.md](docs/VERSIONING.md) "generated API reference + frozen surface" 1.0
   requirement.
 
+## [0.5.2] - 2026-07-23
+
+`@quantakrypto/mcp` metadata-only patch. Adds an `mcpName` field to the package
+and a `server.json`, so the server can be listed on the official MCP Registry
+(registry.modelcontextprotocol.io) under `io.github.quantakrypto/pqc-tools`. No
+code or behavior change; the other packages stay at 0.5.0.
+
 ## [0.5.1] — 2026-07-23
 
 `@quantakrypto/mcp` patch release only — the other `@quantakrypto/*` packages

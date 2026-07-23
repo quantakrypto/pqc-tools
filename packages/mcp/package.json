@@ -1,6 +1,7 @@
 {
   "name": "@quantakrypto/mcp",
-  "version": "0.5.1",
+  "version": "0.5.2",
+  "mcpName": "io.github.quantakrypto/pqc-tools",
   "description": "quantakrypto MCP — post-quantum readiness for AI coding agents via the Model Context Protocol. Zero runtime dependencies (stdio JSON-RPC implemented in-house).",
   "license": "Apache-2.0",
   "author": "Dandelion Labs <hello@dandelionlabs.io> (https://dandelionlabs.io)",
