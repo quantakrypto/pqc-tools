@@ -20,3 +20,76 @@ updates:
     labels: ["ci"]
     commit-message:
       prefix: "ci"
+
+  # ── Scanner test corpora: DO NOT auto-update ────────────────────────────────
+  # packages/core/test/benchmark/** holds realistic-but-fake dependency manifests
+  # (pom.xml, go.mod, Cargo.toml, requirements.txt, *.csproj, Gemfile, package.json,
+  # packages.config) used to test crypto-dependency DETECTION — see
+  # packages/core/test/dependencies.test.ts and the recall benchmark. Their versions
+  # are pinned on purpose; when one trips a security advisory (e.g. jackson-databind),
+  # Dependabot's security-update scanner keeps trying — and failing — to "update" the
+  # test data, which surfaces as a failing CI signal. Scoping each fixture ecosystem
+  # here with limit 0 + ignore "*" (both version and security updates honor these)
+  # tells Dependabot to leave the fixtures alone.
+  - package-ecosystem: "maven"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "gomod"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "pip"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "cargo"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "nuget"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "bundler"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "npm"
+    directories:
+      - "/packages/core/test/benchmark/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
