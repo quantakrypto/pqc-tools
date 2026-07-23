@@ -17,12 +17,14 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   container-ghcr:
     name: Push the MCP server image to ghcr.io
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -45,6 +47,9 @@ jobs:
   npm-github-packages:
     name: Publish npm packages to GitHub Packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
