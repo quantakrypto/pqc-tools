@@ -283,7 +283,12 @@ export function toB64(bytes: Uint8Array): string {
 export function fromB64(b64: string): Uint8Array {
   const buf = Buffer.from(b64, "base64");
   // Buffer.from is lenient; sanity-check by re-encoding the canonical form.
-  if (buf.toString("base64").replace(/=+$/, "") !== b64.replace(/\s/g, "").replace(/=+$/, "")) {
+  const trimEq = (x: string): string => {
+    let n = x.length;
+    while (n > 0 && x[n - 1] === "=") n--;
+    return x.slice(0, n);
+  };
+  if (trimEq(buf.toString("base64")) !== trimEq(b64.replace(/\s/g, ""))) {
     throw new ProtocolError("invalid base64", b64);
   }
   return new Uint8Array(buf);

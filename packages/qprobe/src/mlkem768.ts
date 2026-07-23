@@ -46,14 +46,26 @@ export function byteDecode12(bytes: Buffer): number[] {
   return out;
 }
 
-/** A random polynomial with all coefficients in [0, q) (throwaway, not uniform). */
+/** A random polynomial with all coefficients uniform in [0, q) (throwaway probe key). */
 function randomInRangePoly(): number[] {
-  const raw = randomBytes(N * 2);
+  // Rejection sampling from 16-bit draws to avoid modulo bias. The key is a
+  // throwaway (never used for real security), but a security tool should not
+  // ship biased "randomness" even here.
+  const MAX = Math.floor(0x10000 / ML_KEM_Q) * ML_KEM_Q;
   const poly: number[] = new Array(N);
+  let pool = randomBytes(N * 4);
+  let off = 0;
   for (let i = 0; i < N; i++) {
-    // 16-bit sample reduced mod q — biased but always in [0, q), which is all the
-    // server's modulus check requires. This is a throwaway key.
-    poly[i] = raw.readUInt16BE(i * 2) % ML_KEM_Q;
+    let v: number;
+    do {
+      if (off + 2 > pool.length) {
+        pool = randomBytes(N * 4);
+        off = 0;
+      }
+      v = pool.readUInt16BE(off);
+      off += 2;
+    } while (v >= MAX);
+    poly[i] = v % ML_KEM_Q;
   }
   return poly;
 }
