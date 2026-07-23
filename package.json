@@ -47,6 +47,7 @@
     "@noble/post-quantum": "0.6.1",
     "@types/node": "^26.1.1",
     "eslint": "^9.18.0",
+    "fast-check": "^4.9.0",
     "prettier": "^3.4.2",
     "tsx": "^4.23.1",
     "typescript": "^5.7.2",
