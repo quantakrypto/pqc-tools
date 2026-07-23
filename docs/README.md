@@ -8,6 +8,10 @@ Engineering, standards, and compliance documentation for the
 - **[OBJECTIVES.md](OBJECTIVES.md)** — what the toolchain is for, what each library
   does, the load-bearing decisions, and the deliberate scope boundaries. Read this
   first.
+- **[COMPARISON.md](COMPARISON.md)** — two head-to-head comparisons: quantakrypto vs
+  QRAMM / cryptodeps (another crypto-dependency scanner) and quantakrypto vs NIST
+  (the standards baseline), with verified algorithm, ecosystem, and standards
+  coverage plus the honest gaps.
 - **[adr/](adr/README.md)** — Architecture Decision Records: the immutable "why"
   behind each load-bearing choice (zero deps, shared core contract, monorepo, no
   fabricated vectors, the two-plane agent architecture, English-only output).
