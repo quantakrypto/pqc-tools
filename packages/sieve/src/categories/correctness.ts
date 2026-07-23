@@ -23,9 +23,7 @@ import { toB64 } from "../protocol.js";
 
 /** Outcome of one round-trip iteration. */
 type Outcome =
-  | { kind: "ok" }
-  | { kind: "mismatch"; detail: string }
-  | { kind: "error"; detail: string };
+  { kind: "ok" } | { kind: "mismatch"; detail: string } | { kind: "error"; detail: string };
 
 export const correctness: Category = async (ctx): Promise<CategoryResult> => {
   const checks: Check[] = [];

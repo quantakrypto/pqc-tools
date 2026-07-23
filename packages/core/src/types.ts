@@ -25,16 +25,7 @@ export type FindingCategory =
 
 /** Classical asymmetric algorithm families that are not quantum-safe. */
 export type AlgorithmFamily =
-  | "RSA"
-  | "ECDH"
-  | "ECDSA"
-  | "EdDSA"
-  | "DH"
-  | "DSA"
-  | "X25519"
-  | "X448"
-  | "ECIES"
-  | "unknown";
+  "RSA" | "ECDH" | "ECDSA" | "EdDSA" | "DH" | "DSA" | "X25519" | "X448" | "ECIES" | "unknown";
 
 /** A precise location inside a scanned file. */
 export interface SourceLocation {
