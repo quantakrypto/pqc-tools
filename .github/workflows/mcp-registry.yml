@@ -36,4 +36,17 @@ jobs:
         working-directory: packages/mcp
         run: |
           mcp-publisher login github-oidc
-          mcp-publisher publish
+          # Idempotent: this workflow also runs on every published Release, so if
+          # server.json's version is already on the registry there is nothing to
+          # do. Treat that one case as success; fail on any other error.
+          set +e
+          out="$(mcp-publisher publish 2>&1)"
+          code=$?
+          printf '%s\n' "$out"
+          if [ "$code" -ne 0 ]; then
+            printf '%s' "$out" | grep -q "duplicate version" && {
+              echo "server.json version already on the registry, nothing to publish."
+              exit 0
+            }
+            exit "$code"
+          fi
