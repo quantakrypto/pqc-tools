@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.quantakrypto/pqc-tools",
+  "title": "quantakrypto pqc-tools",
+  "description": "Scan code for quantum-vulnerable cryptography and get NIST post-quantum migration guidance.",
+  "repository": {
+    "url": "https://github.com/quantakrypto/pqc-tools",
+    "source": "github"
+  },
+  "version": "0.5.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@quantakrypto/mcp",
+      "version": "0.5.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.quantakrypto.com/mcp"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "quantakrypto": {
+      "command": "npx",
+      "args": ["-y", "@quantakrypto/mcp"]
+    }
+  }
+}

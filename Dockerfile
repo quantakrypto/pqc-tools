@@ -17,7 +17,7 @@
 FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 
 # Install the published MCP server globally, version-pinned for reproducibility.
-RUN npm install -g @quantakrypto/mcp@0.5.0
+RUN npm install -g @quantakrypto/mcp@0.5.2
 
 # Run as the built-in unprivileged node user.
 USER node
