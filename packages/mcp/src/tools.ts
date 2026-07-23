@@ -960,6 +960,60 @@ const checkDependencyTool: ToolDefinition = {
   },
 };
 
+/**
+ * JSON-schema shape of one finding from `scan_path --format json` (mirrors the
+ * core {@link Finding} type). Used as the `items` schema for every findings
+ * array below so MCP clients/inspectors get a described element shape instead of
+ * a bare `type: "array"`. Extra finding fields are allowed (no
+ * additionalProperties:false), only ruleId + location.file are required — which
+ * is exactly what {@link areFindings} enforces.
+ */
+const FINDING_ITEM_SCHEMA = {
+  type: "object",
+  description: "A single finding from `scan_path --format json`.",
+  properties: {
+    ruleId: { type: "string", description: 'Stable rule id, e.g. "rsa-keygen".' },
+    title: { type: "string" },
+    category: { type: "string" },
+    severity: { type: "string", description: "critical | high | medium | low | info." },
+    confidence: { type: "string" },
+    algorithm: { type: "string", description: "Classical algorithm family, when applicable." },
+    hndl: { type: "boolean", description: "Exposed to harvest-now-decrypt-later." },
+    message: { type: "string" },
+    remediation: { type: "string" },
+    cwe: { type: "string", description: 'e.g. "CWE-327".' },
+    location: {
+      type: "object",
+      description: "Where the finding is.",
+      properties: {
+        file: { type: "string" },
+        line: { type: "number" },
+      },
+      required: ["file"],
+    },
+  },
+  required: ["ruleId", "location"],
+};
+
+/** JSON-schema shape of one triage verdict for `apply_triage`. */
+const VERDICT_ITEM_SCHEMA = {
+  type: "object",
+  description: "A triage verdict for one finding.",
+  properties: {
+    fingerprint: {
+      type: "string",
+      description: "Fingerprint of the finding this verdict applies to.",
+    },
+    exposureScore: {
+      type: "number",
+      description: "Real-world exposure (higher = more exposed).",
+    },
+    priority: { type: "string", enum: ["now", "soon", "later"] },
+    rationale: { type: "string", description: "Why this exposure score / priority." },
+  },
+  required: ["fingerprint", "exposureScore", "priority", "rationale"],
+};
+
 const scoreDeltaTool: ToolDefinition = {
   name: "score_delta",
   description:
@@ -971,9 +1025,14 @@ const scoreDeltaTool: ToolDefinition = {
     properties: {
       before: {
         type: "array",
+        items: FINDING_ITEM_SCHEMA,
         description: "Findings before the change (from a scan's JSON findings).",
       },
-      after: { type: "array", description: "Findings after the change." },
+      after: {
+        type: "array",
+        items: FINDING_ITEM_SCHEMA,
+        description: "Findings after the change.",
+      },
     },
     required: ["before", "after"],
     additionalProperties: false,
@@ -1064,7 +1123,11 @@ const triageFindingsTool: ToolDefinition = {
   inputSchema: {
     type: "object",
     properties: {
-      findings: { type: "array", description: "Findings from a scan's JSON output." },
+      findings: {
+        type: "array",
+        items: FINDING_ITEM_SCHEMA,
+        description: "Findings from a scan's JSON output.",
+      },
     },
     required: ["findings"],
     additionalProperties: false,
@@ -1136,8 +1199,16 @@ const applyTriageTool: ToolDefinition = {
   inputSchema: {
     type: "object",
     properties: {
-      findings: { type: "array", description: "The findings that were triaged." },
-      verdicts: { type: "array", description: "One verdict per finding, keyed by fingerprint." },
+      findings: {
+        type: "array",
+        items: FINDING_ITEM_SCHEMA,
+        description: "The findings that were triaged.",
+      },
+      verdicts: {
+        type: "array",
+        items: VERDICT_ITEM_SCHEMA,
+        description: "One verdict per finding, keyed by fingerprint.",
+      },
     },
     required: ["findings", "verdicts"],
     additionalProperties: false,
@@ -1203,7 +1274,11 @@ const remediateFindingsTool: ToolDefinition = {
   inputSchema: {
     type: "object",
     properties: {
-      findings: { type: "array", description: "Findings from a scan's JSON output." },
+      findings: {
+        type: "array",
+        items: FINDING_ITEM_SCHEMA,
+        description: "Findings from a scan's JSON output.",
+      },
     },
     required: ["findings"],
     additionalProperties: false,

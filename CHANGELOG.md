@@ -191,6 +191,25 @@ All added with positive + negative + doc-suppression tests; benchmark unaffected
   [VERSIONING.md](docs/VERSIONING.md) "generated API reference + frozen surface" 1.0
   requirement.
 
+## [0.5.1] — 2026-07-23
+
+`@quantakrypto/mcp` patch release only — the other `@quantakrypto/*` packages
+remain at 0.5.0 (see [Unreleased] for the pending, still-unpublished core work).
+
+### Fixed — MCP protocol/schema compliance (surfaced by MCP directory tooling)
+
+- **`resources/templates/list`** now returns an empty `{ resourceTemplates: [] }`
+  instead of `-32601 method not found`. The server advertises the `resources`
+  capability, so spec-compliant clients — and MCP directory health checks like
+  Glama's Inspector — call this during discovery; the missing handler tripped
+  them.
+- **Tool input schemas** — array-typed fields (`triage_findings` / `apply_triage`
+  / `remediate_findings` `findings`, `apply_triage` `verdicts`, and `score_delta`
+  `before` / `after`) now declare an `items` object schema describing the element
+  shape (a finding, or a `{ fingerprint, exposureScore, priority, rationale }`
+  verdict) instead of a bare `type: "array"`. MCP inspectors flag the bare form
+  ("missing items definition") and it lowered tool-definition-quality scores.
+
 ## [0.5.0] — 2026-07-20
 
 ### Fixed — detector precision (cross-detector double-counts)
