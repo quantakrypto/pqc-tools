@@ -5,11 +5,8 @@
 #   uses: quantakrypto/pqc-tools@v1                 (this file, Marketplace)
 #   uses: quantakrypto/pqc-tools/packages/action@v1 (unchanged)
 # Keep the inputs/outputs here in sync with packages/action/action.yml.
-name: "quantakrypto — Quantum Readiness Scan"
-description: >-
-  Fail CI when new quantum-vulnerable cryptography lands. Scans your codebase
-  with qScan, writes a SARIF report for GitHub code scanning, annotates
-  findings inline, and (optionally) comments a summary on the pull request.
+name: "quantakrypto Quantum Readiness Scan"
+description: "Fail CI when new quantum-vulnerable cryptography lands. Scans code, writes SARIF, gives PQC migration guidance."
 author: "quantakrypto"
 branding:
   icon: "shield"
