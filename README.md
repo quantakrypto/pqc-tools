@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/quantakrypto/pqc-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/quantakrypto/pqc-tools/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13769/badge)](https://www.bestpractices.dev/projects/13769)
 [![npm @quantakrypto/core](https://img.shields.io/npm/v/@quantakrypto/core?label=%40quantakrypto%2Fcore)](https://www.npmjs.com/package/@quantakrypto/core)
 [![npm @quantakrypto/qscan](https://img.shields.io/npm/v/@quantakrypto/qscan?label=%40quantakrypto%2Fqscan)](https://www.npmjs.com/package/@quantakrypto/qscan)
 [![npm @quantakrypto/mcp](https://img.shields.io/npm/v/@quantakrypto/mcp?label=%40quantakrypto%2Fmcp)](https://www.npmjs.com/package/@quantakrypto/mcp)
