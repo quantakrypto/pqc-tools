@@ -1,0 +1,20 @@
+{
+  // Standalone typecheck config. The observatory is a PRIVATE worker, not a
+  // published package, so it is intentionally NOT listed in the root
+  // tsconfig.json project references and `tsc -b` never builds it. We turn OFF
+  // composite/declaration/emit here (noEmit) so we may import qProbe's internal
+  // source modules directly by relative path (they live outside this package's
+  // src, which composite `rootDir` emit would reject). Run with:
+  //   npx tsc -p packages/observatory/tsconfig.json
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "inlineSources": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}
