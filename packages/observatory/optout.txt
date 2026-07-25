@@ -1,0 +1,12 @@
+# PQC observatory opt-out list.
+#
+# One host per line. Any domain listed here is:
+#   1. recorded in observatory_host with opted_out_at set, and
+#   2. never probed (skipped within the same run it is added to).
+#
+# This is how an operator removes a host from active probing within one cycle,
+# per docs/adr/0007-observatory-probing-policy.md, without editing hosts.txt.
+# `#` comments and blank lines are ignored.
+#
+# Example:
+# example.com
