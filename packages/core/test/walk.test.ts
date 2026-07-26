@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 
 import { walkFiles } from "../src/index.js";
+import { passesSizeLimit, MANIFEST_MAX_BYTES } from "../src/walk.js";
 
 /** Collect an async iterator into a sorted array. */
 async function collect(iter: AsyncIterable<string>): Promise<string[]> {
@@ -16,6 +17,20 @@ async function collect(iter: AsyncIterable<string>): Promise<string[]> {
   for await (const x of iter) out.push(x);
   return out.sort();
 }
+
+test("passesSizeLimit: manifests use the larger ceiling, non-manifests the ordinary cap", () => {
+  const cap = 1024 * 1024; // 1 MiB ordinary cap
+  // Non-manifest source: bounded by the ordinary cap.
+  assert.equal(passesSizeLimit("src/a.ts", cap, cap), true);
+  assert.equal(passesSizeLimit("src/a.ts", cap + 1, cap), false);
+  // Manifest: exceeds the ordinary cap but is still read...
+  assert.equal(passesSizeLimit("package-lock.json", cap * 8, cap), true);
+  // ...up to the generous manifest ceiling, past which even a lockfile is dropped
+  // so a pathological one can't be read unbounded.
+  assert.equal(passesSizeLimit("package-lock.json", MANIFEST_MAX_BYTES, cap), true);
+  assert.equal(passesSizeLimit("package-lock.json", MANIFEST_MAX_BYTES + 1, cap), false);
+  assert.equal(passesSizeLimit("yarn.lock", MANIFEST_MAX_BYTES + 1, cap), false);
+});
 
 async function makeTree(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "quantakrypto-walk-"));

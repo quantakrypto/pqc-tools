@@ -328,14 +328,23 @@ interface WalkContext {
 }
 
 /**
- * True if a file passes the size limit. Dependency manifests (package.json /
- * package-lock.json) are exempt from the cap so large lockfiles still get
- * scanned for vulnerable dependencies instead of being silently dropped.
+ * Manifests bypass the normal file-size cap (they carry the whole dependency
+ * tree and must not be dropped), but still get a generous hard ceiling so a
+ * pathological or hostile lockfile can't be read unbounded and OOM the scan.
+ * 16 MiB comfortably covers real monorepo lockfiles (npm's own is well under 5).
  */
-function passesSizeLimit(rel: string, size: number, maxFileSize: number): boolean {
-  // Dependency manifests are always read (they can exceed the size cap but carry
-  // the whole dependency tree). Uses the single {@link isManifestFile} definition.
-  if (isManifestFile(rel)) return true;
+export const MANIFEST_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * True if a file passes the size limit. Dependency manifests (package.json /
+ * package-lock.json / yarn.lock / …) get the larger {@link MANIFEST_MAX_BYTES}
+ * ceiling instead of the ordinary cap, so large lockfiles still get scanned for
+ * vulnerable dependencies without letting an enormous one exhaust memory.
+ * Exported for unit testing.
+ */
+export function passesSizeLimit(rel: string, size: number, maxFileSize: number): boolean {
+  // Uses the single {@link isManifestFile} definition.
+  if (isManifestFile(rel)) return size <= MANIFEST_MAX_BYTES;
   return size <= maxFileSize;
 }
 
