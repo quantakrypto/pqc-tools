@@ -9,7 +9,16 @@ import { scanManifest, isManifestFile } from "../src/dependencies.js";
 
 test("database has a healthy number of curated entries across ecosystems", () => {
   assert.ok(vulnerableDependencies.length >= 15, "at least 15 curated entries");
-  const validEcosystems = new Set(["npm", "pypi", "cargo", "go", "maven", "rubygems", "nuget"]);
+  const validEcosystems = new Set([
+    "npm",
+    "pypi",
+    "cargo",
+    "go",
+    "maven",
+    "rubygems",
+    "nuget",
+    "composer",
+  ]);
   const ecosystems = new Set<string>();
   for (const d of vulnerableDependencies) {
     assert.ok(validEcosystems.has(d.ecosystem), `${d.name}: valid ecosystem`);
@@ -19,7 +28,7 @@ test("database has a healthy number of curated entries across ecosystems", () =>
     assert.ok(d.reason.length > 0);
   }
   // Multi-ecosystem coverage — not just npm anymore.
-  for (const eco of ["npm", "pypi", "cargo", "go", "maven", "rubygems", "nuget"]) {
+  for (const eco of ["npm", "pypi", "cargo", "go", "maven", "rubygems", "nuget", "composer"]) {
     assert.ok(ecosystems.has(eco), `database covers ${eco}`);
   }
 });
@@ -37,6 +46,8 @@ test("isManifestFile recognises manifests across ecosystems", () => {
     "build.gradle",
     "Gemfile",
     "lib/foo.gemspec",
+    "composer.json",
+    "app/composer.lock",
   ]) {
     assert.equal(isManifestFile(f), true, `${f} is a manifest`);
   }
@@ -146,6 +157,51 @@ test("rubygems Gemfile gem lines are matched", () => {
       (f) => f.title === "Quantum-vulnerable dependency: rails",
     ),
   );
+});
+
+test("composer.json require/require-dev vendor/package names are matched", () => {
+  const composer = JSON.stringify({
+    name: "acme/app",
+    require: {
+      php: ">=8.1",
+      "ext-openssl": "*",
+      "phpseclib/phpseclib": "^3.0",
+      "firebase/php-jwt": "^6.0",
+      "monolog/monolog": "^3.0",
+    },
+    "require-dev": {
+      "paragonie/halite": "^5.0",
+    },
+  });
+  assertFlags("composer.json", composer, [
+    "phpseclib/phpseclib",
+    "firebase/php-jwt",
+    "paragonie/halite",
+  ]);
+  // Platform reqs and a non-crypto package must not be flagged.
+  const findings = scanManifest("composer.json", composer);
+  assert.ok(!findings.some((f) => f.title.includes("monolog")));
+  assert.ok(!findings.some((f) => f.title.includes("ext-openssl")));
+});
+
+test("composer.lock packages array is parsed", () => {
+  const lock = JSON.stringify({
+    "content-hash": "abc",
+    packages: [
+      { name: "mdanter/ecc", version: "1.0.0" },
+      { name: "psr/log", version: "3.0.0" },
+    ],
+    "packages-dev": [{ name: "simplito/elliptic-php", version: "1.0.6" }],
+  });
+  assertFlags("composer.lock", lock, ["mdanter/ecc", "simplito/elliptic-php"]);
+  assert.ok(!scanManifest("composer.lock", lock).some((f) => f.title.includes("psr/log")));
+});
+
+test("composer: phpseclib exposes RSA/DH so it is HNDL-exposed", () => {
+  const composer = JSON.stringify({ require: { "phpseclib/phpseclib": "^3.0" } });
+  const f = scanManifest("composer.json", composer)[0];
+  assert.equal(f.ruleId, "dep-vulnerable");
+  assert.equal(f.hndl, true);
 });
 
 test("ecosystem scoping: a same-named package matches only its ecosystem", () => {

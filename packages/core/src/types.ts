@@ -95,7 +95,15 @@ export interface Finding {
 }
 
 /** Package ecosystems the dependency scanner understands. */
-export type DependencyEcosystem = "npm" | "pypi" | "cargo" | "go" | "maven" | "rubygems" | "nuget";
+export type DependencyEcosystem =
+  | "npm"
+  | "pypi"
+  | "cargo"
+  | "go"
+  | "maven"
+  | "rubygems"
+  | "nuget"
+  | "composer";
 
 /** A known quantum-vulnerable dependency entry. */
 export interface VulnerableDependency {

@@ -6,6 +6,34 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added - detection quick-wins (PHP composer, JS recall edges, npm lockfile depth)
+
+Four post-1.0-roadmap accuracy/perf items on the benchmark-guarded detection
+surface. The F1 = 1.000 precision/recall benchmark is unchanged (still zero
+false positives, zero false negatives). SemVer: **minor** (additive detection).
+
+- **PHP `composer.json` / `composer.lock` dependency scanning**: a whole
+  ecosystem was invisible. Adds `composer` to `DependencyEcosystem`, a curated
+  DB of quantum-vulnerable PHP packages (phpseclib, paragonie/*, firebase/php-jwt,
+  lcobucci/jwt, web-token/jwt-framework, mdanter/ecc, simplito/elliptic-php), the
+  `composer.json` / `composer.lock` manifest mapping, and a generous
+  `vendor/package` extractor (both files are JSON, so the DB filter keeps it safe).
+- **JS home-turf recall edges**: the Node `crypto` detector now catches bracket
+  (computed-member) access, e.g. `crypto['createSign'](…)` /
+  `crypto["createECDH"](…)` / `crypto['generateKeyPairSync']('rsa')`, and
+  `generateKeyPair(kind, …)` where the key type is a variable (emitted as the
+  generic keygen rule, unknown family, HNDL-conservative). No double-counting
+  with the existing dotted-call and literal-argument rules.
+- **npm lockfile v1 nested tree + `npm:` alias resolution**: `scanNpmManifest`
+  now walks the legacy package-lock v1 nested `dependencies` tree (transitive
+  deps that never appear at the top level) and resolves `npm:`-aliased packages
+  from package.json values, v1 entry `version` fields, and v3 `packages` entry
+  `name` fields, so a vulnerable package hiding behind an alias is still flagged.
+- **Parallel-path double-stat elimination (perf)**: the directory walker now
+  surfaces the byte size it already stat'd (`walkFilesSized`), so the parallel
+  scanner no longer re-stats every file for byte-balanced chunking. Pure perf;
+  the file set and detection output are byte-identical.
+
 ### Added: stable finding fingerprints in JSON and SARIF output
 
 - Every finding in the `--report json` output now carries a top-level

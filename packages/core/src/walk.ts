@@ -291,12 +291,34 @@ export function looksMinified(content: string): boolean {
   return avgLine > 1_000;
 }
 
+/** A scannable file plus the byte size the walker already stat'd for it. */
+export interface WalkedFile {
+  /** Relative POSIX path from the walk root. */
+  rel: string;
+  /** File size in bytes (from the walker's own stat; never re-stat downstream). */
+  size: number;
+}
+
 /**
  * Recursively yield scannable file paths (relative to `root`, POSIX) under a
  * directory. If `root` points at a single file, yields just that file's
- * basename (subject to the size / binary filters).
+ * basename (subject to the size / binary filters). Thin wrapper over
+ * {@link walkFilesSized} that drops the size (the historical string-yielding API).
  */
 export async function* walkFiles(root: string, options: WalkOptions = {}): AsyncGenerator<string> {
+  for await (const f of walkFilesSized(root, options)) yield f.rel;
+}
+
+/**
+ * Like {@link walkFiles} but yields each file WITH the byte size the walker
+ * already obtained while applying the size limit. Callers that need sizes (the
+ * parallel scanner's byte-balanced chunking) consume this directly so they do
+ * not stat every file a second time (P2 double-stat elimination).
+ */
+export async function* walkFilesSized(
+  root: string,
+  options: WalkOptions = {},
+): AsyncGenerator<WalkedFile> {
   const include = options.include ?? [];
   const exclude = options.exclude ?? [];
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
@@ -312,7 +334,7 @@ export async function* walkFiles(root: string, options: WalkOptions = {}): Async
       isIncluded(name, include) &&
       passesSizeLimit(name, rootStat.size, maxFileSize)
     ) {
-      yield name;
+      yield { rel: name, size: rootStat.size };
     }
     return;
   }
@@ -349,7 +371,11 @@ export function passesSizeLimit(rel: string, size: number, maxFileSize: number):
 }
 
 /** Internal recursive directory walker. `relDir` is POSIX-relative to the root. */
-async function* walkDir(absDir: string, relDir: string, ctx: WalkContext): AsyncGenerator<string> {
+async function* walkDir(
+  absDir: string,
+  relDir: string,
+  ctx: WalkContext,
+): AsyncGenerator<WalkedFile> {
   let entries: Dirent[];
   try {
     entries = await readdir(absDir, { withFileTypes: true });
@@ -386,13 +412,15 @@ async function* walkDir(absDir: string, relDir: string, ctx: WalkContext): Async
     if (!manifest && isBinaryPath(rel)) continue;
     if (!manifest && isGeneratedPath(rel)) continue;
 
+    let size: number;
     try {
       const s = await stat(abs);
       if (!passesSizeLimit(rel, s.size, ctx.maxFileSize)) continue;
+      size = s.size;
     } catch {
       continue;
     }
 
-    yield rel;
+    yield { rel, size };
   }
 }

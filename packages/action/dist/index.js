@@ -448,6 +448,8 @@ function manifestEcosystem(file) {
     return "rubygems";
   if (base === "packages.config" || base === "directory.packages.props" || base.endsWith(".csproj"))
     return "nuget";
+  if (base === "composer.json" || base === "composer.lock")
+    return "composer";
   return null;
 }
 function isManifestFile(file) {
@@ -510,6 +512,12 @@ function candidateNames(ecosystem, content) {
         names.push(m[1]);
       }
       for (const m of content.matchAll(/<package\b[^>]*\bid\s*=\s*"([^"]+)"/gi)) {
+        names.push(m[1]);
+      }
+      break;
+    }
+    case "composer": {
+      for (const m of content.matchAll(/["']([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)["']/gi)) {
         names.push(m[1]);
       }
       break;
@@ -582,6 +590,14 @@ function scanManifest(file, content) {
   }
   return sortByTitle(findings);
 }
+function npmAliasTarget(spec) {
+  if (!spec.startsWith("npm:"))
+    return null;
+  const rest = spec.slice(4);
+  const at = rest.lastIndexOf("@");
+  const name = at > 0 ? rest.slice(0, at) : rest;
+  return name || null;
+}
 function scanNpmManifest(content, file, db) {
   let json;
   try {
@@ -593,28 +609,47 @@ function scanNpmManifest(content, file, db) {
     return [];
   const found = /* @__PURE__ */ new Set();
   const obj = json;
-  const collectFromRecord = (rec) => {
-    if (rec === null || typeof rec !== "object")
+  const add = (name) => {
+    if (db.has(name))
+      found.add(name);
+  };
+  const walkDepTree = (deps, depth) => {
+    if (depth > NPM_TREE_MAX_DEPTH || deps === null || typeof deps !== "object")
       return;
-    for (const key of Object.keys(rec)) {
-      if (db.has(key))
-        found.add(key);
+    for (const [name, node] of Object.entries(deps)) {
+      add(name);
+      if (typeof node === "string") {
+        const aliased = npmAliasTarget(node);
+        if (aliased)
+          add(aliased);
+      } else if (node !== null && typeof node === "object") {
+        const rec = node;
+        if (typeof rec.version === "string") {
+          const aliased = npmAliasTarget(rec.version);
+          if (aliased)
+            add(aliased);
+        }
+        walkDepTree(rec.dependencies, depth + 1);
+      }
     }
   };
-  collectFromRecord(obj.dependencies);
-  collectFromRecord(obj.devDependencies);
-  collectFromRecord(obj.peerDependencies);
-  collectFromRecord(obj.optionalDependencies);
+  walkDepTree(obj.dependencies, 0);
+  walkDepTree(obj.devDependencies, 0);
+  walkDepTree(obj.peerDependencies, 0);
+  walkDepTree(obj.optionalDependencies, 0);
   const packages = obj.packages;
   if (packages !== null && typeof packages === "object") {
-    for (const key of Object.keys(packages)) {
+    for (const [key, entry] of Object.entries(packages)) {
       if (!key)
         continue;
       const marker = "node_modules/";
       const idx = key.lastIndexOf(marker);
-      const name = idx >= 0 ? key.slice(idx + marker.length) : key;
-      if (db.has(name))
-        found.add(name);
+      add(idx >= 0 ? key.slice(idx + marker.length) : key);
+      if (entry !== null && typeof entry === "object") {
+        const realName = entry.name;
+        if (typeof realName === "string")
+          add(realName);
+      }
     }
   }
   const findings = [];
@@ -650,7 +685,7 @@ function scanNpmLockfile(content, file, db) {
   }
   return sortByTitle(findings);
 }
-var DEP_VULNERABLE_RULE, vulnerableDependencies, BY_ECOSYSTEM, KEY_REGEX_BY_NAME;
+var DEP_VULNERABLE_RULE, vulnerableDependencies, BY_ECOSYSTEM, KEY_REGEX_BY_NAME, NPM_TREE_MAX_DEPTH;
 var init_dependencies = __esm({
   "../core/dist/dependencies.js"() {
     "use strict";
@@ -1258,6 +1293,73 @@ var init_dependencies = __esm({
         algorithms: ["RSA", "ECDSA"],
         severity: "medium",
         hndl: false
+      },
+      // --- Composer (PHP) ---
+      {
+        name: "phpseclib/phpseclib",
+        ecosystem: "composer",
+        reason: "Pure-PHP RSA / DSA / ECDSA / Diffie-Hellman public-key crypto and X.509.",
+        algorithms: ["RSA", "DSA", "ECDSA", "DH"],
+        severity: "high"
+      },
+      {
+        name: "paragonie/sodium_compat",
+        ecosystem: "composer",
+        reason: "Pure-PHP libsodium polyfill: X25519 key agreement and Ed25519 signatures.",
+        algorithms: ["X25519", "EdDSA"],
+        severity: "low"
+      },
+      {
+        name: "paragonie/halite",
+        ecosystem: "composer",
+        reason: "libsodium wrapper: X25519 key agreement and Ed25519 signatures.",
+        algorithms: ["X25519", "EdDSA"],
+        severity: "low"
+      },
+      {
+        name: "paragonie/paseto",
+        ecosystem: "composer",
+        reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
+        algorithms: ["EdDSA", "RSA"],
+        severity: "medium",
+        hndl: false
+      },
+      {
+        name: "firebase/php-jwt",
+        ecosystem: "composer",
+        reason: "PHP JWT signing/verification with classical RS*/ES* algorithms.",
+        algorithms: ["RSA", "ECDSA"],
+        severity: "medium",
+        hndl: false
+      },
+      {
+        name: "lcobucci/jwt",
+        ecosystem: "composer",
+        reason: "PHP JWT with classical RSA/ECDSA signature algorithms.",
+        algorithms: ["RSA", "ECDSA"],
+        severity: "medium",
+        hndl: false
+      },
+      {
+        name: "web-token/jwt-framework",
+        ecosystem: "composer",
+        reason: "JOSE (JWS/JWE) framework: classical RSA/ECDSA signatures and ECDH-ES key agreement.",
+        algorithms: ["RSA", "ECDSA", "ECDH"],
+        severity: "medium"
+      },
+      {
+        name: "mdanter/ecc",
+        ecosystem: "composer",
+        reason: "Pure-PHP elliptic-curve ECDSA signatures and ECDH key agreement.",
+        algorithms: ["ECDSA", "ECDH"],
+        severity: "high"
+      },
+      {
+        name: "simplito/elliptic-php",
+        ecosystem: "composer",
+        reason: "secp256k1 / NIST-curve ECDSA and ECDH in pure PHP (blockchain keys).",
+        algorithms: ["ECDSA", "ECDH"],
+        severity: "high"
       }
     ];
     BY_ECOSYSTEM = (() => {
@@ -1276,6 +1378,7 @@ var init_dependencies = __esm({
       const escaped = d.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
       return [d.name, new RegExp(`"${escaped}"\\s*:`)];
     }));
+    NPM_TREE_MAX_DEPTH = 64;
   }
 });
 
@@ -1397,6 +1500,10 @@ function looksMinified(content) {
   return avgLine > 1e3;
 }
 async function* walkFiles(root, options = {}) {
+  for await (const f of walkFilesSized(root, options))
+    yield f.rel;
+}
+async function* walkFilesSized(root, options = {}) {
   const include = options.include ?? [];
   const exclude = options.exclude ?? [];
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
@@ -1405,7 +1512,7 @@ async function* walkFiles(root, options = {}) {
   if (rootStat.isFile()) {
     const name = toPosix(path.basename(root));
     if (!isBinaryPath(name) && isIncluded(name, include) && passesSizeLimit(name, rootStat.size, maxFileSize)) {
-      yield name;
+      yield { rel: name, size: rootStat.size };
     }
     return;
   }
@@ -1449,14 +1556,16 @@ async function* walkDir(absDir, relDir, ctx) {
       continue;
     if (!manifest && isGeneratedPath(rel))
       continue;
+    let size;
     try {
       const s = await stat(abs);
       if (!passesSizeLimit(rel, s.size, ctx.maxFileSize))
         continue;
+      size = s.size;
     } catch {
       continue;
     }
-    yield rel;
+    yield { rel, size };
   }
 }
 var DEFAULT_IGNORES, DEFAULT_MAX_FILE_SIZE, BINARY_EXTENSIONS, GLOB_CACHE, KEYSTORE_EXTENSIONS, GENERATED_PATH_RE, MANIFEST_MAX_BYTES;
@@ -1977,13 +2086,14 @@ function isRealSshKeyOrAlgoList(content, index, matchLen) {
     distinct.add(t[1]);
   return distinct.size >= 2;
 }
-var RE_GENERATE_KEYPAIR, KEYGEN_INFO, ALIASABLE, RE_CREATE_SIGN_VERIFY, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RE_SSH_ALGO_TOKEN, SSH_LINE_WINDOW, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
+var RE_GENERATE_KEYPAIR, RE_GENERATE_KEYPAIR_VAR, KEYGEN_INFO, ALIASABLE, RE_CREATE_SIGN_VERIFY, RE_BRACKET_CRYPTO_METHOD, RE_BRACKET_KEYGEN, RE_ONESHOT_SIGN_VERIFY, RE_CREATE_DH, RE_GET_DH, RE_CREATE_ECDH, RE_RSA_ENCRYPT, RE_DH_KEYOBJECT, RE_WEBCRYPTO_ALGO, RE_SUBTLE_CALL, RE_FORGE_RSA, RE_FORGE_ED25519, RE_ELLIPTIC_EC, RE_JSRSASIGN_KEYGEN, RE_JSRSASIGN_SIGN, RE_NODE_RSA, RE_SECP256K1, RE_JWT_ALG, RE_JOSE_ECDH, RE_TLS_LEGACY_VERSION, RE_TLS_REJECT, RE_TLS_WEAK_CIPHER, RULE_NODE_KEYGEN, RULE_NODE_SIGN, RULE_NODE_SIGN_ONESHOT, RULE_NODE_DH, RULE_NODE_DH_MODP, RULE_NODE_ECDH, RULE_NODE_RSA_ENCRYPT, RULE_NODE_DH_KEYOBJECT, nodeCryptoDetector, RULE_WEBCRYPTO, webCryptoDetector, RULE_FORGE_RSA, RULE_FORGE_ED25519, RULE_ELLIPTIC_EC, RULE_SECP256K1, RULE_JSRSASIGN_KEYGEN, RULE_JSRSASIGN_SIGN, RULE_NODE_RSA_LIB, libraryDetector, RE_JOSE_KEM, RULE_JWT_ALG, RULE_JOSE_ECDH, RULE_JOSE_RSA_OAEP, jwtDetector, RULE_TLS_LEGACY, RULE_TLS_REJECT, RULE_TLS_WEAK_CIPHER, tlsDetector, RE_SSH_PUBKEY, RE_CERT_SIG_ALG, RE_SSH_KEX, RE_SSH_ALGO_TOKEN, SSH_LINE_WINDOW, RULE_SSH_PUBKEY, RULE_CERT_SIG_ALG, RULE_SSH_KEX, sshCertDetector, RE_TLS_CLASSICAL_KEX, RULE_TLS_CLASSICAL_KEX, tlsClassicalKexDetector, sourceDetectors;
 var init_source = __esm({
   "../core/dist/detectors/source.js"() {
     "use strict";
     init_detect_utils();
     init_cwe();
     RE_GENERATE_KEYPAIR = /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
+    RE_GENERATE_KEYPAIR_VAR = /(?<![\w$])generateKeyPair(?:Sync)?\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
     KEYGEN_INFO = {
       rsa: { algo: "RSA", cat: "kem", sev: "high", hndl: true, label: "RSA" },
       // RSA-PSS is signature-only, so classify it as a (forgeable) signature
@@ -2024,6 +2134,8 @@ var init_source = __esm({
       "createDiffieHellmanGroup"
     ];
     RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
+    RE_BRACKET_CRYPTO_METHOD = /\[\s*['"`](createSign|createVerify|createECDH|createDiffieHellman|createDiffieHellmanGroup|publicEncrypt|privateDecrypt)['"`]\s*\]\s*\(/g;
+    RE_BRACKET_KEYGEN = /\[\s*['"`]generateKeyPair(?:Sync)?['"`]\s*\]\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
     RE_ONESHOT_SIGN_VERIFY = /(?<![.\w])(?:crypto\.)?(sign|verify)\s*\(\s*(?:['"`][\w.-]+['"`]|null)\s*,/g;
     RE_CREATE_DH = /createDiffieHellman(?:Group)?\s*\(/g;
     RE_GET_DH = /getDiffieHellman\s*\(\s*['"`](modp\d+)['"`]\s*\)/g;
@@ -2163,6 +2275,15 @@ var init_source = __esm({
         eachMatch(RE_GENERATE_KEYPAIR, content, (m) => {
           pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length);
         });
+        eachMatch(RE_GENERATE_KEYPAIR_VAR, content, (m) => {
+          findings.push(findingFromRule(RULE_NODE_KEYGEN, { file, content, index: m.index, matchLength: m[0].length }, {
+            title: "Classical key generation (variable key type)",
+            message: "Generates a classical asymmetric key pair (key type passed as a variable), which is not quantum-safe."
+          }));
+        });
+        eachMatch(RE_BRACKET_KEYGEN, content, (m) => {
+          pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length);
+        });
         const aliases = collectCryptoAliases(content);
         for (const [canonical, names] of aliases) {
           for (const alias of names) {
@@ -2194,6 +2315,19 @@ var init_source = __esm({
             index: m.index,
             matchLength: m[0].length
           }));
+        });
+        eachMatch(RE_BRACKET_CRYPTO_METHOD, content, (m) => {
+          const loc = { file, content, index: m.index, matchLength: m[0].length };
+          const method = m[1];
+          if (method === "createSign" || method === "createVerify") {
+            findings.push(findingFromRule(RULE_NODE_SIGN, loc));
+          } else if (method === "createECDH") {
+            findings.push(findingFromRule(RULE_NODE_ECDH, loc));
+          } else if (method === "publicEncrypt" || method === "privateDecrypt") {
+            findings.push(findingFromRule(RULE_NODE_RSA_ENCRYPT, loc));
+          } else {
+            findings.push(findingFromRule(RULE_NODE_DH, loc));
+          }
         });
         eachMatch(RE_ONESHOT_SIGN_VERIFY, content, (m) => {
           findings.push(findingFromRule(RULE_NODE_SIGN_ONESHOT, {
@@ -9705,27 +9839,24 @@ function shouldParallelize(options, files) {
   return totalBytes >= byteFloor && files.length >= fileFloor;
 }
 async function enumerateFiles(options, baseDir) {
-  const rels = [];
-  if (options.files) {
-    for (const rel of filterExplicitFileList(options.files, options))
-      rels.push(rel);
-  } else {
-    for await (const rel of walkFiles(options.root, {
-      include: options.include,
-      exclude: options.exclude,
-      noDefaultIgnores: options.noDefaultIgnores,
-      maxFileSize: options.maxFileSize
-    })) {
-      rels.push(rel);
-    }
-  }
   const sized = [];
-  for (const rel of rels) {
-    let size = 0;
-    try {
-      size = (await stat3(path4.join(baseDir, ...rel.split("/")))).size;
-    } catch {
+  if (options.files) {
+    for (const rel of filterExplicitFileList(options.files, options)) {
+      let size = 0;
+      try {
+        size = (await stat3(path4.join(baseDir, ...rel.split("/")))).size;
+      } catch {
+      }
+      sized.push({ rel, size });
     }
+    return sized;
+  }
+  for await (const { rel, size } of walkFilesSized(options.root, {
+    include: options.include,
+    exclude: options.exclude,
+    noDefaultIgnores: options.noDefaultIgnores,
+    maxFileSize: options.maxFileSize
+  })) {
     sized.push({ rel, size });
   }
   return sized;

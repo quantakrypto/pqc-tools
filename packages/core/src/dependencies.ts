@@ -654,14 +654,83 @@ export const vulnerableDependencies: VulnerableDependency[] = [
     severity: "medium",
     hndl: false,
   },
+
+  // --- Composer (PHP) ---
+  {
+    name: "phpseclib/phpseclib",
+    ecosystem: "composer",
+    reason: "Pure-PHP RSA / DSA / ECDSA / Diffie-Hellman public-key crypto and X.509.",
+    algorithms: ["RSA", "DSA", "ECDSA", "DH"],
+    severity: "high",
+  },
+  {
+    name: "paragonie/sodium_compat",
+    ecosystem: "composer",
+    reason: "Pure-PHP libsodium polyfill: X25519 key agreement and Ed25519 signatures.",
+    algorithms: ["X25519", "EdDSA"],
+    severity: "low",
+  },
+  {
+    name: "paragonie/halite",
+    ecosystem: "composer",
+    reason: "libsodium wrapper: X25519 key agreement and Ed25519 signatures.",
+    algorithms: ["X25519", "EdDSA"],
+    severity: "low",
+  },
+  {
+    name: "paragonie/paseto",
+    ecosystem: "composer",
+    reason: "PASETO public tokens signed with classical Ed25519 (v2/v4) or RSA.",
+    algorithms: ["EdDSA", "RSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "firebase/php-jwt",
+    ecosystem: "composer",
+    reason: "PHP JWT signing/verification with classical RS*/ES* algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "lcobucci/jwt",
+    ecosystem: "composer",
+    reason: "PHP JWT with classical RSA/ECDSA signature algorithms.",
+    algorithms: ["RSA", "ECDSA"],
+    severity: "medium",
+    hndl: false,
+  },
+  {
+    name: "web-token/jwt-framework",
+    ecosystem: "composer",
+    reason: "JOSE (JWS/JWE) framework: classical RSA/ECDSA signatures and ECDH-ES key agreement.",
+    algorithms: ["RSA", "ECDSA", "ECDH"],
+    severity: "medium",
+  },
+  {
+    name: "mdanter/ecc",
+    ecosystem: "composer",
+    reason: "Pure-PHP elliptic-curve ECDSA signatures and ECDH key agreement.",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high",
+  },
+  {
+    name: "simplito/elliptic-php",
+    ecosystem: "composer",
+    reason: "secp256k1 / NIST-curve ECDSA and ECDH in pure PHP (blockchain keys).",
+    algorithms: ["ECDSA", "ECDH"],
+    severity: "high",
+  },
 ];
 
 /**
  * Normalise a package name for matching within its ecosystem. PyPI is
  * case-insensitive and folds runs of `-_.` to a single `-` (PEP 503); cargo /
- * maven / rubygems / nuget are effectively lower-case (NuGet ids are matched
- * case-insensitively); npm and go module paths are matched verbatim (npm scopes
- * and go paths are case-sensitive).
+ * maven / rubygems / nuget / composer are effectively lower-case (NuGet ids are
+ * matched case-insensitively; Composer `vendor/package` names are lower-cased by
+ * Packagist); npm and go module paths are matched verbatim (npm scopes and go
+ * paths are case-sensitive).
  */
 function normalizeName(ecosystem: DependencyEcosystem, name: string): string {
   const n = name.trim();
@@ -749,6 +818,7 @@ export function manifestEcosystem(file: string): DependencyEcosystem | null {
   if (base === "gemfile" || base.endsWith(".gemspec")) return "rubygems";
   if (base === "packages.config" || base === "directory.packages.props" || base.endsWith(".csproj"))
     return "nuget";
+  if (base === "composer.json" || base === "composer.lock") return "composer";
   return null;
 }
 
@@ -824,6 +894,20 @@ function candidateNames(ecosystem: DependencyEcosystem, content: string): string
         names.push(m[1]);
       }
       for (const m of content.matchAll(/<package\b[^>]*\bid\s*=\s*"([^"]+)"/gi)) {
+        names.push(m[1]);
+      }
+      break;
+    }
+    case "composer": {
+      // composer.json `require`/`require-dev` maps are keyed by "vendor/package";
+      // composer.lock lists `{"name": "vendor/package", …}`. Both are JSON, so
+      // grab every quoted `vendor/package` token (a lower-case vendor + package
+      // separated by a single `/`). PHP platform requirements ("php", "ext-*")
+      // carry no slash and so are naturally excluded; the curated DB filters the
+      // rest, so over-capture is safe.
+      for (const m of content.matchAll(
+        /["']([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)["']/gi,
+      )) {
         names.push(m[1]);
       }
       break;
@@ -925,9 +1009,32 @@ export function scanManifest(file: string, content: string): Finding[] {
 }
 
 /**
+ * Resolve an npm `npm:` alias spec to the real package it installs, or null when
+ * the spec is not an alias. An aliased dependency records the alias as the map
+ * KEY and `npm:<real-name>@<range>` as the VALUE (in package.json and in a
+ * lockfile entry's `version`), so the vulnerable package hides behind a benign
+ * alias name. Keeps a leading scope `@` (only a version `@` past index 0 is a
+ * separator): `npm:node-forge@^1` → `node-forge`, `npm:@scope/pkg@1` → `@scope/pkg`.
+ */
+function npmAliasTarget(spec: string): string | null {
+  if (!spec.startsWith("npm:")) return null;
+  const rest = spec.slice(4);
+  const at = rest.lastIndexOf("@");
+  const name = at > 0 ? rest.slice(0, at) : rest;
+  return name || null;
+}
+
+/** Guard against a pathological / hostile lockfile nesting the walk unbounded. */
+const NPM_TREE_MAX_DEPTH = 64;
+
+/**
  * npm manifest scan.
- * - `package.json`: dependencies / devDependencies / peerDependencies / optionalDependencies.
- * - `package-lock.json` (v2/v3): the `packages` map keys (node_modules/<name>).
+ * - `package.json`: dependencies / devDependencies / peerDependencies / optionalDependencies,
+ *   including `npm:`-aliased entries (the alias key hides the real package name).
+ * - `package-lock.json` v1: the NESTED `dependencies` tree, where each entry may carry
+ *   its own `dependencies` (transitive deps) and an `npm:` alias in `version`.
+ * - `package-lock.json` v2/v3: the flat `packages` map keys (node_modules/<name>),
+ *   plus each entry's own `name` field (set for aliased installs).
  */
 function scanNpmManifest(
   content: string,
@@ -945,26 +1052,54 @@ function scanNpmManifest(
   const found = new Set<string>();
   const obj = json as Record<string, unknown>;
 
-  const collectFromRecord = (rec: unknown): void => {
-    if (rec === null || typeof rec !== "object") return;
-    for (const key of Object.keys(rec as Record<string, unknown>)) {
-      if (db.has(key)) found.add(key);
+  const add = (name: string): void => {
+    if (db.has(name)) found.add(name);
+  };
+
+  /**
+   * Walk a dependency map that may be either a flat package.json map
+   * (name → version-range string) or a legacy package-lock v1 tree (name →
+   * `{ version, requires, dependencies }`, arbitrarily nested). Matches keys,
+   * resolves `npm:` aliases from string values and entry `version` fields, and
+   * recurses into a nested `dependencies` sub-tree.
+   */
+  const walkDepTree = (deps: unknown, depth: number): void => {
+    if (depth > NPM_TREE_MAX_DEPTH || deps === null || typeof deps !== "object") return;
+    for (const [name, node] of Object.entries(deps as Record<string, unknown>)) {
+      add(name);
+      if (typeof node === "string") {
+        // package.json form: the value is a range, possibly `npm:<real>@<range>`.
+        const aliased = npmAliasTarget(node);
+        if (aliased) add(aliased);
+      } else if (node !== null && typeof node === "object") {
+        const rec = node as Record<string, unknown>;
+        if (typeof rec.version === "string") {
+          const aliased = npmAliasTarget(rec.version);
+          if (aliased) add(aliased);
+        }
+        walkDepTree(rec.dependencies, depth + 1); // v1 nests transitive deps here
+      }
     }
   };
 
-  collectFromRecord(obj.dependencies);
-  collectFromRecord(obj.devDependencies);
-  collectFromRecord(obj.peerDependencies);
-  collectFromRecord(obj.optionalDependencies);
+  walkDepTree(obj.dependencies, 0);
+  walkDepTree(obj.devDependencies, 0);
+  walkDepTree(obj.peerDependencies, 0);
+  walkDepTree(obj.optionalDependencies, 0);
 
   const packages = obj.packages;
   if (packages !== null && typeof packages === "object") {
-    for (const key of Object.keys(packages as Record<string, unknown>)) {
+    for (const [key, entry] of Object.entries(packages as Record<string, unknown>)) {
       if (!key) continue; // root package entry
       const marker = "node_modules/";
       const idx = key.lastIndexOf(marker);
-      const name = idx >= 0 ? key.slice(idx + marker.length) : key;
-      if (db.has(name)) found.add(name);
+      add(idx >= 0 ? key.slice(idx + marker.length) : key);
+      // Aliased install: the entry's own `name` field is the real package, which
+      // differs from the alias embedded in the node_modules/<alias> key.
+      if (entry !== null && typeof entry === "object") {
+        const realName = (entry as Record<string, unknown>).name;
+        if (typeof realName === "string") add(realName);
+      }
     }
   }
 
