@@ -2,7 +2,7 @@
 
 How `quantakrypto-tools` targets the three pillars of OSS supply-chain assurance —
 **OpenSSF Scorecard**, **SLSA / npm provenance**, and **SPDX/REUSE licensing** —
-and where the project stands against each today. This operationalises and the supply-chain section of [COMPLIANCE.md](COMPLIANCE.md §5).
+and where the project stands against each today. This operationalises the supply-chain section of [COMPLIANCE.md §5](COMPLIANCE.md).
 
 The project's strongest asset here is the [zero-runtime-dependency](adr/0001-zero-runtime-dependencies.md)
 posture: no transitive CVEs, no lifecycle scripts, a tiny dev-tool surface. That

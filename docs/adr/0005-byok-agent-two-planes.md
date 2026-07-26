@@ -88,7 +88,7 @@ imported by both planes.
   **"crypto-verified, not security-reviewed"** and must be reviewed as a diff.
   *(F1) **Resolved**: a blast-radius guard now bounds a patch to the finding's file
   set + dependency manifests, and the output framing says "crypto-verified, not
-  security-reviewed" honestly — see [OBJECTIVES.md](OBJECTIVES.md).*
+  security-reviewed" honestly — see [OBJECTIVES.md](../OBJECTIVES.md).*
 - **On the MCP plane the gates are advisory** — the host agent writes files, so
   patch-policy/`verify_fix` are not enforced there. Documented, not code-guaranteed. (F5)
 - *(F2, F3) **Resolved**: instruction/data separation now travels via the provider's
