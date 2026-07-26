@@ -12,6 +12,7 @@ import {
   remediationFor,
   buildInventory,
   defaultRegistry,
+  fingerprintFinding,
   VERSION,
 } from "../src/index.js";
 import type { AlgorithmFamily, Finding, ScanResult } from "../src/index.js";
@@ -244,6 +245,128 @@ test("toJson returns a clean structured object", () => {
   assert.ok(typeof inv.readinessScore === "number");
   // Round-trips through JSON without throwing.
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(json)));
+});
+
+test("toJson stamps a stable fingerprint on every finding", () => {
+  const json = toJson(sampleResult());
+  const findings = json.findings as Array<Record<string, unknown>>;
+  for (const f of findings) {
+    assert.match(
+      f.fingerprint as string,
+      /^[0-9a-f]{64}$/,
+      "each JSON finding carries a sha256 fingerprint",
+    );
+  }
+});
+
+test("toJson fingerprint is line-INSENSITIVE (a line move does not change it)", () => {
+  const base: Finding = {
+    ruleId: "node-crypto-ecdh",
+    title: "ECDH key exchange",
+    category: "key-exchange",
+    severity: "high",
+    confidence: "high",
+    algorithm: "ECDH",
+    hndl: true,
+    message: "ECDH is broken by Shor's algorithm.",
+    location: { file: "src/x.ts", line: 5, snippet: "createECDH('secp256k1')" },
+  };
+  // Same rule/path/snippet, only the line (and column) shifted.
+  const moved: Finding = {
+    ...base,
+    location: { ...base.location, line: 999, column: 40 },
+  };
+  const fpOf = (f: Finding) =>
+    (
+      toJson({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) })
+        .findings as Array<Record<string, unknown>>
+    )[0].fingerprint as string;
+  assert.equal(fpOf(base), fpOf(moved), "fingerprint survives a line move");
+});
+
+test("toJson fingerprint differs across rule, path, and context", () => {
+  const base: Finding = {
+    ruleId: "node-crypto-ecdh",
+    title: "ECDH key exchange",
+    category: "key-exchange",
+    severity: "high",
+    confidence: "high",
+    algorithm: "ECDH",
+    hndl: true,
+    message: "ECDH is broken by Shor's algorithm.",
+    location: { file: "src/x.ts", line: 5, snippet: "createECDH('secp256k1')" },
+  };
+  const fpOf = (f: Finding) =>
+    (
+      toJson({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) })
+        .findings as Array<Record<string, unknown>>
+    )[0].fingerprint as string;
+
+  const otherRule: Finding = { ...base, ruleId: "node-crypto-rsa" };
+  const otherPath: Finding = { ...base, location: { ...base.location, file: "src/y.ts" } };
+  const otherContext: Finding = {
+    ...base,
+    location: { ...base.location, snippet: "createECDH('prime256v1')" },
+  };
+
+  const fp = fpOf(base);
+  assert.notEqual(fpOf(otherRule), fp, "different rule → different fingerprint");
+  assert.notEqual(fpOf(otherPath), fp, "different path → different fingerprint");
+  assert.notEqual(fpOf(otherContext), fp, "different context → different fingerprint");
+});
+
+test("toJson fingerprint falls back to rule+path when no context is available", () => {
+  // No snippet: two findings that share rule+path collapse to one identity;
+  // changing the path (still no snippet) splits them apart again.
+  const noCtx: Finding = {
+    ruleId: "dep-vulnerable",
+    title: "Quantum-vulnerable dependency",
+    category: "dependency",
+    severity: "medium",
+    confidence: "high",
+    hndl: false,
+    message: "m",
+    location: { file: "package.json", line: 1 },
+  };
+  const fpOf = (f: Finding) =>
+    (
+      toJson({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) })
+        .findings as Array<Record<string, unknown>>
+    )[0].fingerprint as string;
+
+  const sameNoLine: Finding = { ...noCtx, location: { ...noCtx.location, line: 42 } };
+  const otherPath: Finding = {
+    ...noCtx,
+    location: { ...noCtx.location, file: "sub/package.json" },
+  };
+  assert.equal(fpOf(noCtx), fpOf(sameNoLine), "rule+path identity survives line moves");
+  assert.notEqual(fpOf(noCtx), fpOf(otherPath), "rule+path still distinguishes different paths");
+});
+
+test("JSON fingerprint, SARIF partialFingerprints, and the baseline share one value", () => {
+  const f = sampleResult().findings[0];
+  const jsonFp = (
+    toJson({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) }).findings as Array<
+      Record<string, unknown>
+    >
+  )[0].fingerprint as string;
+  const sarifFp = (
+    toSarif({ ...sampleResult(), findings: [f], inventory: buildInventory([f]) }).runs[0] as any
+  ).results[0].partialFingerprints["quantakrypto/v1"] as string;
+  const baselineFp = fingerprintFinding(f);
+  assert.equal(jsonFp, sarifFp, "JSON fingerprint equals SARIF partialFingerprint");
+  assert.equal(jsonFp, baselineFp, "JSON fingerprint equals the baseline identity");
+});
+
+test("toJson fingerprint is stable regardless of snippet redaction", () => {
+  const r = sampleResult();
+  const fpOf = (json: Record<string, unknown>) =>
+    (json.findings as Array<Record<string, unknown>>).map((f) => f.fingerprint as string);
+  assert.deepEqual(
+    fpOf(toJson(r)),
+    fpOf(toJson(r, { redactSnippets: true })),
+    "redacting the emitted snippet must not change identity",
+  );
 });
 
 test("formatSummary is plain text by default and colours on request", () => {

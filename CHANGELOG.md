@@ -6,6 +6,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added: stable finding fingerprints in JSON and SARIF output
+
+- Every finding in the `--report json` output now carries a top-level
+  `fingerprint` field, and each SARIF result mirrors the same value in
+  `properties.fingerprint` (alongside the existing `partialFingerprints`). It is
+  the line-INSENSITIVE identity already used by the baseline: `sha256(ruleId |
+  normalized-POSIX-repo-relative-path | normalized-snippet)`, with the volatile
+  line number deliberately excluded and a rule+path fallback when no snippet
+  context exists. A line move does not change it, so downstream consumers can key
+  finding identity across runs (posture drift, migration tracking) rather than
+  re-reading a shifted finding as new-plus-resolved. Reuses `fingerprintFinding`
+  from the baseline module (no new public API), so JSON identity, SARIF
+  `partialFingerprints`, and the baseline suppression set are one value. Additive
+  and backward compatible.
+
 ### Added — new detection surfaces (Solidity/blockchain, WebAuthn, proxy/gRPC TLS, code-signing, weak-hash)
 
 Five new detectors from a fresh coverage-gap research pass (52 detectors / 297 rules):
