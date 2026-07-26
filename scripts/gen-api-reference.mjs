@@ -4,10 +4,10 @@
  * snapshot (docs/api-surface.json) from each package's public entry point.
  *
  * This operationalises the VERSIONING.md 1.0 gate ("a documented, frozen public API
- * surface + a generated API reference"): the JSON snapshot is the CONTRACT — a test /
+ * surface + a generated API reference"): the JSON snapshot is the CONTRACT - a test /
  * CI check (`--check`) fails if a package's real exports drift from it, so any
  * addition or removal of a public symbol is a deliberate, reviewed change, not an
- * accident. Zero dependencies — a lightweight, comment/string-aware line scanner over
+ * accident. Zero dependencies - a lightweight, comment/string-aware line scanner over
  * the entry `index.ts` (following a single `export * from "./mod.js"` re-export hop),
  * NOT a full TypeScript parse; it enumerates the exported NAMES + their kind and
  * one-line doc summary, which is exactly what freezing the surface needs.
@@ -85,8 +85,8 @@ function exportedName(clause) {
 /**
  * Best-effort one-line doc summary for `name` declared in `src`: the first line of the
  * JSDoc block that ends immediately above the declaration (whitespace-only in between).
- * Anchoring to the declaration first — rather than scanning left-to-right for a
- * doc-comment-then-export pair — is deliberate: it never mis-attributes a file's module
+ * Anchoring to the declaration first - rather than scanning left-to-right for a
+ * doc-comment-then-export pair - is deliberate: it never mis-attributes a file's module
  * header (or an earlier symbol's block) to a symbol that has no doc comment of its own.
  */
 function docFor(src, name) {
@@ -117,7 +117,7 @@ function collectExports(entryRel) {
   const src = stripComments(raw);
   const out = new Map();
 
-  // `export * from "./mod.js"` — pull in the re-exported module's own named exports.
+  // `export * from "./mod.js"` - pull in the re-exported module's own named exports.
   for (const m of src.matchAll(/export\s+\*\s+from\s+["']([^"']+)["']/g)) {
     const modPath = resolve(dirname(entryAbs), m[1].replace(/\.js$/, ".ts"));
     let modRaw;
@@ -143,7 +143,7 @@ function collectExports(entryRel) {
     try {
       modRaw = readFileSync(resolve(dirname(entryAbs), m[3].replace(/\.js$/, ".ts")), "utf8");
     } catch {
-      /* re-export from a package or an unresolved path — leave kind/doc best-effort */
+      /* re-export from a package or an unresolved path - leave kind/doc best-effort */
     }
     const modSrc = modRaw ? stripComments(modRaw) : "";
     for (const clause of m[2].split(",")) {
@@ -189,7 +189,7 @@ function renderMarkdown(details) {
   const lines = [
     "# Public API reference",
     "",
-    "> **Generated** by `scripts/gen-api-reference.mjs` — do not edit by hand. Run",
+    "> **Generated** by `scripts/gen-api-reference.mjs` - do not edit by hand. Run",
     "> `npm run api:docs` to regenerate; `npm run api:check` fails CI if it drifts.",
     "",
     "Only the symbols listed here are covered by the SemVer contract",
@@ -201,7 +201,7 @@ function renderMarkdown(details) {
   for (const pkg of PACKAGES) {
     const map = details[pkg.name];
     lines.push(`## ${pkg.name}`, "");
-    lines.push(`Public entry: \`${pkg.entry}\` — ${map.size} exported symbols.`, "");
+    lines.push(`Public entry: \`${pkg.entry}\` - ${map.size} exported symbols.`, "");
     lines.push("| Symbol | Kind | Summary |", "| --- | --- | --- |");
     for (const name of [...map.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       const { kind, doc } = map.get(name);
@@ -233,14 +233,14 @@ if (process.argv.includes("--check")) {
     }
     if (current !== fresh) {
       stale = true;
-      console.error(`api:check — ${path.replace(ROOT + "/", "")} is stale.`);
+      console.error(`api:check - ${path.replace(ROOT + "/", "")} is stale.`);
     }
   }
   if (stale) {
     console.error("Public API surface drifted. Run `npm run api:docs` and review the diff.");
     process.exit(1);
   }
-  console.log("api:check — public API surface matches the frozen snapshot.");
+  console.log("api:check - public API surface matches the frozen snapshot.");
   process.exit(0);
 }
 
@@ -248,5 +248,5 @@ writeFileSync(SNAPSHOT_PATH, snapshotText);
 writeFileSync(MD_PATH, mdText);
 const total = Object.values(surface).reduce((n, a) => n + a.length, 0);
 console.log(
-  `Wrote docs/API.md + docs/api-surface.json — ${total} public symbols across ${PACKAGES.length} packages.`,
+  `Wrote docs/API.md + docs/api-surface.json - ${total} public symbols across ${PACKAGES.length} packages.`,
 );

@@ -11,6 +11,8 @@ import { remediationFor, remediationForTier, remediationForProfile } from "./rem
 import type { SecurityTier } from "./remediation.js";
 import type { StandardsProfile } from "./standards-profiles.js";
 import { fingerprintFinding } from "./baseline.js";
+import { findingFingerprint } from "./hndl.js";
+import type { FindingExposure, HndlReport } from "./hndl.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
 export interface SarifLog {
@@ -36,6 +38,29 @@ export interface ReportOptions {
    * {@link toJson}.
    */
   catalog?: RuleMeta[];
+  /**
+   * Optional HNDL exposure analysis ({@link computeHndl}). When supplied, each
+   * finding gains its `exposure` fields (score, bound data asset, rationale)
+   * keyed by fingerprint, and the report carries the repo-level HNDL summary.
+   * Purely additive: it never changes finding identity, ordering, or exit codes.
+   */
+  hndl?: HndlReport;
+}
+
+/** The per-finding exposure block emitted in JSON / SARIF, or undefined. */
+function exposureFor(f: Finding, hndl: HndlReport | undefined): FindingExposure | undefined {
+  if (!hndl) return undefined;
+  return hndl.byFingerprint.get(findingFingerprint(f));
+}
+
+/** The repo HNDL summary block shared by JSON output and the SARIF run. */
+function hndlSummaryBlock(hndl: HndlReport): Record<string, unknown> {
+  return {
+    modelVersion: hndl.modelVersion,
+    horizon: hndl.horizon,
+    summary: hndl.summary,
+    assets: hndl.assets,
+  };
 }
 
 const SARIF_SCHEMA =
@@ -102,6 +127,16 @@ function sarifRule(spec: {
           ],
         }
       : {}),
+  };
+}
+
+/** SARIF result.properties fragment for a finding's HNDL exposure, or empty. */
+function exposureProperties(exposure: FindingExposure | undefined): Record<string, unknown> {
+  if (!exposure) return {};
+  return {
+    exposureScore: exposure.exposureScore,
+    dataAsset: exposure.dataAsset,
+    exposureRationale: exposure.rationale,
   };
 }
 
@@ -182,6 +217,7 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
         ...(f.algorithm ? { algorithm: f.algorithm } : {}),
         ...(f.remediation ? { remediation: f.remediation } : {}),
         ...(f.cwe ? { cwe: f.cwe } : {}),
+        ...exposureProperties(exposureFor(f, opts?.hndl)),
       },
       ...(f.cwe
         ? {
@@ -237,6 +273,7 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
           },
         },
         ...(taxonomies.length > 0 ? { taxonomies } : {}),
+        ...(opts?.hndl ? { properties: { hndl: hndlSummaryBlock(opts.hndl) } } : {}),
         results,
       },
     ],
@@ -262,6 +299,7 @@ function securitySeverity(severity: Severity): string {
 /** Serialize a scan result as a plain JSON-friendly object. */
 export function toJson(result: ScanResult, opts?: ReportOptions): Record<string, unknown> {
   const redactSnippets = opts?.redactSnippets ?? false;
+  const hndl = opts?.hndl;
   return {
     toolVersion: result.toolVersion,
     root: result.root,
@@ -277,34 +315,48 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
       byCategory: result.inventory.byCategory,
       byAlgorithm: result.inventory.byAlgorithm,
     },
-    findings: result.findings.map((f) => ({
-      // Stable, line-INSENSITIVE identity of the finding: sha256 of
-      // ruleId | normalized-POSIX-repo-relative-path | normalized-snippet
-      // (the SARIF partialFingerprints trick, line number deliberately
-      // excluded). Reused verbatim from the baseline module so JSON identity,
-      // SARIF partialFingerprints, and the baseline suppression set are one and
-      // the same value. A line move does NOT change it; when no snippet context
-      // exists it falls back to ruleId|path. This is the cross-run identity the
-      // platform keys posture drift on.
-      fingerprint: fingerprintFinding(f),
-      ruleId: f.ruleId,
-      title: f.title,
-      category: f.category,
-      severity: f.severity,
-      confidence: f.confidence,
-      algorithm: f.algorithm,
-      hndl: f.hndl,
-      message: f.message,
-      remediation: f.remediation,
-      cwe: f.cwe,
-      location: {
-        file: f.location.file,
-        line: f.location.line,
-        column: f.location.column,
-        endLine: f.location.endLine,
-        snippet: emittedSnippet(f, redactSnippets),
-      },
-    })),
+    ...(hndl ? { hndl: hndlSummaryBlock(hndl) } : {}),
+    findings: result.findings.map((f) => {
+      const exposure = exposureFor(f, hndl);
+      return {
+        // Stable, line-INSENSITIVE identity of the finding: sha256 of
+        // ruleId | normalized-POSIX-repo-relative-path | normalized-snippet
+        // (the SARIF partialFingerprints trick, line number deliberately
+        // excluded). Reused verbatim from the baseline module so JSON identity,
+        // SARIF partialFingerprints, and the baseline suppression set are one and
+        // the same value. A line move does NOT change it; when no snippet context
+        // exists it falls back to ruleId|path. This is the cross-run identity the
+        // platform keys posture drift on.
+        fingerprint: fingerprintFinding(f),
+        ruleId: f.ruleId,
+        title: f.title,
+        category: f.category,
+        severity: f.severity,
+        confidence: f.confidence,
+        algorithm: f.algorithm,
+        hndl: f.hndl,
+        message: f.message,
+        remediation: f.remediation,
+        cwe: f.cwe,
+        location: {
+          file: f.location.file,
+          line: f.location.line,
+          column: f.location.column,
+          endLine: f.location.endLine,
+          snippet: emittedSnippet(f, redactSnippets),
+        },
+        ...(exposure
+          ? {
+              exposure: {
+                fingerprint: exposure.fingerprint,
+                exposureScore: exposure.exposureScore,
+                dataAsset: exposure.dataAsset,
+                rationale: exposure.rationale,
+              },
+            }
+          : {}),
+      };
+    }),
   };
 }
 

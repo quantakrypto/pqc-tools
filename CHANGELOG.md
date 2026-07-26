@@ -20,6 +20,31 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
   from the baseline module (no new public API), so JSON identity, SARIF
   `partialFingerprints`, and the baseline suppression set are one value. Additive
   and backward compatible.
+### Added - HNDL data-risk quantifier (`hndl.yml`, `qscan --hndl`, `qscan hndl init`)
+
+Roadmap initiative 2.a/2.b: quantify harvest-now-decrypt-later exposure so the
+migration backlog ranks by real risk, not finding counts. Exposure per finding =
+crypto-vulnerability x data-sensitivity x Mosca-factor (retention + secrecy lifetime
+vs the quantum-threat horizon; Mosca's inequality made concrete). SemVer: **minor**
+(additive public API + CLI surface; no breaking change).
+
+- **`@quantakrypto/core`**: a new `hndl.ts` engine - a hand-rolled, zero-dependency
+  `hndl.yml` parser (data assets, `public|internal|confidential|regulated`
+  classification, `retention_years`, `secrecy_lifetime_years`, path-glob + detector-
+  scope bindings), finding→asset binding, and the exposure computation
+  (`computeHndl`, `parseHndlMap`, `loadHndlMap`, `scaffoldHndlYaml`, plus the exported
+  weight/horizon constants so the score is contestable, not magic). The reporters
+  (`toJson` / `toSarif`) gain an optional `hndl` field: per-finding `exposureScore` /
+  `dataAsset` / `rationale` and a repo-level HNDL summary.
+- **`@quantakrypto/qscan`**: `qscan ./ --hndl` emits exposure per finding + a repo
+  summary in the JSON/SARIF properties and a section in the human report (additive,
+  never changing the exit code); `qscan hndl init` scaffolds `hndl.yml` seeded with
+  detected data-adjacent findings.
+- **Docs**: `docs/HNDL.md` documents the exposure model (formula, weights, Mosca
+  worked example) so the score can be argued with.
+- **Fingerprint integration point**: exposures key by `finding.fingerprint` when
+  present, else the canonical `fingerprintFinding()` hash; switches transparently
+  once `Finding.fingerprint` lands from the parallel workstream.
 
 ### Added — new detection surfaces (Solidity/blockchain, WebAuthn, proxy/gRPC TLS, code-signing, weak-hash)
 

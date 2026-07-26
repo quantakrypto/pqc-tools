@@ -10,13 +10,19 @@
  * downstream tools can reuse them without reaching into internal paths.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import * as nodePath from "node:path";
 import process from "node:process";
 
 import {
   buildReadinessReport,
   changedFiles,
+  computeHndl,
+  findingScope,
+  HNDL_FILENAME,
+  loadHndlMap,
   parseCryptoPolicy,
+  scaffoldHndlYaml,
   scan,
   scanParallel,
   signReadinessReport,
@@ -27,6 +33,7 @@ import type {
   CycloneDxBom,
   EvidenceSigner,
   Finding,
+  HndlReport,
   ParallelScanOptions,
   ReadinessReport,
   ScanResult,
@@ -284,6 +291,16 @@ export async function runQscan(
       `--sign/--timestamp require --format evidence (got ${options.format ?? "the human report"})`,
     );
   }
+  // HNDL exposure (`--hndl`): read the declared data map, score every finding
+  // and build the repo summary. Computed AFTER the exit code so it can never
+  // change CI pass/fail - it only annotates + ranks. A missing / malformed
+  // hndl.yml fails loudly (the user opted in), surfaced by the CLI as exit 2.
+  let hndl: HndlReport | undefined;
+  if (options.hndl) {
+    const { map } = await loadHndlMap(options.path);
+    hndl = computeHndl(result.findings, map);
+  }
+
   const signer: EvidenceSigner | undefined = options.sign ? commandSigner(options.sign) : undefined;
   const timestamper: EvidenceSigner | undefined = options.timestamp
     ? commandSigner(options.timestamp)
@@ -323,6 +340,7 @@ export async function runQscan(
     ...(options.profile ? { profile: options.profile } : {}),
     ...(policy ? { policy } : {}),
     ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
+    ...(hndl ? { hndl } : {}),
   });
   // Evidence signing is orchestrated here (async: an external signer may be async),
   // after the synchronous renderer has produced the unsigned report (ADR-0004: the
@@ -336,6 +354,64 @@ export async function runQscan(
   }
 
   return { result, suppressed, report, exitCode };
+}
+
+/** Outcome of {@link runHndlInit}: the scaffold plus where it should be written. */
+export interface HndlInitResult {
+  /** Absolute path the `hndl.yml` should be written to. */
+  path: string;
+  /** True when a file already exists there (the CLI refuses to overwrite). */
+  exists: boolean;
+  /** The generated `hndl.yml` content. */
+  content: string;
+  /** How many findings the seeding scan produced. */
+  findingsScanned: number;
+  /** How many distinct data-adjacent (config-scope, HNDL) findings seeded stubs. */
+  seededFindings: number;
+}
+
+/**
+ * Scaffold an `hndl.yml` for a repo (`qscan hndl init`). Runs a scan to seed the
+ * template with detected data-adjacent findings, then returns the generated
+ * content and its target path WITHOUT writing it - the CLI owns file I/O and the
+ * refuse-to-overwrite decision.
+ */
+export async function runHndlInit(
+  opts: Partial<QscanOptions> & { path: string },
+  hooks: RunQscanHooks = {},
+): Promise<HndlInitResult> {
+  const options: QscanOptions = { ...defaultOptions(), ...opts };
+  const scanFn: ScanFn = hooks.scanFn ?? (options.parallel ? scanParallel : scan);
+  const result = await scanFn(toScanOptions(options));
+
+  const content = scaffoldHndlYaml(result.findings);
+  const target = resolveHndlTarget(options.path);
+  let exists = false;
+  try {
+    await stat(target);
+    exists = true;
+  } catch {
+    exists = false;
+  }
+  const seededFindings = result.findings.filter(
+    (f) => f.hndl && findingScope(f) === "config",
+  ).length;
+  return {
+    path: target,
+    exists,
+    content,
+    findingsScanned: result.findings.length,
+    seededFindings,
+  };
+}
+
+/** Resolve where `hndl init` writes: `<dir>/hndl.yml`, or an explicit `*.yml`. */
+function resolveHndlTarget(root: string): string {
+  const base = nodePath.basename(root);
+  if (base === HNDL_FILENAME || base.endsWith(".yml") || base.endsWith(".yaml")) {
+    return nodePath.resolve(root);
+  }
+  return nodePath.resolve(root, HNDL_FILENAME);
 }
 
 /** Rendering controls for {@link renderReport}. */
@@ -354,6 +430,8 @@ export interface RenderReportOptions {
   policy?: CryptoPolicy;
   /** External CBOMs to merge into the `cbom` output (CycloneDX bom-link). */
   mergeCboms?: CycloneDxBom[];
+  /** HNDL exposure analysis (`--hndl`); annotates JSON/SARIF/human output. */
+  hndl?: HndlReport;
 }
 
 /** Render a scan result in the requested format. */
@@ -371,12 +449,13 @@ export function renderReport(
     profile = undefined,
     policy = undefined,
     mergeCboms = undefined,
+    hndl = undefined,
   } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
   switch (format) {
     case "json":
-      return renderJson(result, { redactSnippets });
+      return renderJson(result, { redactSnippets, ...(hndl ? { hndl } : {}) });
     case "sarif":
-      return renderSarif(result, { redactSnippets });
+      return renderSarif(result, { redactSnippets, ...(hndl ? { hndl } : {}) });
     case "cbom":
       return renderCbom(result, mergeCboms);
     case "vex":
@@ -395,7 +474,7 @@ export function renderReport(
     }
     case "human":
     default:
-      return renderHuman(result, { color, topN, tier, profile });
+      return renderHuman(result, { color, topN, tier, profile, ...(hndl ? { hndl } : {}) });
   }
 }
 

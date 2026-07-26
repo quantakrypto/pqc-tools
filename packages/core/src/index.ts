@@ -83,6 +83,42 @@ export { changedFiles } from "./changed.js";
 export { loadConfig, ConfigError, CONFIG_FILENAME } from "./config.js";
 export type { QuantakryptoFileConfig, LoadConfigResult } from "./config.js";
 
+// HNDL (harvest-now-decrypt-later) data-risk quantifier (see docs/HNDL.md).
+export {
+  HNDL_MODEL_VERSION,
+  HNDL_FILENAME,
+  SEVERITY_VULNERABILITY,
+  CONFIDENCE_WEIGHT,
+  CLASSIFICATION_SENSITIVITY,
+  NON_HNDL_DISCOUNT,
+  DEFAULT_QUANTUM_THREAT_YEARS,
+  DEFAULT_MIGRATION_HORIZON_YEARS,
+  DEFAULT_UNBOUND_CLASSIFICATION,
+  HndlError,
+  computeHndl,
+  vulnerabilityFactor,
+  moscaFactor,
+  globMatch,
+  findingFingerprint,
+  findingScope,
+  parseHndlMap,
+  loadHndlMap,
+  scaffoldHndlYaml,
+} from "./hndl.js";
+export type {
+  DataClassification,
+  HndlScope,
+  HndlDataAsset,
+  HndlHorizon,
+  HndlDefaults,
+  HndlMap,
+  ExposureRationale,
+  FindingExposure,
+  AssetExposure,
+  HndlSummary,
+  HndlReport,
+} from "./hndl.js";
+
 // Filesystem walker (relative POSIX paths, default ignores, size/binary filters).
 export { walkFiles, isBinaryPath, looksMinified } from "./walk.js";
 

@@ -30,6 +30,7 @@ import {
 import type {
   CycloneDxBom,
   Finding,
+  HndlReport,
   ReportOptions,
   ScanResult,
   SecurityTier,
@@ -133,7 +134,13 @@ export function renderVex(result: ScanResult): string {
  */
 export function renderHuman(
   result: ScanResult,
-  opts: { color?: boolean; topN?: number; tier?: SecurityTier; profile?: string } = {},
+  opts: {
+    color?: boolean;
+    topN?: number;
+    tier?: SecurityTier;
+    profile?: string;
+    hndl?: HndlReport;
+  } = {},
 ): string {
   const c = opts.color ? COLOR : PLAIN;
   const topN = opts.topN ?? 5;
@@ -254,6 +261,10 @@ export function renderHuman(
     for (const t of g.slice(1)) lines.push(`${c.cyan}${t}${c.reset}`);
   }
 
+  // HNDL exposure ranking (`--hndl`): the risk-ranked view that reorders the
+  // backlog by real exposure rather than finding count.
+  if (opts.hndl) lines.push("", ...hndlSection(opts.hndl, c));
+
   // Forward-looking standards + the IR 8547 migration deadline (HQC / FN-DSA /
   // X-Wing) — the long-horizon guidance behind anything flagged above.
   lines.push("");
@@ -264,6 +275,38 @@ export function renderHuman(
   }
 
   return lines.join("\n");
+}
+
+/** Render the HNDL exposure section for the human report. */
+function hndlSection(hndl: HndlReport, c: Palette): string[] {
+  const s = hndl.summary;
+  const out: string[] = [`${c.bold}HNDL exposure${c.reset}`];
+  out.push(
+    `${c.dim}horizon: quantum threat ${hndl.horizon.quantumThreatYears}y · migration ${hndl.horizon.migrationHorizonYears}y · model v${hndl.modelVersion}${c.reset}`,
+  );
+  out.push(
+    `max exposure ${exposureColor(s.maxExposure, c)}${s.maxExposure}/100${c.reset}  •  mean ${s.meanExposure}/100  •  ${s.moscaBreaches} finding(s) breach Mosca's inequality`,
+  );
+  if (s.assetsDeclared > 0) {
+    out.push(
+      `${c.dim}${s.assetsWithFindings}/${s.assetsDeclared} declared assets carry findings; ${s.assetsOutlivingHorizon} have secrecy outliving the threat horizon.${c.reset}`,
+    );
+  }
+  if (s.topExposures.length > 0) {
+    out.push(`${c.bold}Top exposures${c.reset}`);
+    for (const e of s.topExposures) {
+      const asset = e.dataAsset ? e.dataAsset : `${c.dim}(unbound)${c.reset}`;
+      out.push(
+        `  ${exposureColor(e.exposureScore, c)}${String(e.exposureScore).padStart(3)}${c.reset} ${c.cyan}${e.ruleId}${c.reset}  ${e.file}  → ${asset}`,
+      );
+    }
+  }
+  return out;
+}
+
+/** Color an exposure score red/yellow/dim by band. */
+function exposureColor(score: number, c: Palette): string {
+  return score >= 50 ? c.red : score >= 20 ? c.yellow : c.dim;
 }
 
 /** Suggest a single concrete next action based on the worst finding. */

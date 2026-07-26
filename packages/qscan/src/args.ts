@@ -155,6 +155,13 @@ export interface QscanOptions {
    * from `--no-config` (which skips config-file *detectors*).
    */
   noConfigFile: boolean;
+  /**
+   * Compute + emit HNDL (harvest-now-decrypt-later) exposure (`--hndl`). Reads
+   * `hndl.yml` at the scan root, scores each finding + a repo summary, and adds
+   * the exposure fields to the JSON / SARIF report. Additive: never changes the
+   * exit code. See docs/HNDL.md.
+   */
+  hndl: boolean;
 }
 
 /**
@@ -183,8 +190,14 @@ export interface ParsedRun {
   explicit: Set<ConfigurableKey>;
 }
 
+/** The `qscan hndl init` subcommand: scaffold an `hndl.yml`. */
+export interface ParsedHndlInit {
+  kind: "hndl-init";
+  options: QscanOptions;
+}
+
 /** Result of {@link parseArgs}: either resolved options or a meta action. */
-export type ParsedArgs = ParsedRun | { kind: "help" } | { kind: "version" };
+export type ParsedArgs = ParsedRun | ParsedHndlInit | { kind: "help" } | { kind: "version" };
 
 /** Thrown on malformed input; the CLI maps this to exit code 2. */
 export class ArgError extends Error {
@@ -212,6 +225,7 @@ export function defaultOptions(): QscanOptions {
     noConfigFile: false,
     triage: false,
     dryRun: false,
+    hndl: false,
   };
 }
 
@@ -224,6 +238,28 @@ export function defaultOptions(): QscanOptions {
 export const DEFAULT_CACHE_FILE = ".quantakrypto-cache.json";
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
+  // Subcommand dispatch: `qscan hndl <sub> …`. Only `init` exists today. `--help`
+  // / `--version` anywhere still short-circuit to the meta actions (handled by
+  // the shared loop below), so `qscan hndl init --help` shows help.
+  if (argv[0] === "hndl") {
+    const sub = argv[1];
+    if (sub === undefined || sub.startsWith("-")) {
+      if (sub === "--help" || sub === "-h") return { kind: "help" };
+      if (sub === "--version" || sub === "-v") return { kind: "version" };
+      throw new ArgError(`"hndl" requires a subcommand (expected: init)`);
+    }
+    if (sub !== "init") {
+      throw new ArgError(`unknown hndl subcommand "${sub}" (expected: init)`);
+    }
+    const parsed = parseRunArgs(argv.slice(2));
+    if (parsed.kind !== "run") return parsed; // --help / --version passthrough
+    return { kind: "hndl-init", options: parsed.options };
+  }
+  return parseRunArgs(argv);
+}
+
+/** Parse the run-mode grammar (flags + a single optional positional path). */
+function parseRunArgs(argv: readonly string[]): ParsedArgs {
   const options = defaultOptions();
   const explicit = new Set<ConfigurableKey>();
   let positional: string | undefined;
@@ -443,6 +479,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--no-snippets":
         rejectInlineValue();
         options.noSnippets = true;
+        break;
+      case "--hndl":
+        rejectInlineValue();
+        options.hndl = true;
         break;
 
       default:
