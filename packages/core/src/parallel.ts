@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import type { Worker as NodeWorker } from "node:worker_threads";
 
 import type { Finding, ParallelScanOptions, ScanResult } from "./types.js";
-import { walkFiles } from "./walk.js";
+import { walkFilesSized } from "./walk.js";
 import { isAnalyzableSource } from "./detect-utils.js";
 import { buildInventory } from "./inventory.js";
 import { compareFindings, filterExplicitFileList, scan } from "./scan.js";
@@ -115,30 +115,31 @@ function shouldParallelize(options: ParallelScanOptions, files: SizedFile[]): bo
  * explicit `files` list or the walker. Sizes power byte-balanced chunking.
  */
 async function enumerateFiles(options: ParallelScanOptions, baseDir: string): Promise<SizedFile[]> {
-  const rels: string[] = [];
+  const sized: SizedFile[] = [];
   if (options.files) {
+    // Explicit file list: the walker isn't involved, so stat each once here.
     // Apply the SAME include/exclude/binary filtering the serial path uses via
-    // `filterExplicitFiles`, so `--parallel` is byte-for-byte identical to serial.
-    for (const rel of filterExplicitFileList(options.files, options)) rels.push(rel);
-  } else {
-    for await (const rel of walkFiles(options.root, {
-      include: options.include,
-      exclude: options.exclude,
-      noDefaultIgnores: options.noDefaultIgnores,
-      maxFileSize: options.maxFileSize,
-    })) {
-      rels.push(rel);
+    // `filterExplicitFileList`, so `--parallel` is byte-for-byte identical to serial.
+    for (const rel of filterExplicitFileList(options.files, options)) {
+      let size = 0;
+      try {
+        size = (await stat(path.join(baseDir, ...rel.split("/")))).size;
+      } catch {
+        // Unreadable now; keep with size 0 (the worker read will skip if it's gone).
+      }
+      sized.push({ rel, size });
     }
+    return sized;
   }
 
-  const sized: SizedFile[] = [];
-  for (const rel of rels) {
-    let size = 0;
-    try {
-      size = (await stat(path.join(baseDir, ...rel.split("/")))).size;
-    } catch {
-      // Unreadable now; keep with size 0 — worker read will skip if it's gone.
-    }
+  // Directory walk: reuse the size the walker already stat'd while enforcing the
+  // size limit, so files are not stat'd a second time here (double-stat fix).
+  for await (const { rel, size } of walkFilesSized(options.root, {
+    include: options.include,
+    exclude: options.exclude,
+    noDefaultIgnores: options.noDefaultIgnores,
+    maxFileSize: options.maxFileSize,
+  })) {
     sized.push({ rel, size });
   }
   return sized;

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 
 import { walkFiles } from "../src/index.js";
-import { passesSizeLimit, MANIFEST_MAX_BYTES } from "../src/walk.js";
+import { passesSizeLimit, MANIFEST_MAX_BYTES, walkFilesSized } from "../src/walk.js";
 
 /** Collect an async iterator into a sorted array. */
 async function collect(iter: AsyncIterable<string>): Promise<string[]> {
@@ -55,6 +55,24 @@ test("walkFiles skips default ignores and binaries", async () => {
     assert.deepEqual(files, ["a.ts", "legacy/old.ts", "src/b.js"]);
     assert.ok(!files.includes("logo.png"), "binary extension skipped");
     assert.ok(!files.some((f) => f.startsWith("node_modules/")), "node_modules ignored");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("walkFilesSized yields the same files with their byte sizes (single stat)", async () => {
+  const dir = await makeTree();
+  try {
+    const sized: { rel: string; size: number }[] = [];
+    for await (const f of walkFilesSized(dir)) sized.push(f);
+    const rels = sized.map((f) => f.rel).sort();
+    // Same file set as walkFiles (walkFiles is now a thin wrapper over this).
+    assert.deepEqual(rels, ["a.ts", "legacy/old.ts", "src/b.js"]);
+    // `a.ts` content is "export const a = 1;\n" (20 bytes), and the walker reports it
+    // from its own stat, so downstream never needs a second stat.
+    const a = sized.find((f) => f.rel === "a.ts");
+    assert.equal(a?.size, 20);
+    for (const f of sized) assert.ok(f.size >= 0, `${f.rel} has a size`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

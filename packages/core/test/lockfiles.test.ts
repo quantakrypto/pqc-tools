@@ -61,3 +61,69 @@ test("a lockfile with no known-vulnerable deps yields nothing", () => {
   const yarn = ["lodash@^4.17.21:", '  version "4.17.21"'].join("\n");
   assert.deepEqual(scanManifest("yarn.lock", yarn), []);
 });
+
+test("package-lock v1 nested dependencies tree: a transitive vulnerable dep is flagged", () => {
+  // Legacy v1 lockfile: `elliptic` appears ONLY nested under a top-level dep's
+  // own `dependencies` tree, never at the top level. The recursive walk must find it.
+  const lock = JSON.stringify({
+    name: "demo",
+    lockfileVersion: 1,
+    dependencies: {
+      "some-wrapper": {
+        version: "1.0.0",
+        requires: { elliptic: "^6.5.4" },
+        dependencies: {
+          elliptic: { version: "6.5.4", resolved: "https://registry/elliptic-6.5.4.tgz" },
+          "safe-buffer": { version: "5.2.1" },
+        },
+      },
+    },
+  });
+  const findings = scanManifest("package-lock.json", lock);
+  assert.ok(
+    findings.some((f) => f.title.includes("elliptic")),
+    "nested transitive elliptic flagged",
+  );
+  assert.ok(!findings.some((f) => f.title.includes("safe-buffer")));
+});
+
+test("npm: alias in package.json resolves to the real (vulnerable) package", () => {
+  // The alias key `my-forge` hides `node-forge`; resolution must see through it.
+  const pkg = JSON.stringify({
+    dependencies: { "my-forge": "npm:node-forge@^1.3.0", left: "^1.0.0" },
+  });
+  const findings = scanManifest("package.json", pkg);
+  assert.ok(findings.some((f) => f.title.includes("node-forge")));
+});
+
+test("npm: scoped alias keeps the leading scope", () => {
+  const pkg = JSON.stringify({
+    dependencies: { curves: "npm:@noble/curves@^1.2.0" },
+  });
+  const findings = scanManifest("package.json", pkg);
+  assert.ok(findings.some((f) => f.title.includes("@noble/curves")));
+});
+
+test("package-lock v1 npm: alias in a nested entry version resolves", () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 1,
+    dependencies: {
+      "my-forge": { version: "npm:node-forge@1.3.1" },
+    },
+  });
+  assert.ok(scanManifest("package-lock.json", lock).some((f) => f.title.includes("node-forge")));
+});
+
+test("package-lock v3 aliased install: the entry's name field resolves", () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      "": { name: "demo" },
+      "node_modules/my-forge": { name: "node-forge", version: "1.3.1" },
+      "node_modules/lodash": { version: "4.17.21" },
+    },
+  });
+  const findings = scanManifest("package-lock.json", lock);
+  assert.ok(findings.some((f) => f.title.includes("node-forge")));
+  assert.ok(!findings.some((f) => f.title.includes("lodash")));
+});

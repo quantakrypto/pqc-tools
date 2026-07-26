@@ -47,6 +47,15 @@ import { CWE_BROKEN_CRYPTO, CWE_CERT_VALIDATION, CWE_WEAK_STRENGTH } from "../cw
 // (ordered alternation would otherwise match `rsa` and reject the `-pss` tail).
 const RE_GENERATE_KEYPAIR =
   /generateKeyPair(?:Sync)?\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
+// Variable-typed key generation: `generateKeyPair(kind, …)` where the algorithm
+// argument is an IDENTIFIER (a variable), not a quoted literal, so the concrete
+// family is unknown at scan time but a classical key is still being generated.
+// The lookbehind anchors the call to a word boundary so it does not fire inside
+// a longer identifier (e.g. `myGenerateKeyPair(`); the first argument must be a
+// bare identifier immediately followed by `,` or `)` so a quoted-literal call
+// (handled by RE_GENERATE_KEYPAIR) never matches here.
+const RE_GENERATE_KEYPAIR_VAR =
+  /(?<![\w$])generateKeyPair(?:Sync)?\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 
 /** Per-key-type classification for `generateKeyPair(Sync)('<type>', …)`. Hoisted
  * to module scope so the direct matcher AND the import-alias pass (below) share
@@ -177,6 +186,20 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 const RE_CREATE_SIGN_VERIFY = /create(?:Sign|Verify)\s*\(/g;
+// Computed-member (bracket) access to a Node `crypto` method:
+// `crypto['createSign'](…)`, `c["createECDH"](…)`. Bracket access defeats the
+// dotted-call regexes above (which require `name(`), so match a quoted method
+// name inside a `[ '…' ]( ` computed call and route it to the right rule. The
+// method names here take no key-type argument, so no argument parsing is needed;
+// `generateKeyPair(Sync)` bracket access is handled separately (it carries the
+// key-type literal). None of these overlap the dotted regexes (those require the
+// name immediately before `(`, whereas here it is followed by a closing quote).
+const RE_BRACKET_CRYPTO_METHOD =
+  /\[\s*['"`](createSign|createVerify|createECDH|createDiffieHellman|createDiffieHellmanGroup|publicEncrypt|privateDecrypt)['"`]\s*\]\s*\(/g;
+// `crypto['generateKeyPairSync']('rsa', …)`: bracket access carrying the quoted
+// key-type literal, classified exactly like the dotted `generateKeyPair` call.
+const RE_BRACKET_KEYGEN =
+  /\[\s*['"`]generateKeyPair(?:Sync)?['"`]\s*\]\s*\(\s*['"`](rsa-pss|rsa|ec|dsa|dh|x25519|x448|ed25519|ed448)['"`]/g;
 // One-shot crypto.sign/verify(algorithm, data, key). A LOOKBEHIND (not a
 // consumed char) anchors it so it doesn't fire inside identifiers like `assign(`
 // or `createSign(` (handled by the dedicated createSign/createVerify rule) —
@@ -375,6 +398,28 @@ const nodeCryptoDetector: Detector = {
       pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length);
     });
 
+    // generateKeyPair(Sync)(<variable>, …): key type passed as a variable, so the
+    // family is unknown; emit the generic keygen rule (unknown / key-exchange /
+    // HNDL-conservative) rather than missing the classical key generation.
+    eachMatch(RE_GENERATE_KEYPAIR_VAR, content, (m) => {
+      findings.push(
+        findingFromRule(
+          RULE_NODE_KEYGEN,
+          { file, content, index: m.index, matchLength: m[0].length },
+          {
+            title: "Classical key generation (variable key type)",
+            message:
+              "Generates a classical asymmetric key pair (key type passed as a variable), which is not quantum-safe.",
+          },
+        ),
+      );
+    });
+
+    // Bracket (computed-member) key generation: crypto['generateKeyPairSync']('rsa').
+    eachMatch(RE_BRACKET_KEYGEN, content, (m) => {
+      pushKeygenFinding(findings, m[1], file, content, m.index, m[0].length);
+    });
+
     // Import-alias resolution: follow `import { generateKeyPairSync as gk }` (and
     // the CommonJS destructure-rename) so an aliased call still detects. Only the
     // keygen / ECDH / DH constructors are resolved — their classification is
@@ -430,6 +475,23 @@ const nodeCryptoDetector: Detector = {
           matchLength: m[0].length,
         }),
       );
+    });
+
+    // Bracket (computed-member) access to argument-free crypto methods:
+    // crypto['createSign'](…), c["createECDH"](…). Route each to its rule.
+    eachMatch(RE_BRACKET_CRYPTO_METHOD, content, (m) => {
+      const loc = { file, content, index: m.index, matchLength: m[0].length };
+      const method = m[1];
+      if (method === "createSign" || method === "createVerify") {
+        findings.push(findingFromRule(RULE_NODE_SIGN, loc));
+      } else if (method === "createECDH") {
+        findings.push(findingFromRule(RULE_NODE_ECDH, loc));
+      } else if (method === "publicEncrypt" || method === "privateDecrypt") {
+        findings.push(findingFromRule(RULE_NODE_RSA_ENCRYPT, loc));
+      } else {
+        // createDiffieHellman / createDiffieHellmanGroup: finite-field DH.
+        findings.push(findingFromRule(RULE_NODE_DH, loc));
+      }
     });
 
     // One-shot crypto.sign(algorithm, data, key) / crypto.verify(...) (Node ≥ 12).
