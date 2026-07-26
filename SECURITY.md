@@ -6,8 +6,21 @@ disclosure) and ISO/IEC 30111 (vulnerability handling).
 
 ## Supported versions
 
-The project is pre-1.0. Only the latest `main` is supported while the API
-stabilises. Versioned support windows will be defined at the 1.0 release.
+There are two consumption surfaces, versioned on two different schemes:
+
+- **npm packages** (`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`,
+  `@quantakrypto/sieve`, `@quantakrypto/qprobe`, `@quantakrypto/agent`) are pre-1.0,
+  currently `0.5.x`. Only the latest `main` is supported while the API stabilises,
+  and we make no backward-compatibility promises before 1.0. Versioned support
+  windows for the packages will be defined at the 1.0 release. The full policy is
+  in [`docs/VERSIONING.md`](docs/VERSIONING.md).
+- **GitHub Action** is consumed through a moving major tag,
+  `uses: quantakrypto/pqc-tools/packages/action@v1`. Pinning to `@v1` is the
+  supported way to run it in CI: the tag advances within its major to pick up
+  fixes and does not carry breaking changes. That major line is independent of the
+  action package's own pre-1.0 `0.x` version.
+
+Security fixes are applied to the latest `main` and to the current `v1` Action tag.
 
 ## Reporting a vulnerability
 
