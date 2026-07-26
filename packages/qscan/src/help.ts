@@ -12,6 +12,7 @@ export const HELP_TEXT = `qscan — find quantum-vulnerable cryptography in any 
 
 USAGE
   qscan [path] [options]
+  qscan hndl init [path]        Scaffold an hndl.yml data map (see --hndl)
 
 ARGUMENTS
   path                          Directory or file to scan (default: ".")
@@ -79,6 +80,13 @@ OPTIONS
                                 be sent and exit without calling the provider
   --llm-provider <name>         anthropic | openai-compatible (default: anthropic)
   --llm-model <id>              Model id for the BYOK provider
+  --hndl                        Score harvest-now-decrypt-later exposure per
+                                finding + a repo summary from hndl.yml (data
+                                assets, classification, retention + secrecy
+                                lifetime vs the quantum-threat horizon; Mosca's
+                                inequality). Adds exposure fields to json/sarif;
+                                additive, never changes the exit code. Scaffold
+                                the map with "qscan hndl init". See docs/HNDL.md
   --baseline <file>             Suppress findings listed in a baseline file
   --write-baseline <file>       Write current findings as a baseline, then exit 0
   --quiet                       Suppress the human summary banner
@@ -105,6 +113,8 @@ EXAMPLES
   qscan . --changed --since origin/main
   qscan . --parallel --concurrency 4
   qscan . --cbom -o qscan-cbom.json
+  qscan hndl init               Scaffold hndl.yml seeded with detected assets
+  qscan . --hndl --format json  Emit per-finding HNDL exposure + a repo summary
 `;
 
 /** The `--version` line. */

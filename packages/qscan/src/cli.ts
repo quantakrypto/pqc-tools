@@ -21,7 +21,7 @@ import type { ParsedArgs, QscanOptions } from "./args.js";
 import { resolveColor } from "./color.js";
 import { resolveConfig } from "./config.js";
 import { HELP_TEXT, versionLine } from "./help.js";
-import { EXIT, runQscan } from "./index.js";
+import { EXIT, runHndlInit, runQscan } from "./index.js";
 import type { QscanRun } from "./index.js";
 
 /** Run the CLI and return the desired process exit code (never throws). */
@@ -45,6 +45,36 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (parsed.kind === "version") {
     process.stdout.write(`${versionLine()}\n`);
     return EXIT.OK;
+  }
+
+  // `qscan hndl init`: scaffold an hndl.yml from a seeding scan. Refuses to
+  // overwrite an existing file.
+  if (parsed.kind === "hndl-init") {
+    try {
+      const init = await runHndlInit(parsed.options);
+      if (init.exists) {
+        process.stderr.write(
+          `qscan: ${init.path} already exists; refusing to overwrite. Edit it, or remove it and re-run.\n`,
+        );
+        return EXIT.ERROR;
+      }
+      await writeFile(init.path, init.content, "utf8");
+      process.stderr.write(
+        `qscan: wrote ${init.path} (seeded from ${init.seededFindings} data-adjacent finding(s) of ${init.findingsScanned} scanned).\n`,
+      );
+      process.stderr.write(
+        `qscan: review the assets, then run "qscan ${parsed.options.path} --hndl" for exposure scores.\n`,
+      );
+      return EXIT.OK;
+    } catch (err) {
+      if (isErrno(err) && err.code === "ENOENT") {
+        process.stderr.write(`qscan: path not found: ${parsed.options.path}\n`);
+        return EXIT.ERROR;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`qscan: ${message}\n`);
+      return EXIT.ERROR;
+    }
   }
 
   // Resolve `quantakrypto.config.json` (flags > config > defaults) before scanning.

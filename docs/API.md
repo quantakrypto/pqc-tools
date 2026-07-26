@@ -1,6 +1,6 @@
 # Public API reference
 
-> **Generated** by `scripts/gen-api-reference.mjs` — do not edit by hand. Run
+> **Generated** by `scripts/gen-api-reference.mjs` - do not edit by hand. Run
 > `npm run api:docs` to regenerate; `npm run api:check` fails CI if it drifts.
 
 Only the symbols listed here are covered by the SemVer contract
@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` — 145 exported symbols.
+Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -18,9 +18,12 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `ANALYZABLE_SOURCE_EXTENSIONS` | const | Extensions the scanner can actually analyze for inline crypto usage today |
 | `AbortError` | class | Thrown when a scan is aborted via `ScanOptions.signal`. `name` is `"AbortError"` |
 | `AlgorithmFamily` | type | Classical asymmetric algorithm families that are not quantum-safe. |
+| `AssetExposure` | interface | Per-asset rollup for the repo summary. |
 | `BASELINE_VERSION` | const | Current on-disk baseline schema version. |
 | `Baseline` | interface | The on-disk baseline shape: a version tag and a set of fingerprints. |
 | `BudgetExceededError` | class | Thrown when a scan exceeds its `maxFiles` / `maxBytes` work budget mid-walk. |
+| `CLASSIFICATION_SENSITIVITY` | const | Data-sensitivity weight (S) per classification. |
+| `CONFIDENCE_WEIGHT` | const | Crypto-vulnerability weight (V) scaled by detector confidence. |
 | `CONFIG_FILENAME` | const | Canonical config file name discovered at a scan root. |
 | `CWE_BROKEN_CRYPTO` | const | CWE-327: Use of a Broken or Risky Cryptographic Algorithm. |
 | `CWE_CERT_VALIDATION` | const | CWE-295: Improper Certificate Validation. |
@@ -35,8 +38,12 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `CryptoInventory` | interface | Aggregated counts produced from a scan's findings. |
 | `CryptoPolicy` | interface | An organization-supplied cryptography policy (from a JSON file). |
 | `CycloneDxBom` | interface | A CycloneDX 1.6 cryptographic bill of materials (kept permissive). |
+| `DEFAULT_MIGRATION_HORIZON_YEARS` | const | Default years to complete the org's PQC migration (Y in Mosca's inequality). |
 | `DEFAULT_PROFILE_ID` | const | The default profile id when `--profile` is not given. |
+| `DEFAULT_QUANTUM_THREAT_YEARS` | const | Default years until a cryptographically-relevant quantum computer is assumed |
+| `DEFAULT_UNBOUND_CLASSIFICATION` | const | Classification assumed for findings that bind to no declared asset. |
 | `DEP_VULNERABLE_RULE` | const | Catalog entry for the `dep-vulnerable` rule. Dependency findings are produced |
+| `DataClassification` | type | Data sensitivity classes, least → most sensitive. Vocabulary aligned with the |
 | `DependencyEcosystem` | type | Package ecosystems the dependency scanner understands. |
 | `Detector` | interface | A pluggable source detector. Detectors are pure and stateless. |
 | `DetectorInput` | interface |  |
@@ -45,12 +52,25 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `DetectorScope` | type | Which logical scope a detector belongs to. Drives the source/config scope |
 | `EvidenceFinding` | interface | Stable per-finding record for the evidence body (deterministic per commit). |
 | `EvidenceSigner` | interface | An EXTERNAL signer/timestamper the tool orchestrates. Per ADR-0004 the tool |
+| `ExposureRationale` | interface | Full, auditable breakdown of one finding's exposure score. |
 | `FIX_REQUEST_SCHEMA` | const | JSON Schema every fix proposal must satisfy. |
 | `Finding` | interface | A single detected concern. |
 | `FindingCategory` | type | What kind of cryptographic concern a finding represents. |
+| `FindingExposure` | interface | A finding's computed exposure, keyed by fingerprint for website ingest. |
 | `FixProposal` | interface | An LLM-proposed fix before it enters the deterministic pipeline. |
+| `HNDL_FILENAME` | const | Canonical `hndl.yml` file name discovered at a scan root. |
+| `HNDL_MODEL_VERSION` | const | Version of the exposure model. Bump on any weight / formula change. |
+| `HndlDataAsset` | interface | A single declared data asset from `hndl.yml`. |
+| `HndlDefaults` | interface | Defaults applied to findings that bind to no declared asset. |
+| `HndlError` | class | Thrown when `hndl.yml` is malformed (structure or a bad known value). |
+| `HndlHorizon` | interface | The Mosca horizons that gate the exposure model. |
+| `HndlMap` | interface | A fully-parsed, validated `hndl.yml`. |
+| `HndlReport` | interface | The complete HNDL analysis of a scan. |
+| `HndlScope` | type | Logical scope a finding belongs to, used for optional scope-bound assets. The |
+| `HndlSummary` | interface | Repo-level HNDL summary. |
 | `HybridStance` | type | Whether classical+PQC hybridization is required during the transition, per regime. |
 | `LoadConfigResult` | interface | Result of {@link loadConfig}: the resolved config plus where it came from. |
+| `NON_HNDL_DISCOUNT` | const | Discount applied to V when a finding is NOT harvest-now-decrypt-later exposed |
 | `OpenVexDocument` | interface | An OpenVEX 0.2.0 document. |
 | `OpenVexOptions` | interface | Options for {@link toOpenVex}. |
 | `OpenVexStatement` | interface | A single OpenVEX statement: one synthetic vulnerability over its affected products. |
@@ -78,6 +98,7 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `ReportOptions` | interface | Options shared by the structured reporters ({@link toSarif} / {@link toJson}). |
 | `RuleMeta` | interface | Declarative metadata for a single rule a detector can emit. This is the |
 | `SEVERITY_ORDER` | const | Severity ordering, most → least severe. Index 0 is the most severe. |
+| `SEVERITY_VULNERABILITY` | const | Crypto-vulnerability weight (V) contributed by a finding's severity. |
 | `STANDARDS_PROFILES` | const | Built-in regime profiles. Facts reflect each authority's published PQC-transition |
 | `STATEFUL_HBS_NOTE` | const | Guidance for stateful hash-based signatures (SP 800-208: LMS / XMSS / HSS). |
 | `SarifLog` | interface | Minimal SARIF 2.1.0 log shape (kept permissive on purpose). |
@@ -117,26 +138,33 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `codemodFor` | function | The first codemod that applies to `finding`, or undefined. |
 | `codemodRegistry` | const | All registered codemods, in priority order. |
 | `compareFindings` | function | Stable comparator: by file, then line, then ruleId. Exported for reuse. |
+| `computeHndl` | function | Compute HNDL exposure for a set of findings against a declared data map. |
 | `configToggleCodemod` | const |  |
 | `defaultRegistry` | const | The default registry, preloaded with {@link builtinDetectors}. Used by |
 | `defaultStandardsProfile` | function | The default profile (NIST). Always defined. |
 | `detectFile` | function | Run all applicable detectors + the manifest scanner over a single file's |
 | `detectors` | const | The full set of built-in detectors exposed on the public API. Re-exported |
+| `findingFingerprint` | function | Identity key for a finding's exposure. Prefers a `finding.fingerprint` field |
+| `findingScope` | function | The scope a finding belongs to. Dependency findings (from the manifest |
 | `fingerprintFinding` | function | Stable, line-INSENSITIVE fingerprint of a finding: the hex SHA-256 of |
 | `formatProfileGuidance` | function | Per-family migration targets tailored to a selected {@link StandardsProfile} |
 | `formatSummary` | function | Render a human-readable summary of a scan result. Colour is off by default; |
 | `formatTierGuidance` | function | Per-family migration targets for a CNSA security tier — surfaces the otherwise |
 | `getStandardsProfile` | function | Look up a built-in profile by id, or `undefined` when unknown. |
+| `globMatch` | function | Match a POSIX path against a glob supporting `**` (any path segments incl. |
 | `isAnalyzableSource` | function | True when a path is in a source language the scanner can analyze for crypto. |
 | `isBinaryPath` | function | True if the file's extension marks it as binary / non-text. |
 | `isManifestFile` | function | True if a file path looks like a manifest we can parse for dependencies. |
 | `languageToExtension` | function | Map a language name (or a bare extension) to a source extension whose |
 | `loadBaseline` | function | Load a baseline from disk. Returns an empty baseline (rather than throwing) |
 | `loadConfig` | function | Load a `quantakrypto.config.json` for a scan. |
+| `loadHndlMap` | function | Load and validate the `hndl.yml` for a scan. By default reads |
 | `looksMinified` | function | Heuristic content check for machine-minified / generated files with no |
 | `meetsThreshold` | function | True when `severity` is at or above `threshold` (i.e. at least as severe). |
 | `mergeCboms` | function | Merge CBOMs into one. Components with the same `bom-ref` (same algorithm + |
+| `moscaFactor` | function | M - the Mosca factor (0..1). `X` is the data's protection horizon |
 | `parseCryptoPolicy` | function | Validate + normalize a parsed policy object (from an operator's JSON file). |
+| `parseHndlMap` | function | Validate a parsed `hndl.yml` object into a typed {@link HndlMap}. Applies |
 | `remediateFindings` | function | Run each finding through patchSource → policy → verify, collecting the patches |
 | `remediationFor` | function | Look up the recommended post-quantum remediation for a classical algorithm. |
 | `remediationForProfile` | function | Regime-aware remediation. Composes the base family guidance with a |
@@ -144,6 +172,7 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `renderPreflight` | function | Render the exact payload text a `--dry-run` preflight would send. |
 | `sarifLevel` | function | Map our severity to a SARIF 2.1.0 result level. |
 | `saveBaseline` | function | Write a baseline derived from the given findings to disk as pretty JSON |
+| `scaffoldHndlYaml` | function | Scaffold an `hndl.yml` document seeded from a scan's findings. Config-scope, |
 | `scan` | function | Recursively scan a directory (or single file, or explicit file list) for |
 | `scanParallel` | function | Scan in parallel across a worker-thread pool, falling back to the in-process |
 | `severityRank` | function | Rank of a severity within {@link SEVERITY_ORDER} (0 = most severe). Lower |
@@ -156,13 +185,14 @@ Public entry: `packages/core/src/index.ts` — 145 exported symbols.
 | `toSarif` | function | Serialize a scan result as SARIF 2.1.0. |
 | `verifyFix` | function | Run all detectors over `code`, selecting them by `filename` (extension) or |
 | `verifyReadinessReport` | function | Recompute the deterministic content hash over a readiness report's body and |
+| `vulnerabilityFactor` | function | V - crypto-vulnerability factor for a finding (0..1). |
 | `vulnerableDependencies` | const | Known quantum-vulnerable npm dependencies. |
 | `walkFiles` | value |  |
 | `withWorktree` | function | Create a detached worktree of `repoRoot` at HEAD, run `fn` with its path, and |
 
 ## @quantakrypto/qscan
 
-Public entry: `packages/qscan/src/index.ts` — 55 exported symbols.
+Public entry: `packages/qscan/src/index.ts` - 57 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -174,6 +204,7 @@ Public entry: `packages/qscan/src/index.ts` — 55 exported symbols.
 | `EXIT` | const | Process-style exit codes qScan uses. |
 | `Finding` | type |  |
 | `HELP_TEXT` | const | The full `--help` screen. |
+| `HndlInitResult` | interface | Outcome of {@link runHndlInit}: the scaffold plus where it should be written. |
 | `ParsedArgs` | type | Result of {@link parseArgs}: either resolved options or a meta action. |
 | `ParsedRun` | interface | A successful parse: resolved options plus which configurable keys were explicit. |
 | `QscanFormat` | type | Output formats qScan accepts on the command line. Extends core's |
@@ -214,6 +245,7 @@ Public entry: `packages/qscan/src/index.ts` — 55 exported symbols.
 | `renderSarif` | function | Render the SARIF 2.1.0 report (pretty-printed, no trailing newline). |
 | `renderVex` | function | Render an OpenVEX 0.2.0 document for the scan (pretty-printed, no trailing |
 | `resolveConfig` | function | Load and merge `quantakrypto.config.json` into the parsed CLI options. |
+| `runHndlInit` | function | Scaffold an `hndl.yml` for a repo (`qscan hndl init`). Runs a scan to seed the |
 | `runQscan` | function | Run a complete qScan pass: scan → baseline → threshold → render. |
 | `runRemediate` | function | Run a complete qremediate pass. Pure w.r.t. process; the bin prints + exits. |
 | `saveBaseline` | value |  |
@@ -224,7 +256,7 @@ Public entry: `packages/qscan/src/index.ts` — 55 exported symbols.
 
 ## @quantakrypto/mcp
 
-Public entry: `packages/mcp/src/index.ts` — 25 exported symbols.
+Public entry: `packages/mcp/src/index.ts` - 25 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -256,7 +288,7 @@ Public entry: `packages/mcp/src/index.ts` — 25 exported symbols.
 
 ## @quantakrypto/sieve
 
-Public entry: `packages/sieve/src/index.ts` — 46 exported symbols.
+Public entry: `packages/sieve/src/index.ts` - 46 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -309,7 +341,7 @@ Public entry: `packages/sieve/src/index.ts` — 46 exported symbols.
 
 ## @quantakrypto/agent
 
-Public entry: `packages/agent/src/index.ts` — 18 exported symbols.
+Public entry: `packages/agent/src/index.ts` - 18 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -334,7 +366,7 @@ Public entry: `packages/agent/src/index.ts` — 18 exported symbols.
 
 ## @quantakrypto/qprobe
 
-Public entry: `packages/qprobe/src/index.ts` — 42 exported symbols.
+Public entry: `packages/qprobe/src/index.ts` - 42 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |

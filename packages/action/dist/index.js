@@ -9808,7 +9808,7 @@ async function scanParallel(options) {
   };
 }
 function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurrency, onFile, signal) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const results = new Array(chunks.length);
     let next = 0;
     let done = 0;
@@ -9868,7 +9868,7 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
           done++;
           if (done === chunks.length) {
             cleanup();
-            resolve2(results);
+            resolve3(results);
             return;
           }
           dispatch(w);
@@ -9957,10 +9957,10 @@ function coerceBaseline(value) {
   const fingerprints = Array.isArray(obj.fingerprints) ? obj.fingerprints.filter((x) => typeof x === "string") : [];
   return { version, fingerprints };
 }
-async function loadBaseline(path7) {
+async function loadBaseline(path8) {
   let text;
   try {
-    text = await readFile3(path7, "utf8");
+    text = await readFile3(path8, "utf8");
   } catch {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
@@ -9970,9 +9970,9 @@ async function loadBaseline(path7) {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
 }
-async function saveBaseline(path7, findings) {
+async function saveBaseline(path8, findings) {
   const baseline = baselineFromFindings(findings);
-  await writeFile2(path7, `${JSON.stringify(baseline, null, 2)}
+  await writeFile2(path8, `${JSON.stringify(baseline, null, 2)}
 `, "utf8");
   return baseline;
 }
@@ -10049,6 +10049,523 @@ var init_config = __esm({
   }
 });
 
+// ../core/dist/hndl.js
+import { readFile as readFile4 } from "node:fs/promises";
+import * as path5 from "node:path";
+function findingFingerprint(f) {
+  const declared = f.fingerprint;
+  if (typeof declared === "string" && declared.length > 0)
+    return declared;
+  return fingerprintFinding(f);
+}
+function ruleScopeIndex() {
+  if (scopeIndex)
+    return scopeIndex;
+  const index = /* @__PURE__ */ new Map();
+  for (const det of defaultRegistry.all()) {
+    const scope = detectorScope(det);
+    for (const rule2 of det.rules ?? [])
+      index.set(rule2.id, scope);
+  }
+  scopeIndex = index;
+  return index;
+}
+function findingScope(f) {
+  if (f.category === "dependency")
+    return "dependency";
+  return ruleScopeIndex().get(f.ruleId) ?? "source";
+}
+function globMatch(glob, filePath) {
+  return globToRegExp2(glob).test(filePath);
+}
+function globToRegExp2(glob) {
+  const cached = globCache.get(glob);
+  if (cached)
+    return cached;
+  let re = "^";
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === "*") {
+      if (glob[i + 1] === "*") {
+        i++;
+        if (glob[i + 1] === "/")
+          i++;
+        re += ".*";
+      } else {
+        re += "[^/]*";
+      }
+    } else if (ch === "?") {
+      re += "[^/]";
+    } else if ("\\^$.|+()[]{}".includes(ch)) {
+      re += `\\${ch}`;
+    } else {
+      re += ch;
+    }
+  }
+  re += "$";
+  const compiled = new RegExp(re);
+  globCache.set(glob, compiled);
+  return compiled;
+}
+function clamp01(x) {
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+function vulnerabilityFactor(f) {
+  const base = SEVERITY_VULNERABILITY[f.severity] * CONFIDENCE_WEIGHT[f.confidence];
+  return clamp01(base * (f.hndl ? 1 : NON_HNDL_DISCOUNT));
+}
+function moscaFactor(secrecyHorizonYears, horizon) {
+  const span = secrecyHorizonYears + horizon.migrationHorizonYears;
+  if (span <= 0)
+    return 0;
+  const margin = span - horizon.quantumThreatYears;
+  return clamp01(margin / span);
+}
+function scoreFinding(f, input, horizon) {
+  const sensitivity = CLASSIFICATION_SENSITIVITY[input.classification];
+  const secrecyHorizonYears = Math.max(input.retentionYears, input.secrecyLifetimeYears);
+  const mosca = moscaFactor(secrecyHorizonYears, horizon);
+  const exposureScore = Math.round(100 * clamp01(input.vulnerability * sensitivity * mosca));
+  const moscaMarginYears = secrecyHorizonYears + horizon.migrationHorizonYears - horizon.quantumThreatYears;
+  const rationale = {
+    vulnerability: round3(input.vulnerability),
+    sensitivity: round3(sensitivity),
+    mosca: round3(mosca),
+    classification: input.classification,
+    retentionYears: input.retentionYears,
+    secrecyLifetimeYears: input.secrecyLifetimeYears,
+    secrecyHorizonYears,
+    quantumThreatYears: horizon.quantumThreatYears,
+    migrationHorizonYears: horizon.migrationHorizonYears,
+    moscaMarginYears,
+    moscaBreach: moscaMarginYears > 0,
+    hndl: f.hndl,
+    severity: f.severity,
+    confidence: f.confidence,
+    scope: findingScope(f),
+    bound: input.bound
+  };
+  return {
+    fingerprint: findingFingerprint(f),
+    ruleId: f.ruleId,
+    file: f.location.file,
+    dataAsset: null,
+    exposureScore,
+    rationale
+  };
+}
+function round3(x) {
+  return Math.round(x * 1e3) / 1e3;
+}
+function matchingAssets(f, map, scope) {
+  const out = [];
+  for (const asset of map.assets) {
+    if (asset.scopes && !asset.scopes.includes(scope))
+      continue;
+    if (asset.paths.some((g) => globMatch(g, f.location.file)))
+      out.push(asset);
+  }
+  return out;
+}
+function computeHndl(findings, map) {
+  const exposures = [];
+  const byFingerprint = /* @__PURE__ */ new Map();
+  const assetFindings = /* @__PURE__ */ new Map();
+  const assetMax = /* @__PURE__ */ new Map();
+  for (const f of findings) {
+    const vulnerability = vulnerabilityFactor(f);
+    const scope = findingScope(f);
+    const candidates = matchingAssets(f, map, scope);
+    let best;
+    if (candidates.length === 0) {
+      best = scoreFinding(f, {
+        vulnerability,
+        classification: map.defaults.classification,
+        retentionYears: 0,
+        secrecyLifetimeYears: 0,
+        bound: false
+      }, map.horizon);
+    } else {
+      let bestAsset;
+      best = void 0;
+      for (const asset of candidates) {
+        const scored = scoreFinding(f, {
+          vulnerability,
+          classification: asset.classification,
+          retentionYears: asset.retentionYears,
+          secrecyLifetimeYears: asset.secrecyLifetimeYears,
+          bound: true
+        }, map.horizon);
+        if (!bestAsset || scored.exposureScore > best.exposureScore) {
+          best = scored;
+          bestAsset = asset;
+        }
+      }
+      best.dataAsset = bestAsset.key;
+      assetFindings.set(bestAsset.key, (assetFindings.get(bestAsset.key) ?? 0) + 1);
+      assetMax.set(bestAsset.key, Math.max(assetMax.get(bestAsset.key) ?? 0, best.exposureScore));
+    }
+    exposures.push(best);
+    byFingerprint.set(best.fingerprint, best);
+  }
+  const assets = map.assets.map((a) => ({
+    key: a.key,
+    name: a.name,
+    classification: a.classification,
+    retentionYears: a.retentionYears,
+    secrecyLifetimeYears: a.secrecyLifetimeYears,
+    findings: assetFindings.get(a.key) ?? 0,
+    maxExposure: assetMax.get(a.key) ?? 0,
+    outlivesThreat: Math.max(a.retentionYears, a.secrecyLifetimeYears) > map.horizon.quantumThreatYears
+  }));
+  const scores = exposures.map((e) => e.exposureScore);
+  const maxExposure = scores.reduce((m, s) => Math.max(m, s), 0);
+  const meanExposure = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const topExposures = [...exposures].sort((a, b) => b.exposureScore - a.exposureScore || a.fingerprint.localeCompare(b.fingerprint)).slice(0, TOP_EXPOSURES);
+  const summary = {
+    findingsScored: exposures.length,
+    assetsDeclared: map.assets.length,
+    assetsWithFindings: assets.filter((a) => a.findings > 0).length,
+    assetsOutlivingHorizon: assets.filter((a) => a.outlivesThreat).length,
+    moscaBreaches: exposures.filter((e) => e.rationale.moscaBreach).length,
+    maxExposure,
+    meanExposure,
+    topExposures
+  };
+  return {
+    modelVersion: HNDL_MODEL_VERSION,
+    horizon: map.horizon,
+    exposures,
+    byFingerprint,
+    assets,
+    summary
+  };
+}
+function stripInlineComment(text) {
+  let quote;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote)
+        quote = void 0;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#" && (i === 0 || /\s/.test(text[i - 1]))) {
+      return text.slice(0, i);
+    }
+  }
+  return text;
+}
+function tokenizeYaml(text, file) {
+  const lines = [];
+  const raw = text.split(/\r?\n/);
+  for (let i = 0; i < raw.length; i++) {
+    const line = raw[i];
+    if (line.includes("	")) {
+      throw new HndlError(`tabs are not allowed for indentation (line ${i + 1})`, file);
+    }
+    const stripped = stripInlineComment(line).replace(/\s+$/, "");
+    if (stripped.trim() === "")
+      continue;
+    const indent = stripped.length - stripped.trimStart().length;
+    lines.push({ indent, content: stripped.trimStart(), n: i + 1 });
+  }
+  return lines;
+}
+function isKeyLine(content) {
+  return /^[A-Za-z0-9_.-]+\s*:(\s|$)/.test(content);
+}
+function splitKey(content, file, n) {
+  const idx = content.indexOf(":");
+  if (idx < 0)
+    throw new HndlError(`expected "key: value" (line ${n})`, file);
+  return { key: content.slice(0, idx).trim(), value: content.slice(idx + 1).trim() };
+}
+function parseScalar(token) {
+  if (token.length >= 2) {
+    const q = token[0];
+    if ((q === '"' || q === "'") && token[token.length - 1] === q) {
+      return token.slice(1, -1);
+    }
+  }
+  if (token === "true")
+    return true;
+  if (token === "false")
+    return false;
+  if (/^-?\d+(\.\d+)?$/.test(token))
+    return Number(token);
+  return token;
+}
+function parseValueToken(token, file, n) {
+  if (token.startsWith("[")) {
+    if (!token.endsWith("]")) {
+      throw new HndlError(`unterminated inline list (line ${n})`, file);
+    }
+    return parseFlowList(token.slice(1, -1), file, n);
+  }
+  return parseScalar(token);
+}
+function parseFlowList(body, file, n) {
+  const out = [];
+  let cur = "";
+  let quote;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (quote) {
+      cur += ch;
+      if (ch === quote)
+        quote = void 0;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === ",") {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  if (quote)
+    throw new HndlError(`unterminated string in inline list (line ${n})`, file);
+  const last = cur.trim();
+  if (last !== "" || out.length > 0)
+    out.push(last);
+  return out.filter((t) => t !== "").map((t) => parseScalar(t));
+}
+function parseYaml(text, file) {
+  const lines = tokenizeYaml(text, file);
+  if (lines.length === 0)
+    return {};
+  function parseNode(i, indent) {
+    const first = lines[i];
+    if (first.content === "-" || first.content.startsWith("- ")) {
+      return parseSeq(i, indent);
+    }
+    return parseMap(i, indent);
+  }
+  function parseSeq(start, indent) {
+    const arr = [];
+    let i = start;
+    while (i < lines.length && lines[i].indent === indent && (lines[i].content === "-" || lines[i].content.startsWith("- "))) {
+      const line = lines[i];
+      const rest = line.content === "-" ? "" : line.content.slice(2).trim();
+      const itemIndent = indent + 2;
+      if (rest === "") {
+        if (i + 1 < lines.length && lines[i + 1].indent > indent) {
+          const [val, next] = parseNode(i + 1, lines[i + 1].indent);
+          arr.push(val);
+          i = next;
+        } else {
+          arr.push(null);
+          i++;
+        }
+      } else if (isKeyLine(rest)) {
+        lines[i] = { indent: itemIndent, content: rest, n: line.n };
+        const [val, next] = parseMap(i, itemIndent);
+        arr.push(val);
+        i = next;
+      } else {
+        arr.push(parseValueToken(rest, file, line.n));
+        i++;
+      }
+    }
+    return [arr, i];
+  }
+  function parseMap(start, indent) {
+    const obj = {};
+    let i = start;
+    while (i < lines.length && lines[i].indent === indent && !lines[i].content.startsWith("- ") && lines[i].content !== "-") {
+      const line = lines[i];
+      const { key, value: value2 } = splitKey(line.content, file, line.n);
+      if (value2 !== "") {
+        obj[key] = parseValueToken(value2, file, line.n);
+        i++;
+      } else if (i + 1 < lines.length && lines[i + 1].indent > indent) {
+        const [val, next] = parseNode(i + 1, lines[i + 1].indent);
+        obj[key] = val;
+        i = next;
+      } else {
+        obj[key] = null;
+        i++;
+      }
+    }
+    return [obj, i];
+  }
+  const [value] = parseNode(0, lines[0].indent);
+  return value;
+}
+function isObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function asString(v, what, file) {
+  if (typeof v !== "string" || v.length === 0) {
+    throw new HndlError(`${what} must be a non-empty string`, file);
+  }
+  return v;
+}
+function asNonNegNumber(v, what, file) {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+    throw new HndlError(`${what} must be a non-negative number`, file);
+  }
+  return v;
+}
+function asClassification(v, what, file) {
+  if (typeof v !== "string" || !CLASSIFICATIONS.includes(v)) {
+    throw new HndlError(`${what} must be one of: ${CLASSIFICATIONS.join(", ")}`, file);
+  }
+  return v;
+}
+function asStringList(v, what, file) {
+  if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || x.length === 0)) {
+    throw new HndlError(`${what} must be a list of non-empty strings`, file);
+  }
+  return v;
+}
+function parseHndlMap(text, file = HNDL_FILENAME) {
+  const root = parseYaml(text, file);
+  if (!isObject(root)) {
+    throw new HndlError(`hndl.yml must be a mapping at the top level`, file);
+  }
+  let version = 1;
+  if ("version" in root) {
+    const v = root["version"];
+    if (typeof v !== "number" || !Number.isInteger(v)) {
+      throw new HndlError(`"version" must be an integer`, file);
+    }
+    version = v;
+  }
+  const horizon = {
+    quantumThreatYears: DEFAULT_QUANTUM_THREAT_YEARS,
+    migrationHorizonYears: DEFAULT_MIGRATION_HORIZON_YEARS
+  };
+  if ("horizon" in root && root["horizon"] !== null) {
+    const h = root["horizon"];
+    if (!isObject(h))
+      throw new HndlError(`"horizon" must be a mapping`, file);
+    if ("quantum_threat_years" in h) {
+      horizon.quantumThreatYears = asNonNegNumber(h["quantum_threat_years"], `"horizon.quantum_threat_years"`, file);
+    }
+    if ("migration_horizon_years" in h) {
+      horizon.migrationHorizonYears = asNonNegNumber(h["migration_horizon_years"], `"horizon.migration_horizon_years"`, file);
+    }
+  }
+  const defaults = { classification: DEFAULT_UNBOUND_CLASSIFICATION };
+  if ("defaults" in root && root["defaults"] !== null) {
+    const d = root["defaults"];
+    if (!isObject(d))
+      throw new HndlError(`"defaults" must be a mapping`, file);
+    if ("classification" in d) {
+      defaults.classification = asClassification(d["classification"], `"defaults.classification"`, file);
+    }
+  }
+  const rawAssets = "assets" in root ? root["assets"] : [];
+  if (!Array.isArray(rawAssets)) {
+    throw new HndlError(`"assets" must be a list`, file);
+  }
+  const assets = [];
+  const seenKeys = /* @__PURE__ */ new Set();
+  for (let idx = 0; idx < rawAssets.length; idx++) {
+    const a = rawAssets[idx];
+    if (!isObject(a))
+      throw new HndlError(`assets[${idx}] must be a mapping`, file);
+    const key = asString(a["key"], `assets[${idx}].key`, file);
+    if (seenKeys.has(key))
+      throw new HndlError(`duplicate asset key "${key}"`, file);
+    seenKeys.add(key);
+    const asset = {
+      key,
+      name: asString(a["name"], `assets[${idx}].name`, file),
+      classification: asClassification(a["classification"], `assets[${idx}].classification`, file),
+      retentionYears: asNonNegNumber(a["retention_years"], `assets[${idx}].retention_years`, file),
+      secrecyLifetimeYears: asNonNegNumber(a["secrecy_lifetime_years"], `assets[${idx}].secrecy_lifetime_years`, file),
+      paths: asStringList(a["paths"], `assets[${idx}].paths`, file)
+    };
+    if (asset.paths.length === 0) {
+      throw new HndlError(`assets[${idx}].paths must list at least one glob`, file);
+    }
+    if ("scopes" in a && a["scopes"] !== null) {
+      const scopes = asStringList(a["scopes"], `assets[${idx}].scopes`, file);
+      for (const s of scopes) {
+        if (!HNDL_SCOPES.includes(s)) {
+          throw new HndlError(`assets[${idx}].scopes: "${s}" must be one of: ${HNDL_SCOPES.join(", ")}`, file);
+        }
+      }
+      asset.scopes = scopes;
+    }
+    assets.push(asset);
+  }
+  return { version, horizon, defaults, assets };
+}
+async function loadHndlMap(root) {
+  const base = path5.basename(root);
+  const file = base === HNDL_FILENAME || base.endsWith(".yml") || base.endsWith(".yaml") ? path5.resolve(root) : path5.resolve(root, HNDL_FILENAME);
+  let text;
+  try {
+    text = await readFile4(file, "utf8");
+  } catch {
+    throw new HndlError(`hndl.yml not found: ${file} (run "qscan hndl init" to scaffold one)`, file);
+  }
+  return { map: parseHndlMap(text, file), path: file };
+}
+var HNDL_MODEL_VERSION, HNDL_FILENAME, CLASSIFICATIONS, HNDL_SCOPES, SEVERITY_VULNERABILITY, CONFIDENCE_WEIGHT, CLASSIFICATION_SENSITIVITY, NON_HNDL_DISCOUNT, DEFAULT_QUANTUM_THREAT_YEARS, DEFAULT_MIGRATION_HORIZON_YEARS, DEFAULT_UNBOUND_CLASSIFICATION, HndlError, TOP_EXPOSURES, scopeIndex, globCache;
+var init_hndl = __esm({
+  "../core/dist/hndl.js"() {
+    "use strict";
+    init_baseline();
+    init_registry();
+    HNDL_MODEL_VERSION = "1";
+    HNDL_FILENAME = "hndl.yml";
+    CLASSIFICATIONS = [
+      "public",
+      "internal",
+      "confidential",
+      "regulated"
+    ];
+    HNDL_SCOPES = ["source", "config", "dependency"];
+    SEVERITY_VULNERABILITY = {
+      critical: 1,
+      high: 0.8,
+      medium: 0.5,
+      low: 0.25,
+      info: 0.1
+    };
+    CONFIDENCE_WEIGHT = {
+      high: 1,
+      medium: 0.85,
+      low: 0.6
+    };
+    CLASSIFICATION_SENSITIVITY = {
+      public: 0.1,
+      internal: 0.4,
+      confidential: 0.7,
+      regulated: 1
+    };
+    NON_HNDL_DISCOUNT = 0.15;
+    DEFAULT_QUANTUM_THREAT_YEARS = 15;
+    DEFAULT_MIGRATION_HORIZON_YEARS = 5;
+    DEFAULT_UNBOUND_CLASSIFICATION = "internal";
+    HndlError = class extends Error {
+      name = "HndlError";
+      /** The `hndl.yml` path the error relates to, when known. */
+      path;
+      constructor(message, hndlPath) {
+        super(message);
+        this.path = hndlPath;
+      }
+    };
+    TOP_EXPOSURES = 5;
+    globCache = /* @__PURE__ */ new Map();
+  }
+});
+
 // ../core/dist/severity.js
 function severityRank(s) {
   const i = SEVERITY_ORDER.indexOf(s);
@@ -10077,6 +10594,19 @@ var init_severity = __esm({
 });
 
 // ../core/dist/report.js
+function exposureFor(f, hndl) {
+  if (!hndl)
+    return void 0;
+  return hndl.byFingerprint.get(findingFingerprint(f));
+}
+function hndlSummaryBlock(hndl) {
+  return {
+    modelVersion: hndl.modelVersion,
+    horizon: hndl.horizon,
+    summary: hndl.summary,
+    assets: hndl.assets
+  };
+}
 function emittedSnippet(f, redactSnippets) {
   if (redactSnippets || f.sensitive)
     return void 0;
@@ -10116,6 +10646,15 @@ function sarifRule(spec) {
         { target: { id: spec.cwe, toolComponent: { name: "CWE" } }, kinds: ["relevant"] }
       ]
     } : {}
+  };
+}
+function exposureProperties(exposure) {
+  if (!exposure)
+    return {};
+  return {
+    exposureScore: exposure.exposureScore,
+    dataAsset: exposure.dataAsset,
+    exposureRationale: exposure.rationale
   };
 }
 function toSarif(result, opts) {
@@ -10188,7 +10727,8 @@ function toSarif(result, opts) {
         hndl: f.hndl,
         ...f.algorithm ? { algorithm: f.algorithm } : {},
         ...f.remediation ? { remediation: f.remediation } : {},
-        ...f.cwe ? { cwe: f.cwe } : {}
+        ...f.cwe ? { cwe: f.cwe } : {},
+        ...exposureProperties(exposureFor(f, opts?.hndl))
       },
       ...f.cwe ? {
         taxa: [
@@ -10236,6 +10776,7 @@ function toSarif(result, opts) {
           }
         },
         ...taxonomies.length > 0 ? { taxonomies } : {},
+        ...opts?.hndl ? { properties: { hndl: hndlSummaryBlock(opts.hndl) } } : {},
         results
       }
     ]
@@ -10257,6 +10798,7 @@ function securitySeverity(severity) {
 }
 function toJson(result, opts) {
   const redactSnippets = opts?.redactSnippets ?? false;
+  const hndl = opts?.hndl;
   return {
     toolVersion: result.toolVersion,
     root: result.root,
@@ -10272,34 +10814,46 @@ function toJson(result, opts) {
       byCategory: result.inventory.byCategory,
       byAlgorithm: result.inventory.byAlgorithm
     },
-    findings: result.findings.map((f) => ({
-      // Stable, line-INSENSITIVE identity of the finding: sha256 of
-      // ruleId | normalized-POSIX-repo-relative-path | normalized-snippet
-      // (the SARIF partialFingerprints trick, line number deliberately
-      // excluded). Reused verbatim from the baseline module so JSON identity,
-      // SARIF partialFingerprints, and the baseline suppression set are one and
-      // the same value. A line move does NOT change it; when no snippet context
-      // exists it falls back to ruleId|path. This is the cross-run identity the
-      // platform keys posture drift on.
-      fingerprint: fingerprintFinding(f),
-      ruleId: f.ruleId,
-      title: f.title,
-      category: f.category,
-      severity: f.severity,
-      confidence: f.confidence,
-      algorithm: f.algorithm,
-      hndl: f.hndl,
-      message: f.message,
-      remediation: f.remediation,
-      cwe: f.cwe,
-      location: {
-        file: f.location.file,
-        line: f.location.line,
-        column: f.location.column,
-        endLine: f.location.endLine,
-        snippet: emittedSnippet(f, redactSnippets)
-      }
-    }))
+    ...hndl ? { hndl: hndlSummaryBlock(hndl) } : {},
+    findings: result.findings.map((f) => {
+      const exposure = exposureFor(f, hndl);
+      return {
+        // Stable, line-INSENSITIVE identity of the finding: sha256 of
+        // ruleId | normalized-POSIX-repo-relative-path | normalized-snippet
+        // (the SARIF partialFingerprints trick, line number deliberately
+        // excluded). Reused verbatim from the baseline module so JSON identity,
+        // SARIF partialFingerprints, and the baseline suppression set are one and
+        // the same value. A line move does NOT change it; when no snippet context
+        // exists it falls back to ruleId|path. This is the cross-run identity the
+        // platform keys posture drift on.
+        fingerprint: fingerprintFinding(f),
+        ruleId: f.ruleId,
+        title: f.title,
+        category: f.category,
+        severity: f.severity,
+        confidence: f.confidence,
+        algorithm: f.algorithm,
+        hndl: f.hndl,
+        message: f.message,
+        remediation: f.remediation,
+        cwe: f.cwe,
+        location: {
+          file: f.location.file,
+          line: f.location.line,
+          column: f.location.column,
+          endLine: f.location.endLine,
+          snippet: emittedSnippet(f, redactSnippets)
+        },
+        ...exposure ? {
+          exposure: {
+            fingerprint: exposure.fingerprint,
+            exposureScore: exposure.exposureScore,
+            dataAsset: exposure.dataAsset,
+            rationale: exposure.rationale
+          }
+        } : {}
+      };
+    })
   };
 }
 function formatProfileGuidance(byAlgorithm, profile) {
@@ -10330,6 +10884,7 @@ var init_report = __esm({
     init_detect_utils();
     init_remediation();
     init_baseline();
+    init_hndl();
     SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json";
     INFORMATION_URI = "https://github.com/quantakrypto/pqc-tools";
   }
@@ -10945,6 +11500,7 @@ var init_dist = __esm({
     init_baseline();
     init_changed();
     init_config();
+    init_hndl();
     init_walk();
     init_detect_utils();
     init_inventory();
@@ -10964,8 +11520,8 @@ var init_dist = __esm({
 });
 
 // ../agent/dist/validate.js
-function validateAgainstSchema(value, schema, path7 = "$") {
-  const err = (m) => ({ ok: false, error: `${path7} ${m}` });
+function validateAgainstSchema(value, schema, path8 = "$") {
+  const err = (m) => ({ ok: false, error: `${path8} ${m}` });
   const en = schema.enum;
   if (Array.isArray(en) && !en.includes(value)) {
     return err(`must be one of ${JSON.stringify(en)}`);
@@ -10991,7 +11547,7 @@ function validateAgainstSchema(value, schema, path7 = "$") {
     const items = schema.items;
     if (items) {
       for (let i = 0; i < value.length; i++) {
-        const r = validateAgainstSchema(value[i], items, `${path7}[${i}]`);
+        const r = validateAgainstSchema(value[i], items, `${path8}[${i}]`);
         if (!r.ok)
           return r;
       }
@@ -11008,7 +11564,7 @@ function validateAgainstSchema(value, schema, path7 = "$") {
     const props = schema.properties ?? {};
     for (const [k, sub] of Object.entries(props)) {
       if (k in obj) {
-        const r = validateAgainstSchema(obj[k], sub, `${path7}.${k}`);
+        const r = validateAgainstSchema(obj[k], sub, `${path8}.${k}`);
         if (!r.ok)
           return r;
       }
@@ -11220,8 +11776,8 @@ var init_prompt = __esm({
 });
 
 // ../agent/dist/response-cache.js
-import { readFile as readFile4, writeFile as writeFile3, mkdir as mkdir2, rename } from "node:fs/promises";
-import * as path5 from "node:path";
+import { readFile as readFile5, writeFile as writeFile3, mkdir as mkdir2, rename } from "node:fs/promises";
+import * as path6 from "node:path";
 import process2 from "node:process";
 function cacheKey(parts) {
   return `${parts.promptVersion}|${parts.model}|${parts.contextLevel}|${parts.fingerprint}`;
@@ -11229,7 +11785,7 @@ function cacheKey(parts) {
 async function loadResponseCache(cacheFile) {
   let raw;
   try {
-    raw = await readFile4(cacheFile, "utf8");
+    raw = await readFile5(cacheFile, "utf8");
   } catch {
     return /* @__PURE__ */ new Map();
   }
@@ -11247,7 +11803,7 @@ async function loadResponseCache(cacheFile) {
 async function saveResponseCache(cacheFile, entries) {
   const doc = { version: CACHE_VERSION2, entries: Object.fromEntries(entries) };
   try {
-    await mkdir2(path5.dirname(cacheFile), { recursive: true });
+    await mkdir2(path6.dirname(cacheFile), { recursive: true });
     const tmp = `${cacheFile}.tmp-${process2.pid}`;
     await writeFile3(tmp, JSON.stringify(doc), "utf8");
     await rename(tmp, cacheFile);
@@ -11412,7 +11968,7 @@ __export(triage_run_exports, {
   runTriage: () => runTriage
 });
 import { readFile as fsReadFile } from "node:fs/promises";
-import path6 from "node:path";
+import path7 from "node:path";
 import process3 from "node:process";
 function sanitizeRationale(s) {
   const clean = s.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
@@ -11430,11 +11986,11 @@ async function runTriage(result, opts) {
   const targets = result.findings.filter((f) => SEVERITY_RANK2[f.severity] <= floorRank);
   const stderr = opts.stderr ?? ((s) => void process3.stderr.write(s));
   const root = opts.root ?? result.root ?? ".";
-  const readFile7 = opts.readFile ?? ((rel) => fsReadFile(path6.resolve(root, rel), "utf8"));
+  const readFile8 = opts.readFile ?? ((rel) => fsReadFile(path7.resolve(root, rel), "utf8"));
   if (opts.dryRun) {
     const contexts = [];
     for (const f of targets) {
-      const content = level === "metadata" ? "" : await readFile7(f.location.file).catch(() => "");
+      const content = level === "metadata" ? "" : await readFile8(f.location.file).catch(() => "");
       contexts.push(buildContext(f, level, content));
     }
     return {
@@ -11454,7 +12010,7 @@ async function runTriage(result, opts) {
     return agent.triageFindings(findings, {
       client,
       level,
-      readFile: readFile7,
+      readFile: readFile8,
       fingerprint: fingerprintFinding,
       floor: opts.floor,
       cacheFile: opts.cacheFile,
@@ -11515,13 +12071,13 @@ var init_triage_run = __esm({
 
 // src/main.ts
 init_dist();
-import { access, mkdir as mkdir3, readFile as readFile6, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname5, isAbsolute, resolve, sep as sep2 } from "node:path";
+import { access, mkdir as mkdir3, readFile as readFile7, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname5, isAbsolute, resolve as resolve2, sep as sep2 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // ../qscan/dist/index.js
+import { readFile as readFile6, stat as stat4 } from "node:fs/promises";
 init_dist();
-import { readFile as readFile5 } from "node:fs/promises";
 import process4 from "node:process";
 
 // ../qscan/dist/sign.js
@@ -11570,22 +12126,22 @@ function applyBaseline2(findings, baseline) {
   const { newFindings, suppressed } = applyBaseline(findings, resolved);
   return { kept: newFindings, suppressed };
 }
-async function readBaseline(path7) {
-  const { readFile: readFile7 } = await import("node:fs/promises");
+async function readBaseline(path8) {
+  const { readFile: readFile8 } = await import("node:fs/promises");
   let raw;
   try {
-    raw = await readFile7(path7, "utf8");
+    raw = await readFile8(path8, "utf8");
   } catch (cause) {
-    throw new Error(`could not read baseline file "${path7}": ${errMessage(cause)}`);
+    throw new Error(`could not read baseline file "${path8}": ${errMessage(cause)}`);
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    throw new Error(`baseline file "${path7}" is not valid JSON: ${errMessage(cause)}`);
+    throw new Error(`baseline file "${path8}" is not valid JSON: ${errMessage(cause)}`);
   }
   if (!isBaselineFile(parsed)) {
-    throw new Error(`baseline file "${path7}" is missing a string "fingerprints" array`);
+    throw new Error(`baseline file "${path8}" is missing a string "fingerprints" array`);
   }
   return new Set(parsed.fingerprints);
 }
@@ -11620,7 +12176,8 @@ function defaultOptions() {
     noSnippets: false,
     noConfigFile: false,
     triage: false,
-    dryRun: false
+    dryRun: false,
+    hndl: false
   };
 }
 
@@ -11736,6 +12293,8 @@ function renderHuman(result, opts = {}) {
     for (const t of g.slice(1))
       lines.push(`${c.cyan}${t}${c.reset}`);
   }
+  if (opts.hndl)
+    lines.push("", ...hndlSection(opts.hndl, c));
   lines.push("");
   lines.push(`${c.bold}Standards & timeline${c.reset}`);
   lines.push(`${c.dim}${PQC_TRANSITION_NOTE}${c.reset}`);
@@ -11743,6 +12302,26 @@ function renderHuman(result, opts = {}) {
     lines.push(`${c.dim}${STATEFUL_HBS_NOTE}${c.reset}`);
   }
   return lines.join("\n");
+}
+function hndlSection(hndl, c) {
+  const s = hndl.summary;
+  const out = [`${c.bold}HNDL exposure${c.reset}`];
+  out.push(`${c.dim}horizon: quantum threat ${hndl.horizon.quantumThreatYears}y \xB7 migration ${hndl.horizon.migrationHorizonYears}y \xB7 model v${hndl.modelVersion}${c.reset}`);
+  out.push(`max exposure ${exposureColor(s.maxExposure, c)}${s.maxExposure}/100${c.reset}  \u2022  mean ${s.meanExposure}/100  \u2022  ${s.moscaBreaches} finding(s) breach Mosca's inequality`);
+  if (s.assetsDeclared > 0) {
+    out.push(`${c.dim}${s.assetsWithFindings}/${s.assetsDeclared} declared assets carry findings; ${s.assetsOutlivingHorizon} have secrecy outliving the threat horizon.${c.reset}`);
+  }
+  if (s.topExposures.length > 0) {
+    out.push(`${c.bold}Top exposures${c.reset}`);
+    for (const e of s.topExposures) {
+      const asset = e.dataAsset ? e.dataAsset : `${c.dim}(unbound)${c.reset}`;
+      out.push(`  ${exposureColor(e.exposureScore, c)}${String(e.exposureScore).padStart(3)}${c.reset} ${c.cyan}${e.ruleId}${c.reset}  ${e.file}  \u2192 ${asset}`);
+    }
+  }
+  return out;
+}
+function exposureColor(score, c) {
+  return score >= 50 ? c.red : score >= 20 ? c.yellow : c.dim;
 }
 function nextStep(findings) {
   const worst = [...findings].sort(compareFindings2)[0];
@@ -11880,7 +12459,7 @@ async function runQscan(opts, hooks = {}) {
   }
   let policy;
   if (options.policy) {
-    policy = parseCryptoPolicy(JSON.parse(await readFile5(options.policy, "utf8")));
+    policy = parseCryptoPolicy(JSON.parse(await readFile6(options.policy, "utf8")));
   }
   const exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold)) ? EXIT.FINDINGS : EXIT.OK;
   if (options.triage) {
@@ -11909,27 +12488,32 @@ async function runQscan(opts, hooks = {}) {
   if ((options.sign || options.timestamp) && options.format !== "evidence") {
     throw new Error(`--sign/--timestamp require --format evidence (got ${options.format ?? "the human report"})`);
   }
+  let hndl;
+  if (options.hndl) {
+    const { map } = await loadHndlMap(options.path);
+    hndl = computeHndl(result.findings, map);
+  }
   const signer = options.sign ? commandSigner(options.sign) : void 0;
   const timestamper = options.timestamp ? commandSigner(options.timestamp) : void 0;
   let mergeCbomsData;
   if (options.format === "cbom" && options.mergeCboms && options.mergeCboms.length > 0) {
     mergeCbomsData = [];
-    for (const path7 of options.mergeCboms) {
+    for (const path8 of options.mergeCboms) {
       let text;
       try {
-        text = await readFile5(path7, "utf8");
+        text = await readFile6(path8, "utf8");
       } catch {
-        throw new Error(`--merge: cannot read CBOM file "${path7}"`);
+        throw new Error(`--merge: cannot read CBOM file "${path8}"`);
       }
       let parsed;
       try {
         parsed = JSON.parse(text);
       } catch {
-        throw new Error(`--merge: "${path7}" is not valid JSON`);
+        throw new Error(`--merge: "${path8}" is not valid JSON`);
       }
       const bom = parsed;
       if (bom?.bomFormat !== "CycloneDX") {
-        throw new Error(`--merge: "${path7}" is not a CycloneDX CBOM (missing bomFormat)`);
+        throw new Error(`--merge: "${path8}" is not a CycloneDX CBOM (missing bomFormat)`);
       }
       mergeCbomsData.push(bom);
     }
@@ -11941,7 +12525,8 @@ async function runQscan(opts, hooks = {}) {
     tier: options.tier,
     ...options.profile ? { profile: options.profile } : {},
     ...policy ? { policy } : {},
-    ...mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}
+    ...mergeCbomsData ? { mergeCboms: mergeCbomsData } : {},
+    ...hndl ? { hndl } : {}
   });
   if (options.format === "evidence" && (signer || timestamper)) {
     const signed = await signReadinessReport(JSON.parse(report), {
@@ -11953,12 +12538,12 @@ async function runQscan(opts, hooks = {}) {
   return { result, suppressed, report, exitCode };
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
   switch (format) {
     case "json":
-      return renderJson(result, { redactSnippets });
+      return renderJson(result, { redactSnippets, ...hndl ? { hndl } : {} });
     case "sarif":
-      return renderSarif(result, { redactSnippets });
+      return renderSarif(result, { redactSnippets, ...hndl ? { hndl } : {} });
     case "cbom":
       return renderCbom(result, mergeCboms2);
     case "vex":
@@ -11973,7 +12558,7 @@ function renderReport(result, format, opts = {}) {
     }
     case "human":
     default:
-      return renderHuman(result, { color, topN, tier, profile });
+      return renderHuman(result, { color, topN, tier, profile, ...hndl ? { hndl } : {} });
   }
 }
 
@@ -12224,7 +12809,7 @@ async function readPullRequestContext(env = process.env) {
     if (!repository || !eventPath) return void 0;
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) return void 0;
-    const payload = JSON.parse(await readFile6(eventPath, "utf8"));
+    const payload = JSON.parse(await readFile7(eventPath, "utf8"));
     const prNumber = payload.pull_request?.number ?? payload.number;
     if (typeof prNumber !== "number") return void 0;
     const apiUrl = env["GITHUB_API_URL"] || "https://api.github.com";
@@ -12271,8 +12856,8 @@ ${body}`;
   }
 }
 function resolveInWorkspace(p, env) {
-  const workspace = resolve(env["GITHUB_WORKSPACE"] || process.cwd());
-  const resolved = isAbsolute(p) ? resolve(p) : resolve(workspace, p);
+  const workspace = resolve2(env["GITHUB_WORKSPACE"] || process.cwd());
+  const resolved = isAbsolute(p) ? resolve2(p) : resolve2(workspace, p);
   if (resolved !== workspace && !resolved.startsWith(workspace + sep2)) {
     throw new Error(`path "${p}" escapes the workspace (${workspace})`);
   }
@@ -12361,7 +12946,7 @@ async function run(env = process.env) {
     process.exit(1);
   }
 }
-var invokedDirectly = process.argv[1] !== void 0 && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+var invokedDirectly = process.argv[1] !== void 0 && import.meta.url === pathToFileURL(resolve2(process.argv[1])).href;
 if (invokedDirectly) {
   run().catch((err) => {
     setFailed(`quantakrypto: ${err.message}`);
