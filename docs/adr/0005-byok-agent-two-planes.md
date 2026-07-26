@@ -94,7 +94,7 @@ imported by both planes.
 - *(F2, F3) **Resolved**: instruction/data separation now travels via the provider's
   real `system` role (the rubric out-ranks the untrusted user turn, with an explicit
   anti-injection preamble), and a per-run spend ceiling (`--max-findings`) caps LLM
-  calls. See and `packages/agent/src/loop.ts`.*
+  calls. See `packages/agent/src/loop.ts`.*
 
 ## Alternatives considered
 
