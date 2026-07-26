@@ -171,6 +171,10 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
       // edit above it. `quantakrypto/v1` names our scheme.
       partialFingerprints: { "quantakrypto/v1": fingerprintFinding(f) },
       properties: {
+        // Same stable identity mirrored into properties so non-GitHub SARIF
+        // consumers (our platform ingest) can read one uniform `fingerprint`
+        // field across JSON and SARIF without reaching into partialFingerprints.
+        fingerprint: fingerprintFinding(f),
         category: f.category,
         severity: f.severity,
         confidence: f.confidence,
@@ -274,6 +278,15 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
       byAlgorithm: result.inventory.byAlgorithm,
     },
     findings: result.findings.map((f) => ({
+      // Stable, line-INSENSITIVE identity of the finding: sha256 of
+      // ruleId | normalized-POSIX-repo-relative-path | normalized-snippet
+      // (the SARIF partialFingerprints trick, line number deliberately
+      // excluded). Reused verbatim from the baseline module so JSON identity,
+      // SARIF partialFingerprints, and the baseline suppression set are one and
+      // the same value. A line move does NOT change it; when no snippet context
+      // exists it falls back to ruleId|path. This is the cross-run identity the
+      // platform keys posture drift on.
+      fingerprint: fingerprintFinding(f),
       ruleId: f.ruleId,
       title: f.title,
       category: f.category,
