@@ -82,16 +82,25 @@ function exportedName(clause) {
   return asMatch ? asMatch[1] : clause.trim().replace(/^type\s+/, "");
 }
 
-/** Best-effort one-line doc summary for `name` declared in `src` (from its doc block). */
+/**
+ * Best-effort one-line doc summary for `name` declared in `src`: the first line of the
+ * JSDoc block that ends immediately above the declaration (whitespace-only in between).
+ * Anchoring to the declaration first — rather than scanning left-to-right for a
+ * doc-comment-then-export pair — is deliberate: it never mis-attributes a file's module
+ * header (or an earlier symbol's block) to a symbol that has no doc comment of its own.
+ */
 function docFor(src, name) {
-  const pattern =
-    String.raw`\/\*\*([\s\S]*?)\*\/\s*export\s+(?:(?:declare|async|abstract)\s+)*` +
-    String.raw`(?:const|function|class|interface|type|enum)\s+` +
-    name +
-    String.raw`\b`;
-  const m = src.match(new RegExp(pattern));
-  if (!m) return "";
-  const first = m[1]
+  const decl = new RegExp(
+    String.raw`export\s+(?:(?:declare|async|abstract)\s+)*` +
+      String.raw`(?:const|function|class|interface|type|enum)\s+` +
+      name +
+      String.raw`\b`,
+  ).exec(src);
+  if (!decl) return "";
+  // A single JSDoc block (containing no comment terminator) sitting right before the decl.
+  const preceding = src.slice(0, decl.index).match(/\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*$/);
+  if (!preceding) return "";
+  const first = preceding[1]
     .split("\n")
     .map((l) => l.replace(/^\s*\*?\s?/, "").trim())
     .find((l) => l.length > 0);
@@ -126,11 +135,32 @@ function collectExports(entryRel) {
   }
 
   // `export { a, b as c } from "…"` and `export type { … } from "…"` (may span lines).
-  for (const m of src.matchAll(/export\s+(type\s+)?\{([\s\S]*?)\}\s*from\s+["'][^"']+["']/g)) {
+  // Resolve the source module so re-exported symbols get their real kind and doc summary
+  // (not a blank), the same way `export * from` above does.
+  for (const m of src.matchAll(/export\s+(type\s+)?\{([\s\S]*?)\}\s*from\s+["']([^"']+)["']/g)) {
     const isType = Boolean(m[1]);
+    let modRaw = "";
+    try {
+      modRaw = readFileSync(resolve(dirname(entryAbs), m[3].replace(/\.js$/, ".ts")), "utf8");
+    } catch {
+      /* re-export from a package or an unresolved path — leave kind/doc best-effort */
+    }
+    const modSrc = modRaw ? stripComments(modRaw) : "";
     for (const clause of m[2].split(",")) {
       const name = exportedName(clause);
-      if (name) out.set(name, { kind: isType ? "type" : "value", doc: "" });
+      if (!name) continue;
+      // The clause's original (pre-`as`) identifier, used to find the declaration.
+      const orig = (clause.trim().match(/^(?:type\s+)?([\w$]+)/) || [])[1] || name;
+      let kind = isType ? "type" : "value";
+      if (modSrc) {
+        const d = new RegExp(
+          String.raw`export\s+(?:(?:declare|async|abstract)\s+)*(const|function|class|interface|type|enum)\s+` +
+            orig +
+            String.raw`\b`,
+        ).exec(modSrc);
+        if (d) kind = d[1] === "function" ? "function" : d[1];
+      }
+      out.set(name, { kind, doc: modRaw ? docFor(modRaw, orig) : "" });
     }
   }
 
