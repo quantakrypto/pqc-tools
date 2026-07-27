@@ -300,8 +300,17 @@ test("computeHndl: unbound finding uses defaults and is flagged bound:false", ()
   assert.equal(exp.dataAsset, null);
   assert.equal(exp.rationale.bound, false);
   assert.equal(exp.rationale.classification, "internal");
-  // retention/secrecy default to 0 → X=0, margin = 0+5-10 = -5 → M=0 → score 0.
-  assert.equal(exp.exposureScore, 0);
+  // Unbound findings assume the minimum-concern horizon X = Z (secrecy lifetime =
+  // quantumThreatYears), so `defaults.classification` yields a real, rankable
+  // exposure instead of a dead 0. Here Z=10, Y=5: X=10, retention=0, secrecy=10,
+  // margin = 10+5-10 = 5 (Mosca breached), M = 5/15 = 0.333. V=0.8, S=0.4 (internal)
+  // → round(100 · 0.8 · 0.4 · 0.333) = 11.
+  assert.equal(exp.rationale.secrecyLifetimeYears, 10);
+  assert.equal(exp.rationale.retentionYears, 0);
+  assert.equal(exp.rationale.secrecyHorizonYears, 10);
+  assert.equal(exp.rationale.moscaMarginYears, 5);
+  assert.equal(exp.rationale.moscaBreach, true);
+  assert.equal(exp.exposureScore, 11);
 });
 
 test("computeHndl: overlapping assets pick the worst-case (highest) exposure", () => {
