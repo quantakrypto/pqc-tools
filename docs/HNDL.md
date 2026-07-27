@@ -65,7 +65,9 @@ The classification declared for the bound asset, mapped to a weight:
 The vocabulary matches the readiness model's data-protection (DPE) practice.
 A finding that binds to **no** declared asset is scored with the map's
 `defaults.classification` (default `internal`) and flagged `bound: false`, so a
-fallback score is never mistaken for a declared one.
+fallback score is never mistaken for a declared one. Its protection horizon (X) is
+also assumed - the *minimum-concern* horizon - so the fallback is genuinely
+rankable and not a silent zero; see §4.1.
 
 ## 4. M - the Mosca-factor
 
@@ -117,6 +119,39 @@ exposure = round(100 · 0.80 · 1.00 · 0.667) = 53
 The same finding over a `public`, 1-year-retention marketing asset scores **0**:
 `X + Y = 6 < Z = 10`, so `M = 0`. The Mosca-factor, not the finding, is doing the
 ranking.
+
+### 4.1 Unbound findings: the minimum-concern horizon
+
+A finding that matches no declared asset has an unknown data lifetime, so there is
+no `X` to read off. Assuming `X = 0` (as if the data were never kept) would drive
+`M`, and therefore the score, to **0** for *every* unbound finding under any sane
+horizon (`0 + Y − Z ≤ 0` whenever `Z ≥ Y`, which is the default). That would make
+the documented `defaults.classification` fallback unrankable - a dead value - which
+defeats its purpose.
+
+Instead an unbound finding assumes the **minimum-concern horizon**: data captured
+today must stay confidential *at least* until the quantum threat arrives, i.e.
+
+```
+X = Z   (retention_years = 0, secrecy_lifetime_years = Z assumed)
+```
+
+This is the shortest lifetime for which HNDL is a concern at all - captured data is
+exposed only if it is still secret when the CRQC lands at year `Z`. It yields
+
+```
+M = (Z + Y − Z) / (Z + Y) = Y / (Y + Z)
+```
+
+a small but non-zero, **rankable** exposure that (a) is driven purely by the
+migration window `Y` as a fraction of the assumed horizon, (b) never exceeds a
+declared long-lived asset's score, and (c) self-adjusts to any per-org horizon
+override rather than depending on a fixed magic number. Under the defaults
+(`Y = 5`, `Z = 15`) an unbound finding gets `M = 5/20 = 0.25`; a `bound: false`,
+`internal`, `high`/`high` HNDL finding then scores
+`round(100 · 0.80 · 0.40 · 0.25) = 8`. The `rationale` reports
+`retentionYears: 0`, `secrecyLifetimeYears: Z`, `moscaMarginYears: Y`, and
+`moscaBreach: true`, so the assumption is fully visible and contestable.
 
 ## 5. Binding findings to assets
 

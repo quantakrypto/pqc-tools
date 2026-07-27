@@ -440,7 +440,11 @@ function matchingAssets(f: Finding, map: HndlMap, scope: HndlScope): HndlDataAss
  * exposure is chosen and its asset recorded, since risk ranking should not be
  * diluted by an incidental low-sensitivity overlap. A finding that binds to no
  * asset is still scored, using the map's `defaults.classification` and the
- * global horizons, and flagged `bound: false` so it is visibly a fallback.
+ * global horizons, and flagged `bound: false` so it is visibly a fallback. Its
+ * secrecy lifetime is assumed to be the quantum-threat horizon Z (the
+ * minimum-concern horizon; see {@link scoreFinding} call below and docs/HNDL.md
+ * §4), so the fallback classification produces a real, rankable exposure rather
+ * than a dead 0.
  *
  * Purely additive: it never mutates findings and never affects a scan's exit
  * code.
@@ -463,8 +467,18 @@ export function computeHndl(findings: readonly Finding[], map: HndlMap): HndlRep
         {
           vulnerability,
           classification: map.defaults.classification,
+          // Unbound: the data's lifetime is unknown, so we cannot read X off a
+          // declared asset. Assuming X = 0 would drive M (hence the score) to a
+          // dead 0 for EVERY unbound finding under any sane horizon, making the
+          // documented `defaults.classification` fallback unrankable. Instead we
+          // assume the MINIMUM-CONCERN horizon: data captured today must stay
+          // confidential at least until the quantum threat arrives (X = Z). That
+          // yields M = Y / (Y + Z) - a small but non-zero, rankable exposure that
+          // never exceeds a declared long-lived asset's and self-adjusts to any
+          // per-org horizon override. Retention stays 0 (genuinely unknown); the
+          // secrecy lifetime carries the assumption. See docs/HNDL.md §4.
           retentionYears: 0,
-          secrecyLifetimeYears: 0,
+          secrecyLifetimeYears: map.horizon.quantumThreatYears,
           bound: false,
         },
         map.horizon,

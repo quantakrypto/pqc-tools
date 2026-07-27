@@ -6,6 +6,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed - HNDL exposure of unbound findings was always 0
+
+The `defaults.classification` fallback documented for findings that bind to no
+declared `hndl.yml` asset never produced a non-zero, rankable score. An unbound
+finding was scored with retention = secrecy lifetime = 0, so its protection
+horizon `X = 0`; under any horizon where `Z >= Y` (including the defaults
+`Y = 5`, `Z = 15`) the Mosca factor `M = (0 + Y - Z)/(0 + Y)` clamps to 0, driving
+the exposure to 0 for **every** unbound finding regardless of classification. The
+fallback was effectively dead.
+
+Unbound findings now assume the **minimum-concern horizon**: an unknown data
+lifetime is taken to be at least the quantum-threat horizon (`X = Z`), the shortest
+lifetime for which HNDL is a concern at all. This yields `M = Y / (Y + Z)` - a
+small but non-zero, rankable exposure that never exceeds a declared long-lived
+asset's and self-adjusts to any per-org horizon override (no magic constant).
+Retention stays 0 (genuinely unknown); the assumed secrecy lifetime carries the
+horizon and is surfaced in the finding `rationale` (`secrecyLifetimeYears`,
+`moscaMarginYears`, `moscaBreach`) so it is visible and contestable. The Mosca math
+itself was already correct and is unchanged. Bound findings, the public API surface,
+the detection F1 = 1.000 benchmark, and scan exit codes are unaffected; this is a
+purely additive scoring fix. See docs/HNDL.md §4.1. SemVer: **patch**.
+
 ### Added - detection quick-wins (PHP composer, JS recall edges, npm lockfile depth)
 
 Four post-1.0-roadmap accuracy/perf items on the benchmark-guarded detection
