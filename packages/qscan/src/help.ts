@@ -13,6 +13,8 @@ export const HELP_TEXT = `qscan — find quantum-vulnerable cryptography in any 
 USAGE
   qscan [path] [options]
   qscan hndl init [path]        Scaffold an hndl.yml data map (see --hndl)
+  qscan crypto-agility emit [path]    Write a crypto-agility manifest (exits 0)
+  qscan crypto-agility validate <file>  Check a local manifest against the schema
 
 ARGUMENTS
   path                          Directory or file to scan (default: ".")
@@ -87,6 +89,20 @@ OPTIONS
                                 inequality). Adds exposure fields to json/sarif;
                                 additive, never changes the exit code. Scaffold
                                 the map with "qscan hndl init". See docs/HNDL.md
+  --crypto-agility              Emit a crypto-agility posture manifest instead of a
+                                scan report (equivalent to "crypto-agility emit";
+                                always exits 0). A well-known-URL JSON document any
+                                agent/CI bot can read like security.txt: readiness
+                                score, quantum-vulnerable findings by severity, CBOM
+                                algorithm families, policy deadlines. Combine with
+                                --attestation / --hybrid-kex / --policy / -o.
+                                See docs/CRYPTO-AGILITY-MANIFEST.md
+  --attestation <url>           Record a posture-credential URL in the manifest
+                                (recorded verbatim, never fetched; offline boundary)
+  --hybrid-kex / --no-hybrid-kex
+                                Assert hybrid post-quantum key exchange is / is not
+                                in use in the manifest (default: null / undetermined,
+                                since a static scan can't observe a negotiated group)
   --baseline <file>             Suppress findings listed in a baseline file
   --write-baseline <file>       Write current findings as a baseline, then exit 0
   --quiet                       Suppress the human summary banner
@@ -115,6 +131,8 @@ EXAMPLES
   qscan . --cbom -o qscan-cbom.json
   qscan hndl init               Scaffold hndl.yml seeded with detected assets
   qscan . --hndl --format json  Emit per-finding HNDL exposure + a repo summary
+  qscan . --crypto-agility -o .well-known/crypto-agility.json
+  qscan crypto-agility validate .well-known/crypto-agility.json
 `;
 
 /** The `--version` line. */

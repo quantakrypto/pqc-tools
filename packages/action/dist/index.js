@@ -11363,6 +11363,24 @@ var init_vex = __esm({
   }
 });
 
+// ../core/dist/standards.js
+var init_standards = __esm({
+  "../core/dist/standards.js"() {
+    "use strict";
+  }
+});
+
+// ../core/dist/crypto-agility.js
+var init_crypto_agility = __esm({
+  "../core/dist/crypto-agility.js"() {
+    "use strict";
+    init_cbom();
+    init_standards();
+    init_severity();
+    init_version();
+  }
+});
+
 // ../core/dist/policy.js
 function verdictForAlgorithm(algorithm, policy) {
   const algo2 = algorithm ?? "unknown";
@@ -11539,13 +11557,6 @@ var init_evidence = __esm({
   }
 });
 
-// ../core/dist/standards.js
-var init_standards = __esm({
-  "../core/dist/standards.js"() {
-    "use strict";
-  }
-});
-
 // ../core/dist/standards-profiles.js
 function getStandardsProfile(id) {
   return STANDARDS_PROFILES[id];
@@ -11651,6 +11662,7 @@ var init_dist = __esm({
     init_cbom();
     init_cbom_merge();
     init_vex();
+    init_crypto_agility();
     init_evidence();
     init_policy();
     init_remediation();

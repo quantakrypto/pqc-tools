@@ -158,6 +158,22 @@ export { mergeCboms } from "./cbom-merge.js";
 // OpenVEX 0.2.0 export — quantum-readiness posture as VEX statements.
 export { toOpenVex } from "./vex.js";
 export type { OpenVexDocument, OpenVexStatement, OpenVexOptions } from "./vex.js";
+// Crypto-agility manifest: agent-consumable crypto-posture document.
+export {
+  buildCryptoAgilityManifest,
+  validateCryptoAgilityManifest,
+  CRYPTO_AGILITY_MANIFEST_VERSION,
+  CRYPTO_AGILITY_WELL_KNOWN_PATH,
+} from "./crypto-agility.js";
+export type {
+  CryptoAgilityManifest,
+  CryptoAgilityManifestOptions,
+  CryptoAgilityPosture,
+  CryptoAgilityCbomSummary,
+  CryptoAgilityFamily,
+  CryptoAgilityPolicy,
+  ManifestValidation,
+} from "./crypto-agility.js";
 // ISO/IEC 27001 A.8.24 evidence-chain readiness report.
 export { buildReadinessReport, signReadinessReport, verifyReadinessReport } from "./evidence.js";
 export type {

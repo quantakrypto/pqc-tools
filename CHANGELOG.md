@@ -6,6 +6,40 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added - crypto-agility manifest (emitter + local validator)
+
+A well-known-URL JSON document (`/.well-known/crypto-agility.json`) that publishes a
+project's cryptographic posture so any agent, scanner, or CI bot can read it the way
+it reads `security.txt`. Roadmap frontier initiative 13; MVP. Spec:
+docs/CRYPTO-AGILITY-MANIFEST.md.
+
+The manifest is a compact summary derived from a scan: `version`, `generatedAt`, a
+`posture` block (readiness score, hybrid-KEX assertion, quantum-vulnerable findings
+by severity, HNDL-exposed count), a `cbomSummary` (algorithm families in use, asset
+count, and the full CBOM's serial number), an optional `attestation` URL, and a
+`policy` block (the NIST IR 8547 2030/2035 deadlines by default, or an
+operator-declared `transitionDeadline` via `--policy`).
+
+New CLI surface:
+
+- `qscan crypto-agility emit [path]` (or the `qscan . --crypto-agility` flag) derives
+  and writes the manifest to stdout or `-o <file>`. It is **additive**: it runs a
+  scan but **always exits 0** and never consults the severity threshold, so
+  publishing a posture manifest cannot fail CI. `--attestation <url>` records a
+  credential link (verbatim, never fetched), and `--hybrid-kex` / `--no-hybrid-kex`
+  assert hybrid key exchange (default: `null`, undetermined by a static scan).
+- `qscan crypto-agility validate <file>` checks a **local** manifest against the
+  schema (required fields, types, version), exiting `0` valid / `1` invalid (each
+  problem printed) / `2` on an I/O error. It is strictly offline and never fetches a
+  URL; a network fetch-and-validate of a remote manifest is a website-side follow-up.
+
+New public API in `@quantakrypto/core`: `buildCryptoAgilityManifest`,
+`validateCryptoAgilityManifest`, `CRYPTO_AGILITY_MANIFEST_VERSION`,
+`CRYPTO_AGILITY_WELL_KNOWN_PATH`, and their types; in `@quantakrypto/qscan`:
+`runCryptoAgilityEmit`, `runCryptoAgilityValidate`. Purely additive - detectors, the
+detection F1 = 1.000 benchmark, existing report formats, and scan exit codes are
+unaffected. SemVer: **minor**.
+
 ### Fixed - HNDL exposure of unbound findings was always 0
 
 The `defaults.classification` fallback documented for findings that bind to no

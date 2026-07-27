@@ -21,7 +21,13 @@ import type { ParsedArgs, QscanOptions } from "./args.js";
 import { resolveColor } from "./color.js";
 import { resolveConfig } from "./config.js";
 import { HELP_TEXT, versionLine } from "./help.js";
-import { EXIT, runHndlInit, runQscan } from "./index.js";
+import {
+  EXIT,
+  runCryptoAgilityEmit,
+  runCryptoAgilityValidate,
+  runHndlInit,
+  runQscan,
+} from "./index.js";
 import type { QscanRun } from "./index.js";
 
 /** Run the CLI and return the desired process exit code (never throws). */
@@ -75,6 +81,62 @@ export async function main(argv: readonly string[]): Promise<number> {
       process.stderr.write(`qscan: ${message}\n`);
       return EXIT.ERROR;
     }
+  }
+
+  // `qscan crypto-agility emit` / `--crypto-agility`: derive a posture manifest and
+  // write it to stdout (or `--output`). Additive: always exits 0, never consulting
+  // the severity threshold.
+  if (parsed.kind === "crypto-agility-emit") {
+    try {
+      const { manifest } = await runCryptoAgilityEmit(parsed.options);
+      const out = manifest.endsWith("\n") ? manifest : `${manifest}\n`;
+      if (parsed.options.output) {
+        await writeFile(parsed.options.output, out, "utf8");
+        if (!parsed.options.quiet) {
+          process.stderr.write(
+            `qscan: wrote crypto-agility manifest to ${parsed.options.output}\n`,
+          );
+        }
+      } else {
+        await writeStdout(out);
+      }
+      return EXIT.OK;
+    } catch (err) {
+      if (isErrno(err) && err.code === "ENOENT") {
+        const missing = typeof err.path === "string" && err.path ? err.path : parsed.options.path;
+        process.stderr.write(`qscan: path not found: ${missing}\n`);
+        return EXIT.ERROR;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`qscan: ${message}\n`);
+      return EXIT.ERROR;
+    }
+  }
+
+  // `qscan crypto-agility validate <file>`: check a LOCAL manifest against the
+  // schema. Exit 0 when valid, 1 when the manifest is invalid, 2 on an I/O error.
+  if (parsed.kind === "crypto-agility-validate") {
+    let validation;
+    try {
+      validation = await runCryptoAgilityValidate(parsed.file);
+    } catch (err) {
+      if (isErrno(err) && err.code === "ENOENT") {
+        process.stderr.write(`qscan: path not found: ${parsed.file}\n`);
+        return EXIT.ERROR;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`qscan: ${message}\n`);
+      return EXIT.ERROR;
+    }
+    if (validation.valid) {
+      process.stdout.write(`qscan: ${parsed.file} is a valid crypto-agility manifest\n`);
+      return EXIT.OK;
+    }
+    process.stderr.write(`qscan: ${parsed.file} is not a valid crypto-agility manifest:\n`);
+    for (const e of validation.errors) {
+      process.stderr.write(`  - ${e}\n`);
+    }
+    return EXIT.FINDINGS;
   }
 
   // Resolve `quantakrypto.config.json` (flags > config > defaults) before scanning.

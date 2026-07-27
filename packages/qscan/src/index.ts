@@ -15,6 +15,7 @@ import * as nodePath from "node:path";
 import process from "node:process";
 
 import {
+  buildCryptoAgilityManifest,
   buildReadinessReport,
   changedFiles,
   computeHndl,
@@ -26,6 +27,7 @@ import {
   scan,
   scanParallel,
   signReadinessReport,
+  validateCryptoAgilityManifest,
 } from "@quantakrypto/core";
 import type {
   Baseline,
@@ -34,6 +36,7 @@ import type {
   EvidenceSigner,
   Finding,
   HndlReport,
+  ManifestValidation,
   ParallelScanOptions,
   ReadinessReport,
   ScanResult,
@@ -412,6 +415,69 @@ function resolveHndlTarget(root: string): string {
     return nodePath.resolve(root);
   }
   return nodePath.resolve(root, HNDL_FILENAME);
+}
+
+/** Outcome of {@link runCryptoAgilityEmit}: the rendered manifest and the scan. */
+export interface CryptoAgilityEmitResult {
+  /** The scan result the manifest was derived from. */
+  result: ScanResult;
+  /** The pretty-printed crypto-agility manifest JSON (no trailing newline). */
+  manifest: string;
+}
+
+/**
+ * Emit a crypto-agility manifest for a repo (`qscan crypto-agility emit` /
+ * `--crypto-agility`). Runs a scan and derives the manifest from its inventory +
+ * CBOM. This is deliberately additive: it NEVER consults the severity threshold and
+ * the CLI always exits 0 (publishing a posture manifest must not fail CI). The
+ * generation timestamp is stamped here (the CLI runtime), keeping the core builder
+ * pure. A `--policy` file overlays its `transitionDeadline`; `--attestation` records
+ * a credential URL verbatim (never fetched); `--hybrid-kex` / `--no-hybrid-kex`
+ * assert hybrid-KEX use.
+ */
+export async function runCryptoAgilityEmit(
+  opts: Partial<QscanOptions> & { path: string },
+  hooks: RunQscanHooks = {},
+): Promise<CryptoAgilityEmitResult> {
+  const options: QscanOptions = { ...defaultOptions(), ...opts };
+  const scanFn: ScanFn = hooks.scanFn ?? (options.parallel ? scanParallel : scan);
+  const result = await scanFn(toScanOptions(options));
+
+  let policy: CryptoPolicy | undefined;
+  if (options.policy) {
+    policy = parseCryptoPolicy(JSON.parse(await readFile(options.policy, "utf8")));
+  }
+
+  const manifest = buildCryptoAgilityManifest(result, {
+    generatedAt: new Date().toISOString(),
+    ...(options.attestation ? { attestationUrl: options.attestation } : {}),
+    ...(options.hybridKexInUse !== undefined ? { hybridKexInUse: options.hybridKexInUse } : {}),
+    ...(policy ? { policy } : {}),
+    ...(process.env.GITHUB_REPOSITORY ? { repository: process.env.GITHUB_REPOSITORY } : {}),
+    ...(process.env.GITHUB_SHA ? { commit: process.env.GITHUB_SHA } : {}),
+  });
+  return { result, manifest: JSON.stringify(manifest, null, 2) };
+}
+
+/**
+ * Validate a LOCAL crypto-agility manifest file against the schema
+ * (`qscan crypto-agility validate <file>`). Reads and parses the file, then defers
+ * to core's {@link validateCryptoAgilityManifest}. Strictly offline: it never
+ * fetches a URL (the attestation link and any remote manifest are a website-side
+ * concern). Read / parse failures propagate to the CLI as an I/O error (exit 2); a
+ * successfully-parsed but non-conforming manifest returns `{ valid: false }` and the
+ * CLI exits non-zero.
+ */
+export async function runCryptoAgilityValidate(file: string): Promise<ManifestValidation> {
+  const text = await readFile(file, "utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { valid: false, errors: [`not valid JSON: ${message}`] };
+  }
+  return validateCryptoAgilityManifest(parsed);
 }
 
 /** Rendering controls for {@link renderReport}. */
