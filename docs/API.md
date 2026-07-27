@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` - 175 exported symbols.
+Public entry: `packages/core/src/index.ts` - 186 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -25,6 +25,8 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 | `CLASSIFICATION_SENSITIVITY` | const | Data-sensitivity weight (S) per classification. |
 | `CONFIDENCE_WEIGHT` | const | Crypto-vulnerability weight (V) scaled by detector confidence. |
 | `CONFIG_FILENAME` | const | Canonical config file name discovered at a scan root. |
+| `CRYPTO_AGILITY_MANIFEST_VERSION` | const | Schema version of the manifest this module emits and validates. Bumped only on a |
+| `CRYPTO_AGILITY_WELL_KNOWN_PATH` | const | The conventional path a manifest is served from, relative to the site origin. |
 | `CWE_BROKEN_CRYPTO` | const | CWE-327: Use of a Broken or Risky Cryptographic Algorithm. |
 | `CWE_CERT_VALIDATION` | const | CWE-295: Improper Certificate Validation. |
 | `CWE_HARDCODED_KEY` | const | CWE-798: Use of Hard-coded Credentials (embedded private keys). |
@@ -35,6 +37,12 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 | `Confidence` | type | How sure the detector is that the finding is a real use of the algorithm. |
 | `ConfigError` | class | Thrown when a known key has a malformed *value* (a usage error: exit 2). |
 | `ContextLevel` | type | How much source context a redacted request carries. |
+| `CryptoAgilityCbomSummary` | interface | A compact summary of the full CBOM, linking to it by serial number. |
+| `CryptoAgilityFamily` | interface | A single algorithm family in use, mirroring the CBOM's grouping. |
+| `CryptoAgilityManifest` | interface | The full crypto-agility manifest. |
+| `CryptoAgilityManifestOptions` | interface | Inputs the CLI/runtime supplies that are not derivable from the scan. |
+| `CryptoAgilityPolicy` | interface | The migration policy the project declares it is measured against. |
+| `CryptoAgilityPosture` | interface | The project's cryptographic posture, distilled from the scan inventory. |
 | `CryptoInventory` | interface | Aggregated counts produced from a scan's findings. |
 | `CryptoPolicy` | interface | An organization-supplied cryptography policy (from a JSON file). |
 | `CycloneDxBom` | interface | A CycloneDX 1.6 cryptographic bill of materials (kept permissive). |
@@ -70,6 +78,7 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 | `HndlSummary` | interface | Repo-level HNDL summary. |
 | `HybridStance` | type | Whether classical+PQC hybridization is required during the transition, per regime. |
 | `LoadConfigResult` | interface | Result of {@link loadConfig}: the resolved config plus where it came from. |
+| `ManifestValidation` | interface | Outcome of {@link validateCryptoAgilityManifest}. |
 | `NON_HNDL_DISCOUNT` | const | Discount applied to V when a finding is NOT harvest-now-decrypt-later exposed |
 | `OpenVexDocument` | interface | An OpenVEX 0.2.0 document. |
 | `OpenVexOptions` | interface | Options for {@link toOpenVex}. |
@@ -128,6 +137,7 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 | `applyBaseline` | function | Split findings into those NOT in the baseline (`newFindings`) and those that |
 | `baselineFromFindings` | function | Build a {@link Baseline} from a set of findings (deduped, sorted). |
 | `buildContext` | function | Build the redacted context for `finding` at `level`. `fileContent` is the full |
+| `buildCryptoAgilityManifest` | function | Build a crypto-agility manifest from a scan result. Pure: every runtime input |
 | `buildInventory` | function | Build the full inventory (counts + HNDL + score) from a set of findings. |
 | `buildPolicyMapping` | function | Map every finding to a policy verdict, with per-verdict counts. Deterministic: |
 | `buildReadinessReport` | function | Build the A.8.24 readiness report for a scan result. The attestation's |
@@ -183,6 +193,7 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 | `toJson` | function | Serialize a scan result as a plain JSON-friendly object. |
 | `toOpenVex` | function | Build an OpenVEX 0.2.0 document from a scan result. One statement per distinct |
 | `toSarif` | function | Serialize a scan result as SARIF 2.1.0. |
+| `validateCryptoAgilityManifest` | function | Validate an untrusted value against the crypto-agility manifest schema. |
 | `verifyFix` | function | Run all detectors over `code`, selecting them by `filename` (extension) or |
 | `verifyReadinessReport` | function | Recompute the deterministic content hash over a readiness report's body and |
 | `vulnerabilityFactor` | function | V - crypto-vulnerability factor for a finding (0..1). |
@@ -192,7 +203,7 @@ Public entry: `packages/core/src/index.ts` - 175 exported symbols.
 
 ## @quantakrypto/qscan
 
-Public entry: `packages/qscan/src/index.ts` - 57 exported symbols.
+Public entry: `packages/qscan/src/index.ts` - 60 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -201,6 +212,7 @@ Public entry: `packages/qscan/src/index.ts` - 57 exported symbols.
 | `Baseline` | type |  |
 | `ChangedFilesFn` | type | Resolve the changed-file list for incremental scans. Injectable for testing; |
 | `ConfigurableKey` | type | Option keys that a `quantakrypto.config.json` may also set. When such a key was set |
+| `CryptoAgilityEmitResult` | interface | Outcome of {@link runCryptoAgilityEmit}: the rendered manifest and the scan. |
 | `EXIT` | const | Process-style exit codes qScan uses. |
 | `Finding` | type |  |
 | `HELP_TEXT` | const | The full `--help` screen. |
@@ -245,6 +257,8 @@ Public entry: `packages/qscan/src/index.ts` - 57 exported symbols.
 | `renderSarif` | function | Render the SARIF 2.1.0 report (pretty-printed, no trailing newline). |
 | `renderVex` | function | Render an OpenVEX 0.2.0 document for the scan (pretty-printed, no trailing |
 | `resolveConfig` | function | Load and merge `quantakrypto.config.json` into the parsed CLI options. |
+| `runCryptoAgilityEmit` | function | Emit a crypto-agility manifest for a repo (`qscan crypto-agility emit` / |
+| `runCryptoAgilityValidate` | function | Validate a LOCAL crypto-agility manifest file against the schema |
 | `runHndlInit` | function | Scaffold an `hndl.yml` for a repo (`qscan hndl init`). Runs a scan to seed the |
 | `runQscan` | function | Run a complete qScan pass: scan → baseline → threshold → render. |
 | `runRemediate` | function | Run a complete qremediate pass. Pure w.r.t. process; the bin prints + exits. |

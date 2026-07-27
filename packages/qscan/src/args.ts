@@ -162,6 +162,19 @@ export interface QscanOptions {
    * exit code. See docs/HNDL.md.
    */
   hndl: boolean;
+  /**
+   * URL to a posture credential recorded in a crypto-agility manifest
+   * (`--attestation`). Only consumed by `crypto-agility emit`; recorded verbatim,
+   * never fetched (offline boundary). See docs/CRYPTO-AGILITY-MANIFEST.md.
+   */
+  attestation?: string;
+  /**
+   * Operator assertion of hybrid post-quantum key exchange for a crypto-agility
+   * manifest (`--hybrid-kex` → true, `--no-hybrid-kex` → false). Left undefined,
+   * the manifest reports `hybridKexInUse: null` (a static scan cannot observe a
+   * negotiated TLS group). Only consumed by `crypto-agility emit`.
+   */
+  hybridKexInUse?: boolean;
 }
 
 /**
@@ -196,8 +209,31 @@ export interface ParsedHndlInit {
   options: QscanOptions;
 }
 
+/**
+ * Emit a crypto-agility manifest: either `qscan crypto-agility emit [path]` or the
+ * `--crypto-agility` flag on a normal scan. Additive: it always exits 0, never
+ * consulting the severity threshold.
+ */
+export interface ParsedCryptoAgilityEmit {
+  kind: "crypto-agility-emit";
+  options: QscanOptions;
+}
+
+/** Validate a local manifest file: `qscan crypto-agility validate <file>`. */
+export interface ParsedCryptoAgilityValidate {
+  kind: "crypto-agility-validate";
+  /** Path to the manifest JSON file to check. */
+  file: string;
+}
+
 /** Result of {@link parseArgs}: either resolved options or a meta action. */
-export type ParsedArgs = ParsedRun | ParsedHndlInit | { kind: "help" } | { kind: "version" };
+export type ParsedArgs =
+  | ParsedRun
+  | ParsedHndlInit
+  | ParsedCryptoAgilityEmit
+  | ParsedCryptoAgilityValidate
+  | { kind: "help" }
+  | { kind: "version" };
 
 /** Thrown on malformed input; the CLI maps this to exit code 2. */
 export class ArgError extends Error {
@@ -255,6 +291,41 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     if (parsed.kind !== "run") return parsed; // --help / --version passthrough
     return { kind: "hndl-init", options: parsed.options };
   }
+
+  // Subcommand dispatch: `qscan crypto-agility <sub> …`.
+  //   emit [path]       derive + write a manifest (always exits 0)
+  //   validate <file>   check a local manifest against the schema
+  if (argv[0] === "crypto-agility") {
+    const sub = argv[1];
+    if (sub === undefined || sub.startsWith("-")) {
+      if (sub === "--help" || sub === "-h") return { kind: "help" };
+      if (sub === "--version" || sub === "-v") return { kind: "version" };
+      throw new ArgError(`"crypto-agility" requires a subcommand (expected: emit, validate)`);
+    }
+    if (sub === "emit") {
+      const parsed = parseRunArgs(argv.slice(2));
+      // `--help`/`--version` short-circuit; a redundant `--crypto-agility` flag on
+      // the emit subcommand already yields the emit kind (returned as-is).
+      if (parsed.kind !== "run") return parsed;
+      return { kind: "crypto-agility-emit", options: parsed.options };
+    }
+    if (sub === "validate") {
+      const rest = argv.slice(2);
+      if (rest.includes("--help") || rest.includes("-h")) return { kind: "help" };
+      if (rest.includes("--version") || rest.includes("-v")) return { kind: "version" };
+      const positionals = rest.filter((a) => !(a.startsWith("-") && a !== "-"));
+      if (positionals.length === 0) {
+        throw new ArgError(`"crypto-agility validate" requires a manifest file path`);
+      }
+      if (positionals.length > 1) {
+        throw new ArgError(
+          `"crypto-agility validate" takes exactly one file (got ${positionals.length})`,
+        );
+      }
+      return { kind: "crypto-agility-validate", file: positionals[0] as string };
+    }
+    throw new ArgError(`unknown crypto-agility subcommand "${sub}" (expected: emit, validate)`);
+  }
   return parseRunArgs(argv);
 }
 
@@ -263,6 +334,8 @@ function parseRunArgs(argv: readonly string[]): ParsedArgs {
   const options = defaultOptions();
   const explicit = new Set<ConfigurableKey>();
   let positional: string | undefined;
+  // Set by `--crypto-agility`: the whole run becomes a manifest emit (exit 0).
+  let emitManifest = false;
 
   // Manual index walk so flags can consume the following token as a value.
   for (let i = 0; i < argv.length; i++) {
@@ -485,6 +558,23 @@ function parseRunArgs(argv: readonly string[]): ParsedArgs {
         options.hndl = true;
         break;
 
+      // Crypto-agility manifest controls (see `crypto-agility emit`).
+      case "--crypto-agility":
+        rejectInlineValue();
+        emitManifest = true;
+        break;
+      case "--attestation":
+        options.attestation = takeValue();
+        break;
+      case "--hybrid-kex":
+        rejectInlineValue();
+        options.hybridKexInUse = true;
+        break;
+      case "--no-hybrid-kex":
+        rejectInlineValue();
+        options.hybridKexInUse = false;
+        break;
+
       default:
         if (flag.startsWith("-") && flag !== "-") {
           throw new ArgError(`unknown option "${flag}"`);
@@ -500,6 +590,9 @@ function parseRunArgs(argv: readonly string[]): ParsedArgs {
   }
 
   if (positional !== undefined) options.path = positional;
+  // `--crypto-agility` turns the whole run into a manifest emit, taking it off the
+  // findings-threshold exit path entirely (the emit always exits 0).
+  if (emitManifest) return { kind: "crypto-agility-emit", options };
   return { kind: "run", options, explicit };
 }
 

@@ -155,3 +155,96 @@ test("report is written to a file as parseable JSON containing the real findings
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("crypto-agility emit writes a valid manifest to stdout and always exits 0", async () => {
+  // A repo WITH classical crypto: a normal scan exits 1, but the emit must exit 0.
+  const dir = await makeCryptoFixture();
+  try {
+    const { code, out } = await capture(() => main(["crypto-agility", "emit", dir]));
+    assert.equal(code, EXIT.OK, "emit is additive and never fails CI");
+    const manifest = JSON.parse(out) as {
+      version: number;
+      manifestType: string;
+      posture: { quantumVulnerable: { total: number } };
+      cbomSummary: { algorithmFamilies: { family: string }[] };
+    };
+    assert.equal(manifest.version, 1);
+    assert.equal(manifest.manifestType, "crypto-agility");
+    assert.ok(manifest.posture.quantumVulnerable.total >= 1);
+    assert.ok(manifest.cbomSummary.algorithmFamilies.length >= 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("--crypto-agility flag is equivalent to the emit subcommand (exit 0)", async () => {
+  const dir = await makeCryptoFixture();
+  try {
+    const { code, out } = await capture(() =>
+      main([dir, "--crypto-agility", "--attestation", "https://example.com/cred", "--hybrid-kex"]),
+    );
+    assert.equal(code, EXIT.OK);
+    const m = JSON.parse(out) as {
+      attestation?: { url: string };
+      posture: { hybridKexInUse: boolean | null };
+    };
+    assert.deepEqual(m.attestation, { url: "https://example.com/cred" });
+    assert.equal(m.posture.hybridKexInUse, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("crypto-agility emit round-trips through validate (exit 0)", async () => {
+  const dir = await makeCryptoFixture();
+  try {
+    const manifestFile = join(dir, "crypto-agility.json");
+    const emit = await capture(() => main(["crypto-agility", "emit", dir, "-o", manifestFile]));
+    assert.equal(emit.code, EXIT.OK);
+    const { code, out } = await capture(() => main(["crypto-agility", "validate", manifestFile]));
+    assert.equal(code, EXIT.OK);
+    assert.match(out, /valid crypto-agility manifest/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("crypto-agility validate rejects a malformed manifest (exit 1)", async () => {
+  const dir = await makeCleanFixture();
+  try {
+    const bad = join(dir, "bad.json");
+    await writeFile(bad, JSON.stringify({ version: 1 }), "utf8");
+    const { code, err } = await capture(() => main(["crypto-agility", "validate", bad]));
+    assert.equal(code, EXIT.FINDINGS);
+    assert.match(err, /not a valid crypto-agility manifest/);
+    assert.match(err, /missing required field: posture/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("crypto-agility validate rejects non-JSON (exit 1)", async () => {
+  const dir = await makeCleanFixture();
+  try {
+    const bad = join(dir, "notjson.json");
+    await writeFile(bad, "this is not json", "utf8");
+    const { code, err } = await capture(() => main(["crypto-agility", "validate", bad]));
+    assert.equal(code, EXIT.FINDINGS);
+    assert.match(err, /not valid JSON/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("crypto-agility validate on a missing file exits 2", async () => {
+  const missing = join(tmpdir(), "qscan-no-manifest-7a1b", "x.json");
+  const { code, err } = await capture(() => main(["crypto-agility", "validate", missing]));
+  assert.equal(code, EXIT.ERROR);
+  assert.match(err, /path not found/);
+});
+
+test("crypto-agility with no subcommand is a usage error (exit 2)", async () => {
+  const { code, err } = await capture(() => main(["crypto-agility"]));
+  assert.equal(code, EXIT.ERROR);
+  assert.match(err, /requires a subcommand/);
+});
