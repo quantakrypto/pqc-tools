@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` - 186 exported symbols.
+Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -78,6 +78,14 @@ Public entry: `packages/core/src/index.ts` - 186 exported symbols.
 | `HndlSummary` | interface | Repo-level HNDL summary. |
 | `HybridStance` | type | Whether classical+PQC hybridization is required during the transition, per regime. |
 | `LoadConfigResult` | interface | Result of {@link loadConfig}: the resolved config plus where it came from. |
+| `MANDATES` | const | The bundled mandate catalog. Keyed by `--mandate <id>`. |
+| `Mandate` | interface |  |
+| `MandateEvaluation` | interface |  |
+| `MandateFindingVerdict` | interface |  |
+| `MandateGateOptions` | interface |  |
+| `MandateRule` | interface |  |
+| `MandateRuleTier` | type | Which enforcement tier a clause encodes: warn (`deprecate`) or fail (`disallow`). |
+| `MandateStatus` | type | A finding's status against a mandate, worst last: |
 | `ManifestValidation` | interface | Outcome of {@link validateCryptoAgilityManifest}. |
 | `NON_HNDL_DISCOUNT` | const | Discount applied to V when a finding is NOT harvest-now-decrypt-later exposed |
 | `OpenVexDocument` | interface | An OpenVEX 0.2.0 document. |
@@ -135,6 +143,7 @@ Public entry: `packages/core/src/index.ts` - 186 exported symbols.
 | `VerifyResult` | interface | Result of {@link verifyFix}: the findings that remain, and whether the |
 | `VulnerableDependency` | interface | A known quantum-vulnerable dependency entry. |
 | `applyBaseline` | function | Split findings into those NOT in the baseline (`newFindings`) and those that |
+| `assertKnownMandates` | function | Validate mandate ids loudly, matching `parseCryptoPolicy`'s fail-loud |
 | `baselineFromFindings` | function | Build a {@link Baseline} from a set of findings (deduped, sorted). |
 | `buildContext` | function | Build the redacted context for `finding` at `level`. `fileContent` is the full |
 | `buildCryptoAgilityManifest` | function | Build a crypto-agility manifest from a scan result. Pure: every runtime input |
@@ -154,12 +163,14 @@ Public entry: `packages/core/src/index.ts` - 186 exported symbols.
 | `defaultStandardsProfile` | function | The default profile (NIST). Always defined. |
 | `detectFile` | function | Run all applicable detectors + the manifest scanner over a single file's |
 | `detectors` | const | The full set of built-in detectors exposed on the public API. Re-exported |
+| `evaluateMandates` | function | Evaluate findings against the selected mandates as of `now`. Unknown mandate |
 | `findingFingerprint` | function | Identity key for a finding's exposure. Prefers a `finding.fingerprint` field |
 | `findingScope` | function | The scope a finding belongs to. Dependency findings (from the manifest |
 | `fingerprintFinding` | function | Stable, line-INSENSITIVE fingerprint of a finding: the hex SHA-256 of |
 | `formatProfileGuidance` | function | Per-family migration targets tailored to a selected {@link StandardsProfile} |
 | `formatSummary` | function | Render a human-readable summary of a scan result. Colour is off by default; |
 | `formatTierGuidance` | function | Per-family migration targets for a CNSA security tier — surfaces the otherwise |
+| `getMandate` | const |  |
 | `getStandardsProfile` | function | Look up a built-in profile by id, or `undefined` when unknown. |
 | `globMatch` | function | Match a POSIX path against a glob supporting `**` (any path segments incl. |
 | `isAnalyzableSource` | function | True when a path is in a source language the scanner can analyze for crypto. |
@@ -170,6 +181,8 @@ Public entry: `packages/core/src/index.ts` - 186 exported symbols.
 | `loadConfig` | function | Load a `quantakrypto.config.json` for a scan. |
 | `loadHndlMap` | function | Load and validate the `hndl.yml` for a scan. By default reads |
 | `looksMinified` | function | Heuristic content check for machine-minified / generated files with no |
+| `mandateGateFails` | function | The gate decision under the "deadline-aware" default: fail only once a DISALLOW |
+| `mandateIds` | const |  |
 | `meetsThreshold` | function | True when `severity` is at or above `threshold` (i.e. at least as severe). |
 | `mergeCboms` | function | Merge CBOMs into one. Components with the same `bom-ref` (same algorithm + |
 | `moscaFactor` | function | M - the Mosca factor (0..1). `X` is the data's protection horizon |

@@ -25,7 +25,7 @@ with **zero runtime dependencies** (Node built-ins only).
 
 | Tool | What it does | Get it |
 |---|---|---|
-| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **14 languages** (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo) and prints a readiness score. SARIF / JSON / CBOM / evidence (ISO 27001 A.8.24) / OpenVEX output, baselines, incremental & parallel scans. Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
+| **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **14 languages** (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo) and prints a readiness score. SARIF / JSON / CBOM / evidence (ISO 27001 A.8.24) / OpenVEX output, baselines, incremental & parallel scans. Compliance mandate gate: `--mandate cnsa-2.0` / `nist-ir-8547` reports each prohibited finding with its dated clause and fails the build on the mandate's deadlines (`--lead-months`, `--fail-now`). Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
 | **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
 | **[Sieve](packages/sieve)** (`@quantakrypto/sieve`) | Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA (FIPS 205) implementations, driven over a JSON stdin/stdout protocol. | `npx @quantakrypto/sieve --help` |
 | **[Action](packages/action)** (`@quantakrypto/action`) | GitHub Action that runs qScan in CI, uploads SARIF, annotates the diff, and fails the build only on **new** quantum-vulnerable crypto. | `uses: quantakrypto/pqc-tools/packages/action@v1` |
@@ -61,6 +61,9 @@ claude mcp add quantakrypto npx @quantakrypto/mcp
 
 # 3. Conformance-test a post-quantum implementation (adapter speaks the JSON protocol).
 npx @quantakrypto/sieve --impl "node ./my-impl.js" --param ml-kem-768
+
+# 4. Gate against a compliance mandate's dated deadlines (CNSA 2.0 / NIST IR 8547).
+npx @quantakrypto/qscan ./ --mandate cnsa-2.0
 ```
 
 Add the CI gate by dropping

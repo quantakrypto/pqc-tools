@@ -6,6 +6,50 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added - compliance mandate gate (`qscan --mandate`, deadline-aware policy-as-code)
+
+Enforceable, dated compliance mandates: the two PQC regimes that carry hard
+algorithm deadlines - **CNSA 2.0** and **NIST IR 8547** - become a CI gate.
+`qscan ./ --mandate cnsa-2.0` (repeatable; also `nist-ir-8547`) evaluates every
+finding against the mandate's dated, named clauses and reports each prohibited
+classical-public-key finding (RSA / ECDH / ECDSA / EdDSA / DH / DSA / ECIES)
+with its clause, deadline, and citation. The gate is **deadline-aware**: a
+prohibited finding is a warning once the deprecation date (2030) passes and
+fails the build only once the disallow date (2035) passes. `--lead-months <n>`
+fails early when a deadline is within n months; `--fail-now` fails on any
+prohibited finding immediately. SemVer: **minor** (additive API + CLI surface).
+
+- **`@quantakrypto/core`**: a new `mandates.ts` evaluator - the bundled mandate
+  catalog (`MANDATES`, keyed `cnsa-2.0` / `nist-ir-8547`, each clause named,
+  dated, and cited), `evaluateMandates` (pure and deterministic - the caller
+  supplies `now`, so qScan and qProbe can drive it off the same `Finding[]`),
+  and `mandateGateFails` (the exit-code decision), plus `getMandate`,
+  `mandateIds`, and the `Mandate*` types. The clause deadlines derive from the
+  dated `PQC_STANDARDS` snapshot (single source of truth), so the mandate
+  catalog cannot silently diverge from the documented standards.
+- **`@quantakrypto/qscan`**: `--mandate <id>` (repeatable), `--lead-months <n>`,
+  `--fail-now`; the human report gains a compliance block (per-finding clause +
+  deadline + citation, a due/violation summary, and the next deadline).
+- **`@quantakrypto/action`**: `mandate` / `lead-months` / `fail-now` inputs pass
+  through to the scan, so CI can enforce a mandate's deadlines directly.
+- **Scope (deliberate)**: a *family-level* dated gate over classical public-key
+  crypto. X25519/X448 are intentionally not flagged - they are the classical
+  half of the recommended hybrid (X25519MLKEM768), so hybrid deployments do not
+  false-positive. It does not assert PQC parameter levels (e.g. ML-KEM-768
+  where CNSA 2.0 requires 1024); that parameter-level check stays on the
+  roadmap (docs/COMPARISON.md §2.4). DORA / NIS2 / PCI DSS set no independent
+  algorithm date - they inherit these timelines (docs/COMPLIANCE.md §4).
+- **Deferred to a fast-follow**: (1) machine-readable mandate output in the
+  SARIF / JSON / evidence reports (the gate currently surfaces in the human
+  report + exit code), and (2) composing the mandate gate with a custom
+  `--policy` file.
+
+## [0.6.0] - 2026-07-29
+
+Bumps every published package 0.5.x -> 0.6.0. Ships everything accumulated
+below since 0.5.2 - headline features: the HNDL data-risk quantifier and the
+crypto-agility manifest emitter + local validator.
+
 ### Added - crypto-agility manifest (emitter + local validator)
 
 A well-known-URL JSON document (`/.well-known/crypto-agility.json`) that publishes a

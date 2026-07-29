@@ -19,13 +19,25 @@ import { pathToFileURL } from "node:url";
 
 import {
   applyBaseline,
+  assertKnownMandates,
+  evaluateMandates,
   fingerprintFinding,
   loadBaseline,
+  mandateGateFails,
   meetsThreshold,
   remediationFor,
   SEVERITY_ORDER,
 } from "@quantakrypto/core";
-import type { AlgorithmFamily, Baseline, Finding, ScanResult, Severity } from "@quantakrypto/core";
+import type {
+  AlgorithmFamily,
+  Baseline,
+  Finding,
+  MandateEvaluation,
+  MandateFindingVerdict,
+  MandateGateOptions,
+  ScanResult,
+  Severity,
+} from "@quantakrypto/core";
 import { renderReport, runQscan } from "@quantakrypto/qscan";
 
 import {
@@ -58,6 +70,12 @@ interface ActionInputs {
   /** `scan` (default) writes a report + gates the build; `comment-plan` posts a
    * deterministic migration plan as a PR comment and never fails the build. */
   mode: "scan" | "comment-plan";
+  /** Compliance mandate ids to gate against; empty disables the mandate gate. */
+  mandates: string[];
+  /** Fail early when a mandate deadline is within this many months. */
+  leadMonths?: number;
+  /** Fail on any mandate-prohibited finding regardless of its deadline. */
+  failNow: boolean;
 }
 
 /** Parse + validate the action's inputs from the environment. Pure given `env`. */
@@ -78,6 +96,21 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
   if (mode !== "scan" && mode !== "comment-plan") {
     throw new TypeError(`Invalid mode "${mode}"; expected "scan" or "comment-plan"`);
   }
+  // Comma- or space-separated mandate ids ("cnsa-2.0,nist-ir-8547"). Ids are
+  // validated against the catalog in run() (assertKnownMandates), not here.
+  const mandates = getInput("mandate", env)
+    .split(/[\s,]+/)
+    .filter((id) => id.length > 0);
+  const leadMonthsRaw = getInput("lead-months", env);
+  let leadMonths: number | undefined;
+  if (leadMonthsRaw !== "") {
+    leadMonths = Number(leadMonthsRaw);
+    if (!Number.isInteger(leadMonths) || leadMonths < 0) {
+      throw new TypeError(
+        `Invalid lead-months "${leadMonthsRaw}"; expected a non-negative integer`,
+      );
+    }
+  }
   return {
     path: getInput("path", env) || ".",
     severityThreshold,
@@ -89,6 +122,9 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
     githubToken: githubToken || undefined,
     redactSnippets: getBooleanInput("redact-snippets", false, env),
     mode,
+    mandates,
+    leadMonths,
+    failNow: getBooleanInput("fail-now", false, env),
   };
 }
 
@@ -155,6 +191,7 @@ export function buildSummary(
   result: ScanResult,
   newFindings: Finding[],
   threshold: Severity,
+  mandateEval?: MandateEvaluation,
 ): string {
   const score = result.inventory.readinessScore;
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, threshold));
@@ -168,6 +205,10 @@ export function buildSummary(
   lines.push("");
   if (blocking.length === 0) {
     lines.push("No new quantum-vulnerable cryptography at or above the threshold. ✅");
+    if (mandateEval) {
+      lines.push("");
+      lines.push(buildMandateSection(mandateEval));
+    }
     return lines.join("\n");
   }
   lines.push("| Severity | Rule | File | Message |");
@@ -181,9 +222,123 @@ export function buildSummary(
     lines.push(`| ${f.severity} | \`${rule}\` | ${loc} | ${msg} |`);
   }
   if (blocking.length > 50) lines.push(`| … | | | _${blocking.length - 50} more_ |`);
+  if (mandateEval) {
+    lines.push("");
+    lines.push(buildMandateSection(mandateEval));
+  }
   lines.push("");
   lines.push("<sub>Reported by [quantakrypto](https://quantakrypto.com/tools).</sub>");
   return lines.join("\n");
+}
+
+/** Render order + label for mandate verdict rows: worst first. */
+const MANDATE_ROW_ORDER: Record<MandateFindingVerdict["status"], number> = {
+  violation: 0,
+  deprecated: 1,
+  due: 2,
+  conformant: 3,
+};
+
+/** The Deadline cell / failure-message phrase for one verdict row. Pure. */
+function mandateDeadlinePhrase(r: MandateFindingVerdict): string {
+  if (r.status === "violation") return `overdue since ${r.effective}`;
+  if (r.status === "deprecated") {
+    // The passed DEPRECATE date is a warning; the upcoming DISALLOW date is
+    // what eventually fails the build, so show both when the mandate has one.
+    return (
+      `deprecated since ${r.effective}` +
+      (r.disallowEffective ? `; disallow ${r.disallowEffective}` : "")
+    );
+  }
+  return `${r.effective} (${r.monthsUntil} mo)`;
+}
+
+/**
+ * Build the Markdown mandate section of the job summary / PR comment. Pure.
+ *
+ * One row per (prohibited finding × mandate) verdict — violations first, then
+ * deprecated, then due, earliest deadline first — each naming the governing
+ * clause and its deadline. Deadline-aware by design: `due`/`deprecated` rows
+ * report without failing, so the section is the early-warning surface, not just
+ * the failure explanation. `file` is finding-derived (attacker-controlled in a
+ * fork PR) and escaped; clause/deadline/citation come from the bundled catalog.
+ */
+export function buildMandateSection(ev: MandateEvaluation): string {
+  const lines: string[] = [];
+  lines.push("### Compliance mandates");
+  lines.push("");
+  lines.push(
+    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} · ` +
+      `**Violations:** ${ev.summary.violation} · **Deprecated:** ${ev.summary.deprecated} · ` +
+      `**Due:** ${ev.summary.due}` +
+      (ev.nextDeadline ? ` · next deadline ${ev.nextDeadline}` : ""),
+  );
+  lines.push("");
+  if (ev.findings.length === 0) {
+    lines.push("No mandate-prohibited cryptography found. ✅");
+    return lines.join("\n");
+  }
+  const rows = [...ev.findings].sort((a, b) => {
+    if (a.status !== b.status) return MANDATE_ROW_ORDER[a.status] - MANDATE_ROW_ORDER[b.status];
+    return a.effective.localeCompare(b.effective);
+  });
+  lines.push("| Status | Clause | Deadline | File | Algorithm |");
+  lines.push("| --- | --- | --- | --- | --- |");
+  for (const r of rows.slice(0, 50)) {
+    const icon = r.status === "violation" ? "🔴" : r.status === "deprecated" ? "🟠" : "🟡";
+    const loc = mdCell(`${r.file}:${r.line}`);
+    lines.push(
+      `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`,
+    );
+  }
+  if (rows.length > 50) lines.push(`| … | | | | _${rows.length - 50} more_ |`);
+  return lines.join("\n");
+}
+
+/**
+ * The verdict rows that trip the mandate gate under `opts` — the explanatory
+ * complement of core's `mandateGateFails`, mirroring its precedence: violations
+ * once a DISALLOW deadline has passed, every prohibited row under `failNow`,
+ * rows whose disallow deadline sits inside the window under `leadMonths`.
+ * Empty when the gate passes. Pure.
+ */
+export function mandateGateRows(
+  ev: MandateEvaluation,
+  opts: MandateGateOptions = {},
+): MandateFindingVerdict[] {
+  if (ev.hasViolation) return ev.findings.filter((v) => v.status === "violation");
+  if (opts.failNow) return ev.findings;
+  if (opts.leadMonths !== undefined) {
+    const lead = opts.leadMonths;
+    return ev.findings.filter(
+      (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead,
+    );
+  }
+  return [];
+}
+
+/**
+ * One-line failure reason naming each violated clause, its deadline, and the
+ * citation — so the red X says WHICH regulation failed the build, not a count.
+ * Clauses are deduplicated (many findings can violate one clause). Pure.
+ */
+export function describeMandateFailure(
+  ev: MandateEvaluation,
+  opts: MandateGateOptions = {},
+): string {
+  const rows = mandateGateRows(ev, opts);
+  const seen = new Set<string>();
+  const clauses: string[] = [];
+  for (const r of rows) {
+    if (seen.has(r.clause)) continue;
+    seen.add(r.clause);
+    const when =
+      r.status === "violation"
+        ? `deadline ${r.effective} passed`
+        : `disallow deadline ${r.disallowEffective ?? r.effective}`;
+    clauses.push(`"${r.clause}" (${when}) [${r.citation}]`);
+  }
+  return `mandate gate: ${rows.length} prohibited finding(s) — ${clauses.join("; ")}`;
 }
 
 /**
@@ -466,6 +621,19 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // The findings that gate the build.
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, inputs.severityThreshold));
 
+  // mandate: policy-as-code compliance gate. Deadline-aware — reports every
+  // mandate-prohibited finding with its named clause + deadline, but fails the
+  // build only once a deadline has passed (or early with lead-months / fail-now).
+  // Evaluated on the RAW findings: a baseline can suppress the severity gate,
+  // but must never waive a regulatory deadline.
+  let mandateEval: MandateEvaluation | undefined;
+  if (inputs.mandates.length > 0) {
+    // A typo'd id throws here and fails the run via the entrypoint's catch —
+    // a compliance gate must never silently gate against nothing.
+    assertKnownMandates(inputs.mandates);
+    mandateEval = evaluateMandates(result.findings, inputs.mandates, new Date());
+  }
+
   // Outputs.
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
@@ -475,13 +643,13 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // shows the result on EVERY run — no PR context, no token — so a push build or
   // a fork PR (where commenting needs a token it may not have) still surfaces the
   // scan. Best-effort; a summary-write failure never breaks the build.
-  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold), env);
+  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold, mandateEval), env);
 
   // Optional PR comment (best-effort, never fatal).
   if (inputs.commentPr && inputs.githubToken) {
     const ctx = await readPullRequestContext(env);
     if (ctx) {
-      const body = buildSummary(result, newFindings, inputs.severityThreshold);
+      const body = buildSummary(result, newFindings, inputs.severityThreshold, mandateEval);
       await commentOnPullRequest(ctx, inputs.githubToken, body);
     } else {
       info("quantakrypto: comment-pr enabled but no pull-request context found; skipping comment.");
@@ -491,11 +659,34 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   info(
     `quantakrypto: ${newFindings.length} new finding(s), ${blocking.length} at/above "${inputs.severityThreshold}"; readiness ${result.inventory.readinessScore}/100.`,
   );
-
-  if (shouldFail(blocking.length, inputs.failOnFindings)) {
-    setFailed(
-      `quantakrypto: ${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}".`,
+  if (mandateEval) {
+    info(
+      `quantakrypto: mandate gate (${mandateEval.mandates.join(", ")}): ` +
+        `${mandateEval.summary.violation} violation, ${mandateEval.summary.deprecated} deprecated, ` +
+        `${mandateEval.summary.due} due` +
+        (mandateEval.nextDeadline ? `, next deadline ${mandateEval.nextDeadline}` : "") +
+        ".",
     );
+  }
+
+  // The two gates OR: a passed compliance deadline fails the build even when
+  // every finding is baselined or below the severity threshold (and vice versa).
+  // The mandate gate is deliberately independent of fail-on-findings — setting
+  // `mandate:` is the opt-in.
+  const gateOpts: MandateGateOptions = { leadMonths: inputs.leadMonths, failNow: inputs.failNow };
+  const mandateFailed = mandateEval !== undefined && mandateGateFails(mandateEval, gateOpts);
+  const severityFailed = shouldFail(blocking.length, inputs.failOnFindings);
+
+  if (severityFailed || mandateFailed) {
+    const reasons: string[] = [];
+    if (severityFailed) {
+      reasons.push(
+        `${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}"`,
+      );
+    }
+    // Name the violated clause(s) + deadline + citation, not just a count.
+    if (mandateFailed && mandateEval) reasons.push(describeMandateFailure(mandateEval, gateOpts));
+    setFailed(`quantakrypto: ${reasons.join("; ")}.`);
     process.exit(1);
   }
 }

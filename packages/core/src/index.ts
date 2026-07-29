@@ -194,12 +194,14 @@ export {
   MANDATES,
   mandateIds,
   getMandate,
+  assertKnownMandates,
   evaluateMandates,
   mandateGateFails,
 } from "./mandates.js";
 export type {
   Mandate,
   MandateRule,
+  MandateRuleTier,
   MandateStatus,
   MandateFindingVerdict,
   MandateEvaluation,

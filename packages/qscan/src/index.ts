@@ -25,8 +25,7 @@ import {
   parseCryptoPolicy,
   evaluateMandates,
   mandateGateFails,
-  getMandate,
-  mandateIds,
+  assertKnownMandates,
   scaffoldHndlYaml,
   scan,
   scanParallel,
@@ -265,12 +264,7 @@ export async function runQscan(
   // the same RAW findings as the exit code, so triage can never flip the gate.
   let mandateEval: MandateEvaluation | undefined;
   if (options.mandates.length > 0) {
-    const unknown = options.mandates.filter((id) => !getMandate(id));
-    if (unknown.length > 0) {
-      throw new Error(
-        `unknown --mandate id(s): ${unknown.join(", ")}. Known: ${mandateIds().join(", ")}`,
-      );
-    }
+    assertKnownMandates(options.mandates);
     mandateEval = evaluateMandates(result.findings, options.mandates, new Date());
     if (
       mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })
@@ -391,18 +385,22 @@ function renderMandateBlock(ev: MandateEvaluation): string {
   const lines: string[] = [];
   lines.push(`Compliance mandates: ${ev.mandates.join(", ") || "(none matched)"}`);
   lines.push(
-    `  ${ev.summary.violation} violation · ${ev.summary.due} due · ${ev.summary.conformant} conformant` +
+    `  ${ev.summary.violation} violation · ${ev.summary.deprecated} deprecated · ${ev.summary.due} due · ${ev.summary.conformant} conformant` +
+      (ev.notInScope > 0 ? ` · ${ev.notInScope} out of scope` : "") +
       (ev.nextDeadline ? ` · next deadline ${ev.nextDeadline}` : ""),
   );
-  const rows = [...ev.findings].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "violation" ? -1 : 1;
-    return a.effective.localeCompare(b.effective);
-  });
+  const rank: Record<string, number> = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
+  const rows = [...ev.findings].sort(
+    (a, b) =>
+      (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.effective.localeCompare(b.effective),
+  );
   for (const r of rows.slice(0, 12)) {
     const when =
       r.status === "violation"
-        ? `overdue since ${r.effective}`
-        : `due ${r.effective} (${r.monthsUntil} mo)`;
+        ? `disallowed since ${r.effective}`
+        : r.status === "deprecated"
+          ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}`
+          : `due ${r.effective} (${r.monthsUntil} mo)`;
     lines.push(`  [${r.status}] ${r.clause} · ${r.algorithm} ${r.file}:${r.line} — ${when}`);
   }
   if (rows.length > 12) lines.push(`  … and ${rows.length - 12} more`);

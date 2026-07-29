@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  MANDATES,
   PQC_STANDARDS,
   PQC_TRANSITION_NOTE,
   STATEFUL_HBS_NOTE,
@@ -72,6 +73,30 @@ test("review dates are well-formed and ordered, and match the stated interval", 
   for (const c of cites) {
     assert.ok(c.source.length > 0, "citation has a source");
     assert.match(c.asOf, /^\d{4}-\d{2}$/, `asOf is YYYY-MM (${c.source})`);
+  }
+});
+
+test("mandate deadlines derive from the standards transition timeline", () => {
+  // The mandate catalog (mandates.ts) must never restate 2030/2035 by hand: its
+  // clause dates are derived from PQC_STANDARDS.transitionTimeline with the
+  // documented boundary "after <year>" = effective the LAST day of that year
+  // (`YYYY-12-31`). If a quarterly review moves the timeline and the mandates
+  // don't follow, this fails.
+  const t = PQC_STANDARDS.transitionTimeline;
+  for (const mandate of Object.values(MANDATES)) {
+    const deprecate = mandate.rules.filter((r) => r.tier === "deprecate");
+    const disallow = mandate.rules.filter((r) => r.tier === "disallow");
+    assert.ok(deprecate.length > 0, `${mandate.id} has a deprecate clause`);
+    assert.ok(disallow.length > 0, `${mandate.id} has a disallow clause`);
+    for (const r of deprecate) {
+      assert.equal(r.effective, `${t.deprecateAfter}-12-31`, `${mandate.id}: ${r.clause}`);
+      // The clause prose names the same year (no stale text).
+      assert.match(r.clause, new RegExp(String(t.deprecateAfter)));
+    }
+    for (const r of disallow) {
+      assert.equal(r.effective, `${t.disallowAfter}-12-31`, `${mandate.id}: ${r.clause}`);
+      assert.match(r.clause, new RegExp(String(t.disallowAfter)));
+    }
   }
 });
 
