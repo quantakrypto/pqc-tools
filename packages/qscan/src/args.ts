@@ -71,6 +71,12 @@ export interface QscanOptions {
   maxFileSize?: number;
   /** Disable the built-in ignore list (`--no-default-ignores`). */
   noDefaultIgnores: boolean;
+  /** Compliance mandates to gate findings against (repeatable `--mandate <id>`). */
+  mandates: string[];
+  /** Fail early when a mandate deadline is within this many months (`--lead-months`). */
+  leadMonths?: number;
+  /** Fail on any mandate-prohibited finding now, ignoring the deadline (`--fail-now`). */
+  failNow: boolean;
   /** Scan minified/generated/bundled files instead of skipping them. */
   scanMinified: boolean;
   /**
@@ -262,6 +268,8 @@ export function defaultOptions(): QscanOptions {
     triage: false,
     dryRun: false,
     hndl: false,
+    mandates: [],
+    failNow: false,
   };
 }
 
@@ -447,6 +455,16 @@ function parseRunArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--profile":
         options.profile = asProfile(takeValue());
+        break;
+      case "--mandate":
+        options.mandates.push(takeValue());
+        break;
+      case "--lead-months":
+        options.leadMonths = asInt(takeValue(), "--lead-months");
+        break;
+      case "--fail-now":
+        rejectInlineValue();
+        options.failNow = true;
         break;
       case "--context":
         options.contextLevel = asContextLevel(takeValue());

@@ -68,6 +68,12 @@ OPTIONS
                                 nist (default) | cnsa-2.0 | bsi-tr-02102 | anssi |
                                 uk-ncsc. Sets the parameter sets, deadlines, and
                                 whether hybridization is required/recommended/optional
+  --mandate <id>                Gate findings against a compliance mandate's dated
+                                clauses (repeatable): cnsa-2.0 | nist-ir-8547. Reports
+                                each prohibited finding with its clause + deadline;
+                                fails the build only once a deadline has passed
+  --lead-months <n>             Fail early when a --mandate deadline is within n months
+  --fail-now                    Fail on any --mandate-prohibited finding, ignoring the date
   --cache [file]                Reuse findings for unchanged files across runs
                                 (default file: .quantakrypto-cache.json)
   --triage                      BYOK LLM pass that re-ranks findings by real
