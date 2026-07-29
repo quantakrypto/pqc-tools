@@ -147,6 +147,29 @@ These create the *demand* for the toolset. quantakrypto-tools **helps with the
 technical discovery/migration steps** these mandates require; it does not by
 itself make any entity "compliant."
 
+> **Update (2026-07): mandates with hard algorithm deadlines are now enforceable
+> via `--mandate`.** The two regimes that carry dated algorithm prohibitions —
+> **CNSA 2.0** and **NIST IR 8547** — can be gated directly:
+> `qscan ./ --mandate cnsa-2.0` (repeatable; also `nist-ir-8547`, and exposed as
+> the `mandate` / `lead-months` / `fail-now` inputs on the GitHub Action)
+> evaluates every finding against the mandate's dated, named clauses and reports
+> each prohibited classical public-key finding (RSA, ECDH, ECDSA, EdDSA, DH,
+> DSA, ECIES) with its clause, deadline, and citation. The gate is
+> **deadline-aware**: a prohibited finding is a warning once the deprecation
+> date (2030) passes and fails the build only once the disallow date (2035)
+> passes; `--lead-months <n>` fails early when a deadline is within `n` months,
+> and `--fail-now` fails on any prohibited finding immediately. The deadlines
+> derive from the same dated `PQC_STANDARDS` snapshot (single source of truth).
+> Scope honesty: this is a *family-level* gate — it does not assert PQC
+> parameter levels (e.g. ML-KEM-768 where CNSA 2.0 requires 1024; see
+> [COMPARISON.md](COMPARISON.md) §2.4), and X25519/X448 are deliberately not
+> flagged, since they are the classical half of the recommended hybrid
+> (X25519MLKEM768) and flagging them would false-positive hybrid deployments.
+> **DORA, NIS2, and PCI DSS** require approved/strong cryptography but set **no
+> independent algorithm date** of their own; they inherit these CNSA 2.0 /
+> IR 8547 timelines, so the same mandate-gate output supports their
+> crypto-risk-management expectations too.
+
 | Mandate | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
 | **US OMB M-23-02 & NSM-10** | US federal direction (memo + National Security Memorandum) requiring agencies to inventory quantum-vulnerable crypto and plan PQC migration. | **Helps with the inventory mandate directly.** qscan/core produce exactly the *cryptographic inventory* M-23-02 requires for in-scope systems, plus a readiness score to prioritize. **Boundary:** federal inventories follow specific agency templates/reporting; qscan output **would require** mapping into the agency's required inventory format (and a CBOM export, Section 6) to be a turnkey submission. It informs, it does not file. |

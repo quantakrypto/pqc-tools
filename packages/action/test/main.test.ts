@@ -4,14 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { applyBaseline, fingerprintFinding } from "@quantakrypto/core";
-import type { Baseline, Finding, ScanResult } from "@quantakrypto/core";
+import { applyBaseline, evaluateMandates, fingerprintFinding } from "@quantakrypto/core";
+import type { Baseline, Finding, MandateEvaluation, ScanResult } from "@quantakrypto/core";
 
 import {
   annotateFindings,
+  buildMandateSection,
   buildPlanComment,
   buildSummary,
+  describeMandateFailure,
   fingerprint,
+  mandateGateRows,
   meetsThreshold,
   readInputs,
   run,
@@ -454,4 +457,144 @@ test("readInputs parses mode and rejects an invalid one", () => {
   assert.equal(readInputs({ INPUT_MODE: "comment-plan" }).mode, "comment-plan");
   assert.equal(readInputs({}).mode, "scan");
   assert.throws(() => readInputs({ INPUT_MODE: "bogus" }), /Invalid mode/);
+});
+
+// ---------------------------------------------------------------------------
+// Mandate gate: input parsing, gate rows, failure description, summary section.
+// The evaluations come from core's evaluateMandates with a pinned `now` so the
+// tests stay deterministic regardless of when they run.
+// ---------------------------------------------------------------------------
+
+/** RSA finding evaluated against CNSA 2.0 at three points on its timeline. */
+const rsaFinding = makeFinding();
+/** Before every deadline (2026): prohibited but only `due`. */
+const evDue = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2026-01-01"));
+/** Between deprecate (2030) and disallow (2035): `deprecated`, still no failure. */
+const evDeprecated = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2031-01-01"));
+/** After the DISALLOW deadline (2035): a `violation`. */
+const evViolation = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2036-01-01"));
+
+test("readInputs parses mandate ids from a comma/space-separated list", () => {
+  assert.deepEqual(readInputs({}).mandates, []);
+  assert.deepEqual(readInputs({ INPUT_MANDATE: "cnsa-2.0" }).mandates, ["cnsa-2.0"]);
+  assert.deepEqual(readInputs({ INPUT_MANDATE: "cnsa-2.0, nist-ir-8547" }).mandates, [
+    "cnsa-2.0",
+    "nist-ir-8547",
+  ]);
+  assert.deepEqual(readInputs({ INPUT_MANDATE: "cnsa-2.0 nist-ir-8547" }).mandates, [
+    "cnsa-2.0",
+    "nist-ir-8547",
+  ]);
+  assert.deepEqual(readInputs({ INPUT_MANDATE: " , " }).mandates, []);
+});
+
+test("readInputs parses lead-months and fail-now (defaults: unset / false)", () => {
+  assert.equal(readInputs({}).leadMonths, undefined);
+  assert.equal(readInputs({}).failNow, false);
+  assert.equal(readInputs({ "INPUT_LEAD-MONTHS": "24" }).leadMonths, 24);
+  assert.equal(readInputs({ "INPUT_FAIL-NOW": "true" }).failNow, true);
+  assert.throws(() => readInputs({ "INPUT_LEAD-MONTHS": "soon" }), /Invalid lead-months/);
+  assert.throws(() => readInputs({ "INPUT_LEAD-MONTHS": "-3" }), /Invalid lead-months/);
+});
+
+test("mandateGateRows: deadline-aware default — due/deprecated rows do not trip the gate", () => {
+  assert.deepEqual(mandateGateRows(evDue), []);
+  assert.deepEqual(mandateGateRows(evDeprecated), []);
+  const rows = mandateGateRows(evViolation);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.status, "violation");
+});
+
+test("mandateGateRows: fail-now trips on any prohibited row; lead-months on the disallow window", () => {
+  assert.equal(mandateGateRows(evDue, { failNow: true }).length, 1);
+  // Disallow (2035-01-01) is ~108 months from the pinned 2026 `now`.
+  assert.equal(mandateGateRows(evDue, { leadMonths: 120 }).length, 1);
+  assert.deepEqual(mandateGateRows(evDue, { leadMonths: 12 }), []);
+});
+
+test("describeMandateFailure names the clause, deadline, and citation — not just a count", () => {
+  const msg = describeMandateFailure(evViolation);
+  // Expected dates come from the evaluation rows so the test tracks the catalog.
+  const deadline = evViolation.findings[0]?.effective;
+  assert.match(msg, /"CNSA 2\.0 — disallow classical PKC after 2035"/);
+  assert.ok(msg.includes(`(deadline ${deadline} passed)`), `names the deadline: ${msg}`);
+  assert.match(msg, /NSA Commercial National Security Algorithm Suite 2\.0/);
+  assert.match(msg, /1 prohibited finding\(s\)/);
+});
+
+test("describeMandateFailure under fail-now anchors on the upcoming disallow deadline", () => {
+  const msg = describeMandateFailure(evDue, { failNow: true });
+  const disallow = evDue.findings[0]?.disallowEffective;
+  assert.ok(msg.includes(`(disallow deadline ${disallow})`), `names the disallow date: ${msg}`);
+  assert.match(msg, /NSA Commercial National Security Algorithm Suite 2\.0/);
+});
+
+test("buildMandateSection lists verdicts with clause + deadline, violations first", () => {
+  // Violations sort above due rows even when pushed in the opposite order.
+  const mixed: MandateEvaluation = {
+    ...evViolation,
+    summary: { ...evViolation.summary, due: 1 },
+    findings: [...evDue.findings, ...evViolation.findings],
+  };
+  const md = buildMandateSection(mixed);
+  assert.match(md, /### Compliance mandates/);
+  assert.match(md, /`cnsa-2\.0`/);
+  assert.ok(md.includes(`overdue since ${evViolation.findings[0]?.effective}`));
+  assert.match(md, /CNSA 2\.0 — disallow classical PKC after 2035/);
+  assert.ok(md.indexOf("🔴 violation") < md.indexOf("🟡 due"), "violation row listed first");
+});
+
+test("buildMandateSection escapes a hostile filename in the verdict table", () => {
+  const hostile = makeFinding({ location: { file: "evil|name.ts", line: 1 } });
+  const ev = evaluateMandates([hostile], ["cnsa-2.0"], new Date("2036-01-01"));
+  const md = buildMandateSection(ev);
+  assert.match(md, /evil\\\|name\.ts/);
+});
+
+test("buildSummary appends the mandate section only when an evaluation is passed", () => {
+  const f = makeFinding();
+  const withMandates = buildSummary(makeResult([f]), [f], "high", evDue);
+  assert.match(withMandates, /### Compliance mandates/);
+  assert.doesNotMatch(buildSummary(makeResult([f]), [f], "high"), /Compliance mandates/);
+  // The clean-run (no blocking findings) path carries the section too.
+  const clean = buildSummary(makeResult([], 100), [], "high", evDue);
+  assert.match(clean, /No new quantum-vulnerable cryptography/);
+  assert.match(clean, /### Compliance mandates/);
+});
+
+test("run with mandate: reports the gate in the step summary without failing before a deadline", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `import { generateKeyPairSync } from "node:crypto";\nconst kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  const summaryFile = join(ws, "step-summary.md");
+  writeFileSync(summaryFile, "");
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    GITHUB_STEP_SUMMARY: summaryFile,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    INPUT_MANDATE: "cnsa-2.0",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  // Deadline-aware: the RSA finding is prohibited but its DISALLOW deadline has
+  // not passed, so run() must return (a gate failure would process.exit(1)).
+  await run(env);
+  const summary = readFileSync(summaryFile, "utf8");
+  assert.match(summary, /### Compliance mandates/);
+  assert.match(summary, /`cnsa-2\.0`/);
+});
+
+test("run rejects a typo'd mandate id instead of gating against nothing", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(join(ws, "crypto.ts"), `const x = 1;\n`);
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    INPUT_MANDATE: "cnsa-2",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  await assert.rejects(() => run(env), /unknown mandate id/);
 });

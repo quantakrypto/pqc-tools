@@ -189,6 +189,25 @@ export type {
 export { buildPolicyMapping, parseCryptoPolicy } from "./policy.js";
 export type { CryptoPolicy, PolicyVerdict, PolicyMapping, PolicyFindingVerdict } from "./policy.js";
 
+// Compliance mandates → dated, clause-named verdicts + gate (policy-as-code).
+export {
+  MANDATES,
+  mandateIds,
+  getMandate,
+  assertKnownMandates,
+  evaluateMandates,
+  mandateGateFails,
+} from "./mandates.js";
+export type {
+  Mandate,
+  MandateRule,
+  MandateRuleTier,
+  MandateStatus,
+  MandateFindingVerdict,
+  MandateEvaluation,
+  MandateGateOptions,
+} from "./mandates.js";
+
 // Remediation lookup (family + tier-aware + profile-aware) and stateful-HBS guidance.
 export {
   remediationFor,

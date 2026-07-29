@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.6.0";
+    VERSION = "0.7.0";
   }
 });
 
@@ -11364,9 +11364,78 @@ var init_vex = __esm({
 });
 
 // ../core/dist/standards.js
+var PQC_STANDARDS;
 var init_standards = __esm({
   "../core/dist/standards.js"() {
     "use strict";
+    PQC_STANDARDS = {
+      lastReviewed: "2026-07-19",
+      nextReview: "2026-10-19",
+      reviewIntervalMonths: 3,
+      fips: {
+        mlKem: {
+          summary: "ML-KEM (Kyber) key encapsulation \u2014 finalized August 2024.",
+          source: "NIST FIPS 203",
+          asOf: "2026-07"
+        },
+        mlDsa: {
+          summary: "ML-DSA (Dilithium) lattice signatures \u2014 finalized August 2024.",
+          source: "NIST FIPS 204",
+          asOf: "2026-07"
+        },
+        slhDsa: {
+          summary: "SLH-DSA (SPHINCS+) stateless hash-based signatures \u2014 finalized August 2024.",
+          source: "NIST FIPS 205",
+          asOf: "2026-07"
+        }
+      },
+      cnsa: {
+        category3: { kem: "ML-KEM-768 (FIPS 203)", signature: "ML-DSA-65 (FIPS 204)" },
+        category5: { kem: "ML-KEM-1024 (FIPS 203)", signature: "ML-DSA-87 (FIPS 204)" },
+        source: "NSA CNSA 2.0 (national-security systems; 2030/2033 migration milestones)",
+        asOf: "2026-07"
+      },
+      statefulHbs: {
+        summary: "LMS/HSS and XMSS/XMSSMT stateful hash-based signatures (incl. the SHAKE256 and 192-bit parameter sets) are approved for firmware/boot signing, but are STATEFUL.",
+        source: "NIST SP 800-208",
+        asOf: "2026-07"
+      },
+      transitionTimeline: {
+        deprecateAfter: 2030,
+        disallowAfter: 2035,
+        source: "NIST IR 8547 (transition to post-quantum cryptography standards)",
+        asOf: "2026-07"
+      },
+      emerging: [
+        {
+          summary: "HQC \u2014 NIST's code-based backup KEM (selected March 2025; draft FIPS expected ~2026), a diversity hedge against ML-KEM's lattice assumption.",
+          source: "NIST PQC (HQC selection)",
+          asOf: "2026-07"
+        },
+        {
+          summary: "FN-DSA / Falcon \u2014 compact lattice signatures.",
+          source: "NIST draft FIPS 206",
+          asOf: "2026-07"
+        },
+        {
+          summary: "X-Wing \u2014 X25519 + ML-KEM-768 hybrid KEM for HPKE-style encryption.",
+          source: "IETF draft-connolly-cfrg-xwing-kem",
+          asOf: "2026-07"
+        }
+      ],
+      hybrids: [
+        {
+          summary: "X25519MLKEM768 \u2014 the default TLS 1.3 hybrid key-exchange group.",
+          source: "IETF draft-ietf-tls-ecdhe-mlkem",
+          asOf: "2026-07"
+        },
+        {
+          summary: "SecP384r1MLKEM1024 \u2014 the Category-5 / CNSA hybrid key-exchange group.",
+          source: "IETF draft-ietf-tls-ecdhe-mlkem",
+          asOf: "2026-07"
+        }
+      ]
+    };
   }
 });
 
@@ -11557,6 +11626,184 @@ var init_evidence = __esm({
   }
 });
 
+// ../core/dist/mandates.js
+function assertKnownMandates(ids) {
+  const unknown = ids.filter((id) => !MANDATES[id]);
+  if (unknown.length > 0) {
+    throw new Error(`unknown mandate id(s): ${unknown.join(", ")}; known mandates: ${mandateIds().join(", ")}`);
+  }
+}
+function monthsBetween(fromMs, toMs) {
+  return Math.round((toMs - fromMs) / MONTH_MS);
+}
+function evaluateMandates(findings, mandateIdList, now) {
+  const nowMs = now.getTime();
+  const selected = mandateIdList.map(getMandate).filter((m) => Boolean(m));
+  const rows = [];
+  const perFindingWorst = [];
+  let notInScope = 0;
+  let nextDeadlineMs = null;
+  for (const f of findings) {
+    const algo2 = f.algorithm ?? "unknown";
+    if (!CLASSICAL_PUBLIC_KEY.includes(algo2)) {
+      notInScope++;
+      continue;
+    }
+    let worst = "conformant";
+    for (const mandate of selected) {
+      const applicable = mandate.rules.filter((r) => r.prohibits.includes(algo2)).sort((a, b) => a.effective.localeCompare(b.effective));
+      if (applicable.length === 0)
+        continue;
+      const passed = applicable.filter((r) => nowMs >= new Date(r.effective).getTime());
+      const passedDisallow = passed.filter((r) => r.tier === "disallow");
+      let status;
+      let governing;
+      if (passedDisallow.length > 0) {
+        status = "violation";
+        governing = passedDisallow[0];
+      } else if (passed.length > 0) {
+        status = "deprecated";
+        governing = passed[passed.length - 1];
+      } else {
+        status = "due";
+        governing = applicable[0];
+      }
+      const disallowRule = applicable.find((r) => r.tier === "disallow") ?? null;
+      const disallowMs = disallowRule ? new Date(disallowRule.effective).getTime() : null;
+      if (status !== "violation") {
+        for (const r of applicable) {
+          const effMs = new Date(r.effective).getTime();
+          if (effMs > nowMs && (nextDeadlineMs === null || effMs < nextDeadlineMs))
+            nextDeadlineMs = effMs;
+        }
+      }
+      if (STATUS_RANK[status] > STATUS_RANK[worst])
+        worst = status;
+      rows.push({
+        ruleId: f.ruleId,
+        algorithm: algo2,
+        file: f.location.file,
+        line: f.location.line,
+        mandate: mandate.id,
+        clause: governing.clause,
+        effective: governing.effective,
+        status,
+        monthsUntil: monthsBetween(nowMs, new Date(governing.effective).getTime()),
+        disallowEffective: disallowRule ? disallowRule.effective : null,
+        monthsUntilDisallow: disallowMs !== null ? monthsBetween(nowMs, disallowMs) : null,
+        citation: mandate.citation
+      });
+    }
+    perFindingWorst.push(worst);
+  }
+  const summary = {
+    conformant: 0,
+    due: 0,
+    deprecated: 0,
+    violation: 0
+  };
+  for (const s of perFindingWorst)
+    summary[s]++;
+  return {
+    now: now.toISOString(),
+    mandates: selected.map((m) => m.id),
+    summary,
+    notInScope,
+    findings: rows,
+    nextDeadline: nextDeadlineMs !== null ? new Date(nextDeadlineMs).toISOString().slice(0, 10) : null,
+    hasViolation: summary.violation > 0
+  };
+}
+function mandateGateFails(ev, opts = {}) {
+  if (ev.hasViolation)
+    return true;
+  if (opts.failNow)
+    return ev.findings.length > 0;
+  if (opts.leadMonths !== void 0) {
+    return ev.findings.some((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths);
+  }
+  return false;
+}
+var CLASSICAL_PUBLIC_KEY, PROHIBITED_FAMILIES, deprecateAfter, disallowAfter, DEPRECATE_EFFECTIVE, DISALLOW_EFFECTIVE, MANDATES, mandateIds, getMandate, MONTH_MS, STATUS_RANK;
+var init_mandates = __esm({
+  "../core/dist/mandates.js"() {
+    "use strict";
+    init_standards();
+    CLASSICAL_PUBLIC_KEY = [
+      "RSA",
+      "ECDH",
+      "ECDSA",
+      "EdDSA",
+      "DH",
+      "DSA",
+      "X25519",
+      "X448",
+      "ECIES"
+    ];
+    PROHIBITED_FAMILIES = CLASSICAL_PUBLIC_KEY.filter((family) => family !== "X25519" && family !== "X448");
+    ({ deprecateAfter, disallowAfter } = PQC_STANDARDS.transitionTimeline);
+    DEPRECATE_EFFECTIVE = `${deprecateAfter}-12-31`;
+    DISALLOW_EFFECTIVE = `${disallowAfter}-12-31`;
+    MANDATES = {
+      "cnsa-2.0": {
+        id: "cnsa-2.0",
+        name: "CNSA 2.0",
+        authority: "NSA",
+        citation: "NSA Commercial National Security Algorithm Suite 2.0 (CNSA 2.0)",
+        asOf: "2026-07",
+        rules: [
+          {
+            clause: `CNSA 2.0 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            tier: "deprecate",
+            prohibits: [...PROHIBITED_FAMILIES],
+            effective: DEPRECATE_EFFECTIVE,
+            note: "Classical public-key cryptography deprecated; systems should use CNSA 2.0 PQC exclusively."
+          },
+          {
+            clause: `CNSA 2.0 \u2014 disallow classical PKC after ${disallowAfter}`,
+            tier: "disallow",
+            prohibits: [...PROHIBITED_FAMILIES],
+            effective: DISALLOW_EFFECTIVE,
+            note: "Classical public-key cryptography disallowed; the migration must be complete."
+          }
+        ]
+      },
+      "nist-ir-8547": {
+        id: "nist-ir-8547",
+        name: "NIST IR 8547",
+        authority: "NIST",
+        citation: "NIST IR 8547 (Transition to Post-Quantum Cryptography Standards)",
+        asOf: "2026-07",
+        rules: [
+          {
+            clause: `NIST IR 8547 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            tier: "deprecate",
+            prohibits: [...PROHIBITED_FAMILIES],
+            effective: DEPRECATE_EFFECTIVE,
+            note: `112-bit-security classical public-key algorithms deprecated after ${deprecateAfter}.`
+          },
+          {
+            clause: `NIST IR 8547 \u2014 disallow classical PKC after ${disallowAfter}`,
+            tier: "disallow",
+            prohibits: [...PROHIBITED_FAMILIES],
+            effective: DISALLOW_EFFECTIVE,
+            note: `Classical public-key algorithms disallowed after ${disallowAfter}.`
+          }
+        ]
+      }
+    };
+    mandateIds = () => Object.keys(MANDATES);
+    getMandate = (id) => MANDATES[id];
+    MONTH_MS = 26298e5;
+    STATUS_RANK = {
+      conformant: 0,
+      due: 1,
+      deprecated: 2,
+      violation: 3
+    };
+  }
+});
+
 // ../core/dist/standards-profiles.js
 function getStandardsProfile(id) {
   return STANDARDS_PROFILES[id];
@@ -11665,6 +11912,7 @@ var init_dist = __esm({
     init_crypto_agility();
     init_evidence();
     init_policy();
+    init_mandates();
     init_remediation();
     init_standards();
     init_standards_profiles();
@@ -12330,7 +12578,9 @@ function defaultOptions() {
     noConfigFile: false,
     triage: false,
     dryRun: false,
-    hndl: false
+    hndl: false,
+    mandates: [],
+    failNow: false
   };
 }
 
@@ -12614,7 +12864,15 @@ async function runQscan(opts, hooks = {}) {
   if (options.policy) {
     policy = parseCryptoPolicy(JSON.parse(await readFile6(options.policy, "utf8")));
   }
-  const exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold)) ? EXIT.FINDINGS : EXIT.OK;
+  let exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold)) ? EXIT.FINDINGS : EXIT.OK;
+  let mandateEval;
+  if (options.mandates.length > 0) {
+    assertKnownMandates(options.mandates);
+    mandateEval = evaluateMandates(result.findings, options.mandates, /* @__PURE__ */ new Date());
+    if (mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })) {
+      exitCode = EXIT.FINDINGS;
+    }
+  }
   if (options.triage) {
     const { runTriage: runTriage2 } = await Promise.resolve().then(() => (init_triage_run(), triage_run_exports));
     const triaged = await runTriage2(result, {
@@ -12688,7 +12946,24 @@ async function runQscan(opts, hooks = {}) {
     });
     report = JSON.stringify(signed, null, 2);
   }
+  if (mandateEval && options.format === "human") {
+    report += "\n" + renderMandateBlock(mandateEval);
+  }
   return { result, suppressed, report, exitCode };
+}
+function renderMandateBlock(ev) {
+  const lines = [];
+  lines.push(`Compliance mandates: ${ev.mandates.join(", ") || "(none matched)"}`);
+  lines.push(`  ${ev.summary.violation} violation \xB7 ${ev.summary.deprecated} deprecated \xB7 ${ev.summary.due} due \xB7 ${ev.summary.conformant} conformant` + (ev.notInScope > 0 ? ` \xB7 ${ev.notInScope} out of scope` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : ""));
+  const rank = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
+  const rows = [...ev.findings].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.effective.localeCompare(b.effective));
+  for (const r of rows.slice(0, 12)) {
+    const when = r.status === "violation" ? `disallowed since ${r.effective}` : r.status === "deprecated" ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}` : `due ${r.effective} (${r.monthsUntil} mo)`;
+    lines.push(`  [${r.status}] ${r.clause} \xB7 ${r.algorithm} ${r.file}:${r.line} \u2014 ${when}`);
+  }
+  if (rows.length > 12)
+    lines.push(`  \u2026 and ${rows.length - 12} more`);
+  return lines.join("\n");
 }
 function renderReport(result, format, opts = {}) {
   const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
@@ -12829,6 +13104,17 @@ function readInputs(env = process.env) {
   if (mode !== "scan" && mode !== "comment-plan") {
     throw new TypeError(`Invalid mode "${mode}"; expected "scan" or "comment-plan"`);
   }
+  const mandates = getInput("mandate", env).split(/[\s,]+/).filter((id) => id.length > 0);
+  const leadMonthsRaw = getInput("lead-months", env);
+  let leadMonths;
+  if (leadMonthsRaw !== "") {
+    leadMonths = Number(leadMonthsRaw);
+    if (!Number.isInteger(leadMonths) || leadMonths < 0) {
+      throw new TypeError(
+        `Invalid lead-months "${leadMonthsRaw}"; expected a non-negative integer`
+      );
+    }
+  }
   return {
     path: getInput("path", env) || ".",
     severityThreshold,
@@ -12839,7 +13125,10 @@ function readInputs(env = process.env) {
     commentPr: getBooleanInput("comment-pr", false, env),
     githubToken: githubToken || void 0,
     redactSnippets: getBooleanInput("redact-snippets", false, env),
-    mode
+    mode,
+    mandates,
+    leadMonths,
+    failNow: getBooleanInput("fail-now", false, env)
   };
 }
 function shouldFail(blockingCount, failOnFindings) {
@@ -12866,7 +13155,7 @@ function annotateFindings(findings, threshold) {
     else warning(message, props);
   }
 }
-function buildSummary(result, newFindings, threshold) {
+function buildSummary(result, newFindings, threshold, mandateEval) {
   const score = result.inventory.readinessScore;
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, threshold));
   const lines = [];
@@ -12879,6 +13168,10 @@ function buildSummary(result, newFindings, threshold) {
   lines.push("");
   if (blocking.length === 0) {
     lines.push("No new quantum-vulnerable cryptography at or above the threshold. \u2705");
+    if (mandateEval) {
+      lines.push("");
+      lines.push(buildMandateSection(mandateEval));
+    }
     return lines.join("\n");
   }
   lines.push("| Severity | Rule | File | Message |");
@@ -12890,9 +13183,77 @@ function buildSummary(result, newFindings, threshold) {
     lines.push(`| ${f.severity} | \`${rule2}\` | ${loc} | ${msg} |`);
   }
   if (blocking.length > 50) lines.push(`| \u2026 | | | _${blocking.length - 50} more_ |`);
+  if (mandateEval) {
+    lines.push("");
+    lines.push(buildMandateSection(mandateEval));
+  }
   lines.push("");
   lines.push("<sub>Reported by [quantakrypto](https://quantakrypto.com/tools).</sub>");
   return lines.join("\n");
+}
+var MANDATE_ROW_ORDER = {
+  violation: 0,
+  deprecated: 1,
+  due: 2,
+  conformant: 3
+};
+function mandateDeadlinePhrase(r) {
+  if (r.status === "violation") return `overdue since ${r.effective}`;
+  if (r.status === "deprecated") {
+    return `deprecated since ${r.effective}` + (r.disallowEffective ? `; disallow ${r.disallowEffective}` : "");
+  }
+  return `${r.effective} (${r.monthsUntil} mo)`;
+}
+function buildMandateSection(ev) {
+  const lines = [];
+  lines.push("### Compliance mandates");
+  lines.push("");
+  lines.push(
+    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} \xB7 **Violations:** ${ev.summary.violation} \xB7 **Deprecated:** ${ev.summary.deprecated} \xB7 **Due:** ${ev.summary.due}` + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : "")
+  );
+  lines.push("");
+  if (ev.findings.length === 0) {
+    lines.push("No mandate-prohibited cryptography found. \u2705");
+    return lines.join("\n");
+  }
+  const rows = [...ev.findings].sort((a, b) => {
+    if (a.status !== b.status) return MANDATE_ROW_ORDER[a.status] - MANDATE_ROW_ORDER[b.status];
+    return a.effective.localeCompare(b.effective);
+  });
+  lines.push("| Status | Clause | Deadline | File | Algorithm |");
+  lines.push("| --- | --- | --- | --- | --- |");
+  for (const r of rows.slice(0, 50)) {
+    const icon = r.status === "violation" ? "\u{1F534}" : r.status === "deprecated" ? "\u{1F7E0}" : "\u{1F7E1}";
+    const loc = mdCell(`${r.file}:${r.line}`);
+    lines.push(
+      `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`
+    );
+  }
+  if (rows.length > 50) lines.push(`| \u2026 | | | | _${rows.length - 50} more_ |`);
+  return lines.join("\n");
+}
+function mandateGateRows(ev, opts = {}) {
+  if (ev.hasViolation) return ev.findings.filter((v) => v.status === "violation");
+  if (opts.failNow) return ev.findings;
+  if (opts.leadMonths !== void 0) {
+    const lead = opts.leadMonths;
+    return ev.findings.filter(
+      (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead
+    );
+  }
+  return [];
+}
+function describeMandateFailure(ev, opts = {}) {
+  const rows = mandateGateRows(ev, opts);
+  const seen = /* @__PURE__ */ new Set();
+  const clauses = [];
+  for (const r of rows) {
+    if (seen.has(r.clause)) continue;
+    seen.add(r.clause);
+    const when = r.status === "violation" ? `deadline ${r.effective} passed` : `disallow deadline ${r.disallowEffective ?? r.effective}`;
+    clauses.push(`"${r.clause}" (${when}) [${r.citation}]`);
+  }
+  return `mandate gate: ${rows.length} prohibited finding(s) \u2014 ${clauses.join("; ")}`;
 }
 function buildPlanComment(result) {
   const findings = result.findings;
@@ -13076,14 +13437,19 @@ async function run(env = process.env) {
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);
   annotateFindings(newFindings, inputs.severityThreshold);
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, inputs.severityThreshold));
+  let mandateEval;
+  if (inputs.mandates.length > 0) {
+    assertKnownMandates(inputs.mandates);
+    mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date());
+  }
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
   setOutput("sarif-file", inputs.output, env);
-  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold), env);
+  appendStepSummary(buildSummary(result, newFindings, inputs.severityThreshold, mandateEval), env);
   if (inputs.commentPr && inputs.githubToken) {
     const ctx = await readPullRequestContext(env);
     if (ctx) {
-      const body = buildSummary(result, newFindings, inputs.severityThreshold);
+      const body = buildSummary(result, newFindings, inputs.severityThreshold, mandateEval);
       await commentOnPullRequest(ctx, inputs.githubToken, body);
     } else {
       info("quantakrypto: comment-pr enabled but no pull-request context found; skipping comment.");
@@ -13092,10 +13458,23 @@ async function run(env = process.env) {
   info(
     `quantakrypto: ${newFindings.length} new finding(s), ${blocking.length} at/above "${inputs.severityThreshold}"; readiness ${result.inventory.readinessScore}/100.`
   );
-  if (shouldFail(blocking.length, inputs.failOnFindings)) {
-    setFailed(
-      `quantakrypto: ${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}".`
+  if (mandateEval) {
+    info(
+      `quantakrypto: mandate gate (${mandateEval.mandates.join(", ")}): ${mandateEval.summary.violation} violation, ${mandateEval.summary.deprecated} deprecated, ${mandateEval.summary.due} due` + (mandateEval.nextDeadline ? `, next deadline ${mandateEval.nextDeadline}` : "") + "."
     );
+  }
+  const gateOpts = { leadMonths: inputs.leadMonths, failNow: inputs.failNow };
+  const mandateFailed = mandateEval !== void 0 && mandateGateFails(mandateEval, gateOpts);
+  const severityFailed = shouldFail(blocking.length, inputs.failOnFindings);
+  if (severityFailed || mandateFailed) {
+    const reasons = [];
+    if (severityFailed) {
+      reasons.push(
+        `${blocking.length} quantum-vulnerable finding(s) at or above "${inputs.severityThreshold}"`
+      );
+    }
+    if (mandateFailed && mandateEval) reasons.push(describeMandateFailure(mandateEval, gateOpts));
+    setFailed(`quantakrypto: ${reasons.join("; ")}.`);
     process.exit(1);
   }
 }
@@ -13108,9 +13487,12 @@ if (invokedDirectly) {
 }
 export {
   annotateFindings,
+  buildMandateSection,
   buildPlanComment,
   buildSummary,
+  describeMandateFailure,
   fingerprintFinding as fingerprint,
+  mandateGateRows,
   meetsThreshold,
   readInputs,
   run,

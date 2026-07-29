@@ -23,6 +23,9 @@ import {
   HNDL_FILENAME,
   loadHndlMap,
   parseCryptoPolicy,
+  evaluateMandates,
+  mandateGateFails,
+  assertKnownMandates,
   scaffoldHndlYaml,
   scan,
   scanParallel,
@@ -42,6 +45,7 @@ import type {
   ScanResult,
   SecurityTier,
 } from "@quantakrypto/core";
+import type { MandateEvaluation } from "@quantakrypto/core";
 import { commandSigner } from "./sign.js";
 
 import { applyBaseline, readBaseline, saveBaseline } from "./baseline.js";
@@ -250,11 +254,24 @@ export async function runQscan(
 
   // Exit code is computed from RAW severities, BEFORE triage runs, so the
   // (optional) LLM triage pass can never make a failing scan pass CI.
-  const exitCode = result.findings.some((f) =>
-    meetsThreshold(f.severity, options.severityThreshold),
-  )
+  let exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold))
     ? EXIT.FINDINGS
     : EXIT.OK;
+
+  // --mandate: policy-as-code compliance gate. Deadline-aware — reports every
+  // mandate-prohibited finding with its named clause + deadline, but fails the build
+  // only once a deadline has passed (or early with --lead-months / --fail-now). Uses
+  // the same RAW findings as the exit code, so triage can never flip the gate.
+  let mandateEval: MandateEvaluation | undefined;
+  if (options.mandates.length > 0) {
+    assertKnownMandates(options.mandates);
+    mandateEval = evaluateMandates(result.findings, options.mandates, new Date());
+    if (
+      mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })
+    ) {
+      exitCode = EXIT.FINDINGS;
+    }
+  }
 
   // Optional BYOK triage: annotate + re-sort findings (never suppresses). The
   // agent (networked) package is loaded only here, via dynamic import.
@@ -356,7 +373,38 @@ export async function runQscan(
     report = JSON.stringify(signed, null, 2);
   }
 
+  if (mandateEval && options.format === "human") {
+    report += "\n" + renderMandateBlock(mandateEval);
+  }
+
   return { result, suppressed, report, exitCode };
+}
+
+/** A concise human compliance block appended to the default report for `--mandate`. */
+function renderMandateBlock(ev: MandateEvaluation): string {
+  const lines: string[] = [];
+  lines.push(`Compliance mandates: ${ev.mandates.join(", ") || "(none matched)"}`);
+  lines.push(
+    `  ${ev.summary.violation} violation · ${ev.summary.deprecated} deprecated · ${ev.summary.due} due · ${ev.summary.conformant} conformant` +
+      (ev.notInScope > 0 ? ` · ${ev.notInScope} out of scope` : "") +
+      (ev.nextDeadline ? ` · next deadline ${ev.nextDeadline}` : ""),
+  );
+  const rank: Record<string, number> = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
+  const rows = [...ev.findings].sort(
+    (a, b) =>
+      (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.effective.localeCompare(b.effective),
+  );
+  for (const r of rows.slice(0, 12)) {
+    const when =
+      r.status === "violation"
+        ? `disallowed since ${r.effective}`
+        : r.status === "deprecated"
+          ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}`
+          : `due ${r.effective} (${r.monthsUntil} mo)`;
+    lines.push(`  [${r.status}] ${r.clause} · ${r.algorithm} ${r.file}:${r.line} — ${when}`);
+  }
+  if (rows.length > 12) lines.push(`  … and ${rows.length - 12} more`);
+  return lines.join("\n");
 }
 
 /** Outcome of {@link runHndlInit}: the scaffold plus where it should be written. */
