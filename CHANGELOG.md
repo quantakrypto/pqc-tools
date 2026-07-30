@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-31
+
 ### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)
 
 Three new supply-chain capabilities. SemVer: **minor** (additive API + CLI

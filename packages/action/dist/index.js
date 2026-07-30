@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.7.0";
+    VERSION = "0.8.0";
   }
 });
 
@@ -7958,6 +7958,115 @@ var init_weak_hash = __esm({
   }
 });
 
+// ../core/dist/detectors/pqc-parameter.js
+function advertisedLevels(content) {
+  const levels = /* @__PURE__ */ new Set();
+  eachMatch(RE_ADVERTISED_LEVEL, content, (m) => levels.add(Number.parseInt(m[1], 10)));
+  return levels;
+}
+var RE_KYBER_PKG, RE_KYBER_API, RE_KYBER_PARAM, RE_CRYSTALS_KYBER, PRESTANDARD_RES, RE_STANDARD_CLAIM, RULE_PRESTANDARD, SIZE_TO_LEVEL, RE_SIZE, RE_ADVERTISED_LEVEL, RULE_MISMATCH, pqcParameterDetector;
+var init_pqc_parameter = __esm({
+  "../core/dist/detectors/pqc-parameter.js"() {
+    "use strict";
+    init_detect_utils();
+    RE_KYBER_PKG = /\b(?:pqc[_-]?kyber|pqcrypto[_-]kyber|safe_pqc_kyber|crystals[_-]kyber|kyber[_-]crystals|py[_-]?kyber)\b/gi;
+    RE_KYBER_API = /\b(?:crypto_kem_kyber(?:512|768|1024)|pqcrystals_kyber(?:512|768|1024))\w*/gi;
+    RE_KYBER_PARAM = /\bKyber-?(?:512|768|1024)\b/gi;
+    RE_CRYSTALS_KYBER = /\bCRYSTALS[_-]?Kyber\b/gi;
+    PRESTANDARD_RES = [
+      RE_KYBER_PKG,
+      RE_KYBER_API,
+      RE_KYBER_PARAM,
+      RE_CRYSTALS_KYBER
+    ];
+    RE_STANDARD_CLAIM = /\bFIPS[\s-]?203\b|\bML-?KEM\b|\bNIST\b/i;
+    RULE_PRESTANDARD = {
+      id: "pqc-prestandard-kem",
+      title: "Pre-standard (round-3) Kyber, not FIPS 203 ML-KEM",
+      description: "A pre-FIPS-203, round-3 CRYSTALS-Kyber package/parameter set used where FIPS 203 ML-KEM is intended",
+      category: "kem",
+      severity: "medium",
+      confidence: "low",
+      algorithm: "unknown",
+      hndl: false,
+      message: "Uses pre-standard round-3 Kyber; this is not FIPS 203 ML-KEM (different KDF/domain separation and not interoperable). Migrate to a FIPS 203 ML-KEM implementation.",
+      remediation: "Replace the round-3 Kyber dependency with a FIPS 203 ML-KEM implementation (e.g. ML-KEM-768 / hybrid X25519MLKEM768) and re-run KATs against the FIPS 203 vectors."
+    };
+    SIZE_TO_LEVEL = /* @__PURE__ */ new Map([
+      [800, 512],
+      [1632, 512],
+      [1184, 768],
+      [2400, 768],
+      [1088, 768],
+      [1568, 1024],
+      [3168, 1024]
+    ]);
+    RE_SIZE = /(?<![\d.])(800|1632|1184|2400|1088|1568|3168)(?![\d.])/g;
+    RE_ADVERTISED_LEVEL = /(?:ML-?KEM|Kyber)-?(512|768|1024)\b/gi;
+    RULE_MISMATCH = {
+      id: "pqc-parameter-mismatch",
+      title: "ML-KEM/Kyber size does not match the advertised parameter set",
+      description: "A ML-KEM/Kyber key or ciphertext byte size names one parameter level while the code advertises a different one",
+      category: "kem",
+      severity: "medium",
+      confidence: "low",
+      algorithm: "unknown",
+      hndl: false,
+      message: "A ML-KEM/Kyber byte size does not match the advertised parameter set \u2014 likely a mislabelled security level or a copied constant."
+    };
+    pqcParameterDetector = {
+      id: "pqc-parameter",
+      description: "Post-quantum KEM parameter checks: pre-standard round-3 Kyber, and ML-KEM/Kyber size \u2194 parameter-set mismatch",
+      scope: "config",
+      language: "any",
+      rules: [RULE_PRESTANDARD, RULE_MISMATCH],
+      // Skip prose/docs: a design note discussing Kyber is not live code.
+      appliesTo: (f) => !hasExtension(f, DOC_EXTENSIONS),
+      detect({ file, content }) {
+        if (!/kyber|ml-?kem/i.test(content))
+          return [];
+        const scan2 = maskCommentLines(maskBlockComments(content), ["//", "#", ";"]);
+        const findings = [];
+        const claimPresent = RE_STANDARD_CLAIM.test(content);
+        for (const re of PRESTANDARD_RES) {
+          eachMatch(re, scan2, (m) => {
+            const id = m[0];
+            findings.push(findingFromRule(RULE_PRESTANDARD, { file, content, index: m.index, matchLength: id.length }, {
+              // A co-located FIPS-203/ML-KEM/NIST claim is the strong signal that
+              // pre-standard Kyber is being passed off as the standard.
+              confidence: claimPresent ? "high" : "low",
+              message: `Uses pre-standard round-3 Kyber (${id}); not FIPS 203 ML-KEM${claimPresent ? " despite a FIPS-203/ML-KEM/NIST claim in the same file" : ""}. Migrate to a FIPS 203 ML-KEM implementation.`
+            }));
+          });
+        }
+        const advertised = advertisedLevels(content);
+        if (advertised.size > 0) {
+          const seen = /* @__PURE__ */ new Set();
+          eachMatch(RE_SIZE, scan2, (m) => {
+            const size = Number.parseInt(m[0], 10);
+            const level = SIZE_TO_LEVEL.get(size);
+            if (level === void 0)
+              return;
+            if (advertised.has(level))
+              return;
+            const conflict = [...advertised].find((l) => l !== level);
+            if (conflict === void 0)
+              return;
+            const key = `${size}:${m.index}`;
+            if (seen.has(key))
+              return;
+            seen.add(key);
+            findings.push(findingFromRule(RULE_MISMATCH, { file, content, index: m.index, matchLength: m[0].length }, {
+              message: `Byte size ${size} matches ML-KEM-${level} but the code advertises ML-KEM-${conflict}; parameter-set mismatch (mislabelled level or a copied constant).`
+            }));
+          });
+        }
+        return findings;
+      }
+    };
+  }
+});
+
 // ../core/dist/detectors/bicep.js
 var BICEP_EXTENSIONS, RE_BICEP_KTY_RSA, RE_BICEP_KTY_EC, RE_BICEP_MIN_TLS, RULE_BICEP_KTY_RSA, RULE_BICEP_KTY_EC, RULE_BICEP_MIN_TLS, bicepDetector;
 var init_bicep = __esm({
@@ -9111,6 +9220,7 @@ var init_registry = __esm({
     init_webauthn();
     init_codesign();
     init_weak_hash();
+    init_pqc_parameter();
     init_cloudformation();
     init_bicep();
     init_pulumi();
@@ -9223,6 +9333,7 @@ var init_registry = __esm({
       webauthnDetector,
       codesignDetector,
       weakHashDetector,
+      pqcParameterDetector,
       cloudformationDetector,
       bicepDetector,
       pulumiDetector,
@@ -10088,10 +10199,10 @@ function coerceBaseline(value) {
   const fingerprints = Array.isArray(obj.fingerprints) ? obj.fingerprints.filter((x) => typeof x === "string") : [];
   return { version, fingerprints };
 }
-async function loadBaseline(path8) {
+async function loadBaseline(path10) {
   let text;
   try {
-    text = await readFile3(path8, "utf8");
+    text = await readFile3(path10, "utf8");
   } catch {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
@@ -10101,9 +10212,9 @@ async function loadBaseline(path8) {
     return { version: BASELINE_VERSION, fingerprints: [] };
   }
 }
-async function saveBaseline(path8, findings) {
+async function saveBaseline(path10, findings) {
   const baseline = baselineFromFindings(findings);
-  await writeFile2(path8, `${JSON.stringify(baseline, null, 2)}
+  await writeFile2(path10, `${JSON.stringify(baseline, null, 2)}
 `, "utf8");
   return baseline;
 }
@@ -10704,6 +10815,411 @@ var init_hndl = __esm({
     };
     TOP_EXPOSURES = 5;
     globCache = /* @__PURE__ */ new Map();
+  }
+});
+
+// ../core/dist/advisories.js
+import { execFile as execFile3 } from "node:child_process";
+import { promisify as promisify3 } from "node:util";
+import { readdir as readdir2 } from "node:fs/promises";
+import * as path6 from "node:path";
+function toSeverity(raw) {
+  const s = String(raw ?? "").toLowerCase();
+  if (s === "critical")
+    return "critical";
+  if (s === "high")
+    return "high";
+  if (s === "moderate" || s === "medium")
+    return "medium";
+  if (s === "low")
+    return "low";
+  if (s === "info" || s === "informational" || s === "none" || s === "negligible")
+    return "info";
+  return "high";
+}
+function asRecord(v) {
+  return v !== null && typeof v === "object" ? v : null;
+}
+function str(v) {
+  return typeof v === "string" ? v : v === void 0 || v === null ? "" : String(v);
+}
+function firstString(v) {
+  if (typeof v === "string" && v)
+    return v;
+  if (Array.isArray(v)) {
+    const s = v.find((x) => typeof x === "string" && x);
+    return typeof s === "string" ? s : void 0;
+  }
+  return void 0;
+}
+function parseCargoAudit(json) {
+  const root = asRecord(json);
+  const vulns = asRecord(root?.vulnerabilities);
+  const list = Array.isArray(vulns?.list) ? vulns.list : [];
+  const out = [];
+  for (const item of list) {
+    const rec = asRecord(item);
+    const advisory = asRecord(rec?.advisory);
+    const pkg = asRecord(rec?.package);
+    const versions = asRecord(rec?.versions);
+    if (!advisory)
+      continue;
+    out.push({
+      id: str(advisory.id) || "RUSTSEC-UNKNOWN",
+      package: str(pkg?.name) || str(advisory.package),
+      version: str(pkg?.version),
+      summary: str(advisory.title) || "security advisory",
+      severity: toSeverity(advisory.severity),
+      patched: firstString(versions?.patched)
+    });
+  }
+  return out;
+}
+function parsePipAudit(json) {
+  const root = asRecord(json);
+  const deps = Array.isArray(json) ? json : Array.isArray(root?.dependencies) ? root.dependencies : [];
+  const out = [];
+  for (const item of deps) {
+    const dep = asRecord(item);
+    if (!dep)
+      continue;
+    const name = str(dep.name);
+    const version = str(dep.version);
+    const vulns = Array.isArray(dep.vulns) ? dep.vulns : [];
+    for (const v of vulns) {
+      const vuln = asRecord(v);
+      if (!vuln)
+        continue;
+      out.push({
+        id: str(vuln.id) || firstString(vuln.aliases) || "PYSEC-UNKNOWN",
+        package: name,
+        version,
+        summary: str(vuln.description) || "security advisory",
+        // pip-audit's base JSON does not grade severity; treat as high.
+        severity: toSeverity(vuln.severity),
+        patched: firstString(vuln.fix_versions)
+      });
+    }
+  }
+  return out;
+}
+function ghsaFrom(url) {
+  const m = /GHSA-[\w-]+/.exec(url);
+  return m ? m[0] : void 0;
+}
+function parseNpmAudit(json) {
+  const root = asRecord(json);
+  const vulns = asRecord(root?.vulnerabilities);
+  if (!vulns)
+    return [];
+  const out = [];
+  for (const [name, entry] of Object.entries(vulns)) {
+    const rec = asRecord(entry);
+    if (!rec)
+      continue;
+    const range = str(rec.range);
+    const fix = asRecord(rec.fixAvailable);
+    const patched = fix ? str(fix.version) : void 0;
+    const via = Array.isArray(rec.via) ? rec.via : [];
+    for (const v of via) {
+      const adv = asRecord(v);
+      if (!adv)
+        continue;
+      const url = str(adv.url);
+      const id = ghsaFrom(url) || (adv.source !== void 0 ? `npm-advisory-${str(adv.source)}` : url) || "npm-advisory";
+      out.push({
+        id,
+        package: str(adv.name) || name,
+        version: range,
+        summary: str(adv.title) || "security advisory",
+        severity: toSeverity(adv.severity ?? rec.severity),
+        patched: patched || void 0
+      });
+    }
+  }
+  return out;
+}
+function isRequirements(name) {
+  return /^requirements[\w.-]*\.txt$/i.test(name);
+}
+function advisoryFinding(rec, manifest) {
+  const pkgVer = rec.version ? `${rec.package}@${rec.version}` : rec.package;
+  const finding = {
+    ruleId: "dep-advisory",
+    title: rec.id,
+    category: "dependency",
+    severity: rec.severity,
+    confidence: "high",
+    hndl: false,
+    message: `${pkgVer}: ${rec.summary} (${rec.id})`,
+    location: { file: manifest, line: 1 }
+  };
+  if (rec.patched)
+    finding.remediation = `Upgrade ${rec.package} to ${rec.patched}`;
+  return finding;
+}
+async function scanAdvisories(root, opts = {}) {
+  const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
+  const list = opts.listDir ?? ((dir) => readdir2(dir));
+  const exec3 = opts.exec ?? ((command, args, options) => execFileAsync2(command, args, { ...options, windowsHide: true }));
+  const findings = [];
+  const diagnostics = [];
+  let entries;
+  try {
+    entries = await list(root);
+  } catch {
+    return { findings, diagnostics };
+  }
+  for (const tool of AUDIT_TOOLS) {
+    const manifest = tool.manifest(entries);
+    if (manifest === null)
+      continue;
+    let stdout;
+    try {
+      const res = await exec3(tool.command, tool.args, { cwd: root, timeout, maxBuffer });
+      stdout = res.stdout;
+    } catch (err) {
+      const e = err;
+      if (e.code === "ENOENT") {
+        diagnostics.push(`${tool.label} not available, skipped`);
+        continue;
+      }
+      if (e.killed || e.signal === "SIGTERM") {
+        diagnostics.push(`${tool.label} timed out, skipped`);
+        continue;
+      }
+      if (typeof e.stdout === "string" && e.stdout.trim()) {
+        stdout = e.stdout;
+      } else {
+        const detail = (e.stderr || e.message || "").trim().slice(0, 160);
+        diagnostics.push(`${tool.label} failed, skipped${detail ? `: ${detail}` : ""}`);
+        continue;
+      }
+    }
+    let json;
+    try {
+      json = JSON.parse(stdout);
+    } catch {
+      diagnostics.push(`${tool.label} produced unparseable output, skipped`);
+      continue;
+    }
+    let records;
+    try {
+      records = tool.parse(json);
+    } catch {
+      diagnostics.push(`${tool.label} output could not be interpreted, skipped`);
+      continue;
+    }
+    const seen = /* @__PURE__ */ new Set();
+    for (const rec of records) {
+      const key = `${rec.id}|${rec.package}`;
+      if (seen.has(key))
+        continue;
+      seen.add(key);
+      findings.push(advisoryFinding(rec, path6.posix.basename(manifest)));
+    }
+  }
+  return { findings, diagnostics };
+}
+var execFileAsync2, DEP_ADVISORY_RULE, DEFAULT_TIMEOUT_MS, DEFAULT_MAX_BUFFER, AUDIT_TOOLS;
+var init_advisories = __esm({
+  "../core/dist/advisories.js"() {
+    "use strict";
+    execFileAsync2 = promisify3(execFile3);
+    DEP_ADVISORY_RULE = {
+      id: "dep-advisory",
+      title: "Dependency with a known security advisory",
+      category: "dependency",
+      // Representative default; each finding carries its own advisory severity.
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      message: "A pinned dependency has a published security advisory (CVE / RUSTSEC / GHSA / PYSEC). Upgrade to a patched version.",
+      remediation: "Upgrade the affected package to the advisory's patched release.",
+      description: "Flags dependencies with a known security advisory, via the ecosystem's own audit tool (cargo audit / pip-audit / npm audit). Opt-in with `qscan --audit`."
+    };
+    DEFAULT_TIMEOUT_MS = 12e4;
+    DEFAULT_MAX_BUFFER = 32 * 1024 * 1024;
+    AUDIT_TOOLS = [
+      {
+        label: "cargo audit",
+        command: "cargo",
+        args: ["audit", "--json"],
+        manifest: (e) => e.includes("Cargo.lock") ? "Cargo.lock" : e.includes("Cargo.toml") ? "Cargo.toml" : null,
+        parse: parseCargoAudit
+      },
+      {
+        label: "pip-audit",
+        command: "pip-audit",
+        args: ["--format", "json"],
+        manifest: (e) => {
+          const req = e.find(isRequirements);
+          if (req)
+            return req;
+          return e.includes("pyproject.toml") ? "pyproject.toml" : null;
+        },
+        parse: parsePipAudit
+      },
+      {
+        label: "npm audit",
+        command: "npm",
+        args: ["audit", "--json"],
+        manifest: (e) => e.includes("package-lock.json") ? "package-lock.json" : null,
+        parse: parseNpmAudit
+      }
+    ];
+  }
+});
+
+// ../core/dist/provenance.js
+import { readFile as readFile5 } from "node:fs/promises";
+import * as path7 from "node:path";
+function normalizeRepoUrl(raw) {
+  let s = raw.trim();
+  if (!s)
+    return null;
+  s = s.replace(/^git\+/, "");
+  const scp = /^[\w.-]+@([\w.-]+):(.+)$/.exec(s);
+  if (scp)
+    s = `https://${scp[1]}/${scp[2]}`;
+  if (s.startsWith("git://"))
+    s = `https://${s.slice("git://".length)}`;
+  if (s.startsWith("ssh://"))
+    s = `https://${s.slice("ssh://".length)}`;
+  const hosted = /^(github|gitlab|bitbucket):(.+)$/.exec(s);
+  if (hosted) {
+    const host = hosted[1] === "github" ? "github.com" : `${hosted[1]}.org`;
+    s = `https://${host}/${hosted[2]}`;
+  }
+  if (/^[\w.-]+\/[\w.-]+$/.test(s))
+    s = `https://github.com/${s}`;
+  if (!/^https?:\/\//i.test(s))
+    return null;
+  return s.replace(/\.git$/, "");
+}
+function repoFromPackageJson(content) {
+  let json;
+  try {
+    json = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (json === null || typeof json !== "object")
+    return null;
+  const repo = json.repository;
+  if (typeof repo === "string")
+    return normalizeRepoUrl(repo);
+  if (repo !== null && typeof repo === "object") {
+    const url = repo.url;
+    if (typeof url === "string")
+      return normalizeRepoUrl(url);
+  }
+  return null;
+}
+function repoFromCargoToml(content) {
+  const m = /^\s*repository\s*=\s*"([^"]+)"/m.exec(content);
+  return m ? normalizeRepoUrl(m[1]) : null;
+}
+function repoFromPyproject(content) {
+  const m = /^\s*(?:repository|source|homepage)\s*=\s*"([^"]+)"/im.exec(content);
+  return m ? normalizeRepoUrl(m[1]) : null;
+}
+async function readManifestRepo(root, read) {
+  for (const file of MANIFESTS) {
+    let content;
+    try {
+      content = await read(path7.join(root, file));
+    } catch {
+      continue;
+    }
+    return { file, url: PARSERS[file](content) };
+  }
+  return null;
+}
+async function checkProvenance(root, opts = {}) {
+  const read = opts.readManifest ?? ((file) => readFile5(file, "utf8"));
+  const findings = [];
+  const diagnostics = [];
+  const manifest = await readManifestRepo(root, read);
+  if (manifest === null)
+    return { findings, diagnostics };
+  if (manifest.url === null) {
+    findings.push({
+      ruleId: "provenance-repo-missing",
+      title: "Package declares no source repository",
+      category: "dependency",
+      severity: "info",
+      confidence: "medium",
+      hndl: false,
+      message: "Package declares no source repository; builds cannot be verified against source.",
+      remediation: "Declare a source repository in the manifest (package.json `repository`, Cargo.toml `repository`, or pyproject.toml `[project.urls]`).",
+      location: { file: path7.posix.basename(manifest.file), line: 1 }
+    });
+    return { findings, diagnostics };
+  }
+  if (!opts.network || !opts.head)
+    return { findings, diagnostics };
+  const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS2;
+  let outcome;
+  try {
+    outcome = await opts.head(manifest.url, timeout);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    diagnostics.push(`provenance: could not verify ${manifest.url} (${message}), skipped`);
+    return { findings, diagnostics };
+  }
+  const unresolved = outcome.kind === "unresolved" || outcome.kind === "status" && (outcome.status === 404 || outcome.status === 410);
+  if (unresolved) {
+    findings.push({
+      ruleId: "provenance-repo-unresolved",
+      title: "Declared source repository does not resolve",
+      category: "dependency",
+      severity: "medium",
+      confidence: "medium",
+      hndl: false,
+      message: `Declared source repository ${manifest.url} does not resolve.`,
+      remediation: "Fix the manifest's repository URL to point at the real, reachable source repository.",
+      location: { file: path7.posix.basename(manifest.file), line: 1 }
+    });
+  } else if (outcome.kind === "error") {
+    diagnostics.push(`provenance: could not verify ${manifest.url} (${outcome.message}), skipped`);
+  }
+  return { findings, diagnostics };
+}
+var DEFAULT_TIMEOUT_MS2, MANIFESTS, PARSERS, PROVENANCE_RULES;
+var init_provenance = __esm({
+  "../core/dist/provenance.js"() {
+    "use strict";
+    DEFAULT_TIMEOUT_MS2 = 5e3;
+    MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml"];
+    PARSERS = {
+      "package.json": repoFromPackageJson,
+      "Cargo.toml": repoFromCargoToml,
+      "pyproject.toml": repoFromPyproject
+    };
+    PROVENANCE_RULES = [
+      {
+        id: "provenance-repo-missing",
+        title: "Package declares no source repository",
+        category: "dependency",
+        severity: "info",
+        confidence: "medium",
+        hndl: false,
+        message: "Package declares no source repository; builds cannot be verified against source.",
+        description: "The root manifest declares no source repository (opt-in with `qscan --audit`)."
+      },
+      {
+        id: "provenance-repo-unresolved",
+        title: "Declared source repository does not resolve",
+        category: "dependency",
+        severity: "medium",
+        confidence: "medium",
+        hndl: false,
+        message: "The declared source repository does not resolve (404 / DNS failure).",
+        description: "The manifest's declared source repository 404s or does not resolve (opt-in with `qscan --audit`)."
+      }
+    ];
   }
 });
 
@@ -11904,6 +12420,8 @@ var init_dist = __esm({
     init_detect_utils();
     init_inventory();
     init_dependencies();
+    init_advisories();
+    init_provenance();
     init_severity();
     init_report();
     init_cbom();
@@ -11921,8 +12439,8 @@ var init_dist = __esm({
 });
 
 // ../agent/dist/validate.js
-function validateAgainstSchema(value, schema, path8 = "$") {
-  const err = (m) => ({ ok: false, error: `${path8} ${m}` });
+function validateAgainstSchema(value, schema, path10 = "$") {
+  const err = (m) => ({ ok: false, error: `${path10} ${m}` });
   const en = schema.enum;
   if (Array.isArray(en) && !en.includes(value)) {
     return err(`must be one of ${JSON.stringify(en)}`);
@@ -11948,7 +12466,7 @@ function validateAgainstSchema(value, schema, path8 = "$") {
     const items = schema.items;
     if (items) {
       for (let i = 0; i < value.length; i++) {
-        const r = validateAgainstSchema(value[i], items, `${path8}[${i}]`);
+        const r = validateAgainstSchema(value[i], items, `${path10}[${i}]`);
         if (!r.ok)
           return r;
       }
@@ -11965,7 +12483,7 @@ function validateAgainstSchema(value, schema, path8 = "$") {
     const props = schema.properties ?? {};
     for (const [k, sub] of Object.entries(props)) {
       if (k in obj) {
-        const r = validateAgainstSchema(obj[k], sub, `${path8}.${k}`);
+        const r = validateAgainstSchema(obj[k], sub, `${path10}.${k}`);
         if (!r.ok)
           return r;
       }
@@ -12177,8 +12695,8 @@ var init_prompt = __esm({
 });
 
 // ../agent/dist/response-cache.js
-import { readFile as readFile5, writeFile as writeFile3, mkdir as mkdir2, rename } from "node:fs/promises";
-import * as path6 from "node:path";
+import { readFile as readFile6, writeFile as writeFile3, mkdir as mkdir2, rename } from "node:fs/promises";
+import * as path8 from "node:path";
 import process2 from "node:process";
 function cacheKey(parts) {
   return `${parts.promptVersion}|${parts.model}|${parts.contextLevel}|${parts.fingerprint}`;
@@ -12186,7 +12704,7 @@ function cacheKey(parts) {
 async function loadResponseCache(cacheFile) {
   let raw;
   try {
-    raw = await readFile5(cacheFile, "utf8");
+    raw = await readFile6(cacheFile, "utf8");
   } catch {
     return /* @__PURE__ */ new Map();
   }
@@ -12204,7 +12722,7 @@ async function loadResponseCache(cacheFile) {
 async function saveResponseCache(cacheFile, entries) {
   const doc = { version: CACHE_VERSION2, entries: Object.fromEntries(entries) };
   try {
-    await mkdir2(path6.dirname(cacheFile), { recursive: true });
+    await mkdir2(path8.dirname(cacheFile), { recursive: true });
     const tmp = `${cacheFile}.tmp-${process2.pid}`;
     await writeFile3(tmp, JSON.stringify(doc), "utf8");
     await rename(tmp, cacheFile);
@@ -12369,7 +12887,7 @@ __export(triage_run_exports, {
   runTriage: () => runTriage
 });
 import { readFile as fsReadFile } from "node:fs/promises";
-import path7 from "node:path";
+import path9 from "node:path";
 import process3 from "node:process";
 function sanitizeRationale(s) {
   const clean = s.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
@@ -12387,11 +12905,11 @@ async function runTriage(result, opts) {
   const targets = result.findings.filter((f) => SEVERITY_RANK2[f.severity] <= floorRank);
   const stderr = opts.stderr ?? ((s) => void process3.stderr.write(s));
   const root = opts.root ?? result.root ?? ".";
-  const readFile8 = opts.readFile ?? ((rel) => fsReadFile(path7.resolve(root, rel), "utf8"));
+  const readFile9 = opts.readFile ?? ((rel) => fsReadFile(path9.resolve(root, rel), "utf8"));
   if (opts.dryRun) {
     const contexts = [];
     for (const f of targets) {
-      const content = level === "metadata" ? "" : await readFile8(f.location.file).catch(() => "");
+      const content = level === "metadata" ? "" : await readFile9(f.location.file).catch(() => "");
       contexts.push(buildContext(f, level, content));
     }
     return {
@@ -12411,7 +12929,7 @@ async function runTriage(result, opts) {
     return agent.triageFindings(findings, {
       client,
       level,
-      readFile: readFile8,
+      readFile: readFile9,
       fingerprint: fingerprintFinding,
       floor: opts.floor,
       cacheFile: opts.cacheFile,
@@ -12472,12 +12990,12 @@ var init_triage_run = __esm({
 
 // src/main.ts
 init_dist();
-import { access, mkdir as mkdir3, readFile as readFile7, writeFile as writeFile4 } from "node:fs/promises";
+import { access, mkdir as mkdir3, readFile as readFile8, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, isAbsolute, resolve as resolve2, sep as sep2 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // ../qscan/dist/index.js
-import { readFile as readFile6, stat as stat4 } from "node:fs/promises";
+import { readFile as readFile7, stat as stat4 } from "node:fs/promises";
 init_dist();
 import process4 from "node:process";
 
@@ -12520,6 +13038,37 @@ function commandSigner(command) {
   };
 }
 
+// ../qscan/dist/provenance-net.js
+import * as http from "node:http";
+import * as https from "node:https";
+var repoHeadRequest = (url, timeoutMs) => new Promise((resolve3) => {
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    resolve3({ kind: "error", message: "invalid URL" });
+    return;
+  }
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    resolve3({ kind: "error", message: `unsupported protocol ${target.protocol}` });
+    return;
+  }
+  const mod = target.protocol === "http:" ? http : https;
+  const req = mod.request(target, { method: "HEAD", timeout: timeoutMs, headers: { "user-agent": "qscan-provenance" } }, (res) => {
+    res.resume();
+    resolve3({ kind: "status", status: res.statusCode ?? 0 });
+  });
+  req.on("timeout", () => req.destroy(new Error("request timed out")));
+  req.on("error", (err) => {
+    if (err.code === "ENOTFOUND" || err.code === "EAI_FAIL") {
+      resolve3({ kind: "unresolved" });
+    } else {
+      resolve3({ kind: "error", message: err.message });
+    }
+  });
+  req.end();
+});
+
 // ../qscan/dist/baseline.js
 init_dist();
 function applyBaseline2(findings, baseline) {
@@ -12527,22 +13076,22 @@ function applyBaseline2(findings, baseline) {
   const { newFindings, suppressed } = applyBaseline(findings, resolved);
   return { kept: newFindings, suppressed };
 }
-async function readBaseline(path8) {
-  const { readFile: readFile8 } = await import("node:fs/promises");
+async function readBaseline(path10) {
+  const { readFile: readFile9 } = await import("node:fs/promises");
   let raw;
   try {
-    raw = await readFile8(path8, "utf8");
+    raw = await readFile9(path10, "utf8");
   } catch (cause) {
-    throw new Error(`could not read baseline file "${path8}": ${errMessage(cause)}`);
+    throw new Error(`could not read baseline file "${path10}": ${errMessage(cause)}`);
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    throw new Error(`baseline file "${path8}" is not valid JSON: ${errMessage(cause)}`);
+    throw new Error(`baseline file "${path10}" is not valid JSON: ${errMessage(cause)}`);
   }
   if (!isBaselineFile(parsed)) {
-    throw new Error(`baseline file "${path8}" is missing a string "fingerprints" array`);
+    throw new Error(`baseline file "${path10}" is missing a string "fingerprints" array`);
   }
   return new Set(parsed.fingerprints);
 }
@@ -12579,6 +13128,7 @@ function defaultOptions() {
     triage: false,
     dryRun: false,
     hndl: false,
+    audit: false,
     mandates: [],
     failNow: false
   };
@@ -12611,7 +13161,12 @@ function renderJson(result, opts) {
   return JSON.stringify(toJson(result, opts), null, 2);
 }
 function renderSarif(result, opts) {
-  const catalog = [...defaultRegistry.ruleCatalog(), DEP_VULNERABLE_RULE];
+  const catalog = [
+    ...defaultRegistry.ruleCatalog(),
+    DEP_VULNERABLE_RULE,
+    DEP_ADVISORY_RULE,
+    ...PROVENANCE_RULES
+  ];
   return JSON.stringify(toSarif(result, { catalog, ...opts }), null, 2);
 }
 function renderCbom(result, extra = []) {
@@ -12767,10 +13322,10 @@ function severityColor(severity, c) {
 init_dist();
 
 // ../qscan/dist/remediate-cli.js
-import { execFile as execFile3 } from "node:child_process";
-import { promisify as promisify3 } from "node:util";
+import { execFile as execFile4 } from "node:child_process";
+import { promisify as promisify4 } from "node:util";
 init_dist();
-var exec2 = promisify3(execFile3);
+var exec2 = promisify4(execFile4);
 var DEFAULT_MAX_LLM = 25;
 var REMEDIATE_HELP = `qremediate \u2014 apply verified codemod fixes (and, with --llm, crypto-verified LLM proposals) for insecure crypto findings
 
@@ -12844,12 +13399,26 @@ async function runQscan(opts, hooks = {}) {
     scanOptions.files = await resolveChanged(options.path, options.since);
   }
   const result = await scanFn(scanOptions);
+  let auditDiagnostics;
+  if (options.audit) {
+    const [advisories, provenance] = await Promise.all([
+      scanAdvisories(options.path),
+      checkProvenance(options.path, { network: true, head: repoHeadRequest })
+    ]);
+    const extra = [...advisories.findings, ...provenance.findings];
+    if (extra.length > 0) {
+      result.findings = [...result.findings, ...extra].sort(compareFindings);
+      result.inventory = buildInventory(result.findings);
+    }
+    auditDiagnostics = [...advisories.diagnostics, ...provenance.diagnostics];
+  }
   if (options.writeBaseline) {
     const baseline = await saveBaseline(options.writeBaseline, result.findings);
     return {
       result,
       suppressed: [],
       baselineWritten: baseline,
+      ...auditDiagnostics ? { auditDiagnostics } : {},
       exitCode: EXIT.OK
     };
   }
@@ -12862,7 +13431,7 @@ async function runQscan(opts, hooks = {}) {
   }
   let policy;
   if (options.policy) {
-    policy = parseCryptoPolicy(JSON.parse(await readFile6(options.policy, "utf8")));
+    policy = parseCryptoPolicy(JSON.parse(await readFile7(options.policy, "utf8")));
   }
   let exitCode = result.findings.some((f) => meetsThreshold(f.severity, options.severityThreshold)) ? EXIT.FINDINGS : EXIT.OK;
   let mandateEval;
@@ -12890,7 +13459,13 @@ async function runQscan(opts, hooks = {}) {
       triageFn: hooks.triageFn
     });
     if (triaged.preflight !== void 0) {
-      return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };
+      return {
+        result,
+        suppressed,
+        report: triaged.preflight,
+        ...auditDiagnostics ? { auditDiagnostics } : {},
+        exitCode: EXIT.OK
+      };
     }
   }
   if (options.mergeCboms && options.mergeCboms.length > 0 && options.format !== "cbom") {
@@ -12909,22 +13484,22 @@ async function runQscan(opts, hooks = {}) {
   let mergeCbomsData;
   if (options.format === "cbom" && options.mergeCboms && options.mergeCboms.length > 0) {
     mergeCbomsData = [];
-    for (const path8 of options.mergeCboms) {
+    for (const path10 of options.mergeCboms) {
       let text;
       try {
-        text = await readFile6(path8, "utf8");
+        text = await readFile7(path10, "utf8");
       } catch {
-        throw new Error(`--merge: cannot read CBOM file "${path8}"`);
+        throw new Error(`--merge: cannot read CBOM file "${path10}"`);
       }
       let parsed;
       try {
         parsed = JSON.parse(text);
       } catch {
-        throw new Error(`--merge: "${path8}" is not valid JSON`);
+        throw new Error(`--merge: "${path10}" is not valid JSON`);
       }
       const bom = parsed;
       if (bom?.bomFormat !== "CycloneDX") {
-        throw new Error(`--merge: "${path8}" is not a CycloneDX CBOM (missing bomFormat)`);
+        throw new Error(`--merge: "${path10}" is not a CycloneDX CBOM (missing bomFormat)`);
       }
       mergeCbomsData.push(bom);
     }
@@ -12949,7 +13524,13 @@ async function runQscan(opts, hooks = {}) {
   if (mandateEval && options.format === "human") {
     report += "\n" + renderMandateBlock(mandateEval);
   }
-  return { result, suppressed, report, exitCode };
+  return {
+    result,
+    suppressed,
+    report,
+    ...auditDiagnostics ? { auditDiagnostics } : {},
+    exitCode
+  };
 }
 function renderMandateBlock(ev) {
   const lines = [];
@@ -13323,7 +13904,7 @@ async function readPullRequestContext(env = process.env) {
     if (!repository || !eventPath) return void 0;
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) return void 0;
-    const payload = JSON.parse(await readFile7(eventPath, "utf8"));
+    const payload = JSON.parse(await readFile8(eventPath, "utf8"));
     const prNumber = payload.pull_request?.number ?? payload.number;
     if (typeof prNumber !== "number") return void 0;
     const apiUrl = env["GITHUB_API_URL"] || "https://api.github.com";
