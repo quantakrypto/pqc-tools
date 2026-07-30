@@ -137,6 +137,18 @@ export { buildInventory } from "./inventory.js";
 // (which don't come from a Detector, so aren't in the registry's rule catalog).
 export { vulnerableDependencies, DEP_VULNERABLE_RULE, isManifestFile } from "./dependencies.js";
 
+// Dependency-advisory scanning (opt-in via `qscan --audit`): shells out to each
+// ecosystem's own audit tool. `DEP_ADVISORY_RULE` is the generic SARIF catalog
+// entry (advisory findings don't come from a Detector).
+export { scanAdvisories, DEP_ADVISORY_RULE } from "./advisories.js";
+export type { ScanAdvisoriesOptions, ExecFn } from "./advisories.js";
+
+// Provenance / declared-source-repository check (opt-in via `qscan --audit`). The
+// network HEAD request is INJECTED by the (networked) caller so core stays
+// offline (ADR-0005). `PROVENANCE_RULES` are its generic SARIF catalog entries.
+export { checkProvenance, normalizeRepoUrl, PROVENANCE_RULES } from "./provenance.js";
+export type { ProvenanceOptions, RepoHeadRequester, RepoHeadOutcome } from "./provenance.js";
+
 // Severity utilities (ordering, threshold, SARIF level) — shared across tools.
 export { SEVERITY_ORDER, severityRank, meetsThreshold, sarifLevel } from "./severity.js";
 

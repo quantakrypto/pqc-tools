@@ -14,8 +14,10 @@
 import {
   ANALYZABLE_LANGUAGES_LABEL,
   defaultRegistry,
+  DEP_ADVISORY_RULE,
   DEP_VULNERABLE_RULE,
   formatProfileGuidance,
+  PROVENANCE_RULES,
   getStandardsProfile,
   PQC_TRANSITION_NOTE,
   SEVERITY_ORDER,
@@ -97,7 +99,16 @@ export function renderSarif(result: ScanResult, opts?: ReportOptions): string {
   // the manifest scanner, so add its generic entry — otherwise SARIF would build
   // that rule from the first dependency finding and leak one package's specifics
   // into the shared rule description.
-  const catalog = [...defaultRegistry.ruleCatalog(), DEP_VULNERABLE_RULE];
+  // `dep-advisory` (from `--audit`'s advisory scan) and the two `provenance-*`
+  // rules likewise come from scanners rather than Detectors, so add their generic
+  // catalog entries too — otherwise SARIF would synthesise each from the first
+  // finding and leak one advisory's specifics into the shared rule description.
+  const catalog = [
+    ...defaultRegistry.ruleCatalog(),
+    DEP_VULNERABLE_RULE,
+    DEP_ADVISORY_RULE,
+    ...PROVENANCE_RULES,
+  ];
   return JSON.stringify(toSarif(result, { catalog, ...opts }), null, 2);
 }
 

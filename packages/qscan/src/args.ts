@@ -162,6 +162,14 @@ export interface QscanOptions {
    */
   noConfigFile: boolean;
   /**
+   * Run opt-in supply-chain audit checks (`--audit`): shell out to each present
+   * ecosystem's advisory tool (cargo audit / pip-audit / npm audit) for known-
+   * vulnerable pinned dependencies, and verify the declared source repository
+   * resolves (provenance). Findings merge into the report + exit code; a missing
+   * tool or network hiccup degrades to a diagnostic, never a failure.
+   */
+  audit: boolean;
+  /**
    * Compute + emit HNDL (harvest-now-decrypt-later) exposure (`--hndl`). Reads
    * `hndl.yml` at the scan root, scores each finding + a repo summary, and adds
    * the exposure fields to the JSON / SARIF report. Additive: never changes the
@@ -268,6 +276,7 @@ export function defaultOptions(): QscanOptions {
     triage: false,
     dryRun: false,
     hndl: false,
+    audit: false,
     mandates: [],
     failNow: false,
   };
@@ -574,6 +583,10 @@ function parseRunArgs(argv: readonly string[]): ParsedArgs {
       case "--hndl":
         rejectInlineValue();
         options.hndl = true;
+        break;
+      case "--audit":
+        rejectInlineValue();
+        options.audit = true;
         break;
 
       // Crypto-agility manifest controls (see `crypto-agility emit`).

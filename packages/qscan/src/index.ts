@@ -16,8 +16,11 @@ import process from "node:process";
 
 import {
   buildCryptoAgilityManifest,
+  buildInventory,
   buildReadinessReport,
   changedFiles,
+  checkProvenance,
+  compareFindings,
   computeHndl,
   findingScope,
   HNDL_FILENAME,
@@ -28,6 +31,7 @@ import {
   assertKnownMandates,
   scaffoldHndlYaml,
   scan,
+  scanAdvisories,
   scanParallel,
   signReadinessReport,
   validateCryptoAgilityManifest,
@@ -47,6 +51,7 @@ import type {
 } from "@quantakrypto/core";
 import type { MandateEvaluation } from "@quantakrypto/core";
 import { commandSigner } from "./sign.js";
+import { repoHeadRequest } from "./provenance-net.js";
 
 import { applyBaseline, readBaseline, saveBaseline } from "./baseline.js";
 import { defaultOptions, meetsThreshold } from "./args.js";
@@ -117,6 +122,11 @@ export interface QscanRun {
   report?: string;
   /** The baseline that was written, when `writeBaseline` was requested. */
   baselineWritten?: Baseline;
+  /**
+   * Non-fatal diagnostics from the `--audit` checks (a skipped tool, a network
+   * hiccup). Present only when `--audit` ran; the CLI surfaces them on stderr.
+   */
+  auditDiagnostics?: string[];
   /** Suggested process exit code. */
   exitCode: number;
 }
@@ -218,6 +228,27 @@ export async function runQscan(
 
   const result = await scanFn(scanOptions);
 
+  // --audit: opt-in supply-chain checks. Shell out to each present ecosystem's
+  // advisory tool and verify the declared source repository resolves. Findings
+  // merge into the result (so they count toward the report AND the exit code);
+  // the inventory is rebuilt so the summary counts stay consistent. Both checks
+  // degrade to diagnostics — never throw — so an offline run or a missing tool
+  // can't fail the scan. The provenance HEAD request is injected (the networked
+  // half lives in qScan; core stays offline per ADR-0005).
+  let auditDiagnostics: string[] | undefined;
+  if (options.audit) {
+    const [advisories, provenance] = await Promise.all([
+      scanAdvisories(options.path),
+      checkProvenance(options.path, { network: true, head: repoHeadRequest }),
+    ]);
+    const extra = [...advisories.findings, ...provenance.findings];
+    if (extra.length > 0) {
+      result.findings = [...result.findings, ...extra].sort(compareFindings);
+      result.inventory = buildInventory(result.findings);
+    }
+    auditDiagnostics = [...advisories.diagnostics, ...provenance.diagnostics];
+  }
+
   // --write-baseline: snapshot every finding, persist, and exit cleanly.
   if (options.writeBaseline) {
     const baseline = await saveBaseline(options.writeBaseline, result.findings);
@@ -225,6 +256,7 @@ export async function runQscan(
       result,
       suppressed: [],
       baselineWritten: baseline,
+      ...(auditDiagnostics ? { auditDiagnostics } : {}),
       exitCode: EXIT.OK,
     };
   }
@@ -292,7 +324,13 @@ export async function runQscan(
       triageFn: hooks.triageFn,
     });
     if (triaged.preflight !== undefined) {
-      return { result, suppressed, report: triaged.preflight, exitCode: EXIT.OK };
+      return {
+        result,
+        suppressed,
+        report: triaged.preflight,
+        ...(auditDiagnostics ? { auditDiagnostics } : {}),
+        exitCode: EXIT.OK,
+      };
     }
   }
 
@@ -377,7 +415,13 @@ export async function runQscan(
     report += "\n" + renderMandateBlock(mandateEval);
   }
 
-  return { result, suppressed, report, exitCode };
+  return {
+    result,
+    suppressed,
+    report,
+    ...(auditDiagnostics ? { auditDiagnostics } : {}),
+    exitCode,
+  };
 }
 
 /** A concise human compliance block appended to the default report for `--mandate`. */

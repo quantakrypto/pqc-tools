@@ -137,6 +137,8 @@ drives the source/config scope toggles from the detector's **declared `scope`**
 | `tls-config` | config | `minVersion/secureProtocol: 'TLSv1'/'TLSv1.1'`, `rejectUnauthorized: false`, weak ciphers (RC4/DES/3DES/MD5/NULL/EXPORT) |
 | `pem-material` | config | PEM keys/certs in any file: `RSA/EC/DSA/PKCS#8/OPENSSH/PGP PRIVATE KEY`, `PGP MESSAGE`, `CERTIFICATE` |
 | `ssh-cert` | config | SSH public keys (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`) and X.509 certificate signature algorithms (`sha256WithRSAEncryption`, `ecdsa-with-SHA256`, …) |
+| `weak-hash-signature` | config | SHA-1/MD5 in a digital-signature or X.509 certificate algorithm (`SHA1withRSA`, `sha1WithRSAEncryption` + OID, `openssl -sha1` in a cert/sign command) |
+| `pqc-parameter` | config | Post-quantum KEM parameter checks: pre-standard round-3 Kyber claimed as FIPS 203 ML-KEM (`pqc-prestandard-kem`), and an ML-KEM/Kyber byte size that names a different parameter set than the code advertises (`pqc-parameter-mismatch`) |
 
 The rows above cover JavaScript/TypeScript plus the language-agnostic PEM/SSH/TLS
 surfaces. Thirteen further **language packs** apply the same RSA/EC/DSA/DH/Ed25519
@@ -220,6 +222,26 @@ and lockfiles — `package.json` / `package-lock.json` / `yarn.lock` /
 `go.mod`, `pom.xml` / `build.gradle`, `Gemfile` / `*.gemspec`, `*.csproj` /
 `packages.config` / `directory.packages.props` — and emits
 `category: "dependency"` findings located at the manifest.
+
+### `scanAdvisories(root, opts?)` / `checkProvenance(root, opts?)` (opt-in, `qscan --audit`)
+
+Two supply-chain helpers layered on top of the crypto scan (opt-in because they
+shell out or make a network request):
+
+- **`scanAdvisories(root, opts?): Promise<{ findings; diagnostics }>`** — shells
+  out (`execFile`, bounded timeout + buffer, in a try/catch — the blessed
+  `changed.ts` pattern) to each present ecosystem's own audit tool
+  (`cargo audit --json`, `pip-audit --format json`, `npm audit --json`) and turns
+  its advisories into `dep-advisory` (`category: "dependency"`) findings. A
+  missing tool (`ENOENT`) or any error degrades to a diagnostic string, never
+  throws. `DEP_ADVISORY_RULE` is the generic SARIF catalog entry.
+- **`checkProvenance(root, opts?): Promise<{ findings; diagnostics }>`** — reads
+  the root manifest's declared repository (`package.json` / `Cargo.toml` /
+  `pyproject.toml`). No repository → `provenance-repo-missing` (info). With
+  `opts.network` **and** an injected `head` requester, a declared URL that 404s or
+  does not resolve → `provenance-repo-unresolved` (medium). Core stays offline
+  (ADR-0005): the actual `node:https` HEAD request is **injected** by the caller
+  (qScan). `PROVENANCE_RULES` are the generic SARIF catalog entries.
 
 ### `buildInventory(findings: Finding[]): CryptoInventory`
 
