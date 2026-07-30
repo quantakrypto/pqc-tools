@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` - 199 exported symbols.
+Public entry: `packages/core/src/index.ts` - 209 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `DEFAULT_PROFILE_ID` | const | The default profile id when `--profile` is not given. |
 | `DEFAULT_QUANTUM_THREAT_YEARS` | const | Default years until a cryptographically-relevant quantum computer is assumed |
 | `DEFAULT_UNBOUND_CLASSIFICATION` | const | Classification assumed for findings that bind to no declared asset. |
+| `DEP_ADVISORY_RULE` | const | Generic catalog entry for the `dep-advisory` rule. The per-advisory specifics |
 | `DEP_VULNERABLE_RULE` | const | Catalog entry for the `dep-vulnerable` rule. Dependency findings are produced |
 | `DataClassification` | type | Data sensitivity classes, least → most sensitive. Vocabulary aligned with the |
 | `DependencyEcosystem` | type | Package ecosystems the dependency scanner understands. |
@@ -60,6 +61,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `DetectorScope` | type | Which logical scope a detector belongs to. Drives the source/config scope |
 | `EvidenceFinding` | interface | Stable per-finding record for the evidence body (deterministic per commit). |
 | `EvidenceSigner` | interface | An EXTERNAL signer/timestamper the tool orchestrates. Per ADR-0004 the tool |
+| `ExecFn` | type | Shape of an injectable command runner and of the errors it may reject with. |
 | `ExposureRationale` | interface | Full, auditable breakdown of one finding's exposure score. |
 | `FIX_REQUEST_SCHEMA` | const | JSON Schema every fix proposal must satisfy. |
 | `Finding` | interface | A single detected concern. |
@@ -93,6 +95,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `OpenVexStatement` | interface | A single OpenVEX statement: one synthetic vulnerability over its affected products. |
 | `PQC_STANDARDS` | const | The current snapshot. Update on each quarterly review; the drift test keeps the |
 | `PQC_TRANSITION_NOTE` | const | Forward-looking PQC standards worth tracking beyond the current FIPS 203/204/205 |
+| `PROVENANCE_RULES` | const | The two rule ids this module can emit, for SARIF catalog registration. |
 | `ParallelScanOptions` | interface | Extra options for {@link scanParallel}, layered onto {@link ScanOptions}. |
 | `Patch` | interface | A concrete proposed edit: the full new content for a single file. |
 | `PolicyContext` | interface | Files a remediation may write to. |
@@ -101,6 +104,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `PolicyMapping` | interface | The `policyMapping` block added to the evidence report. |
 | `PolicyVerdict` | type | The three verdicts a finding can carry against a policy. |
 | `PqcStandards` | interface | The full post-quantum standards snapshot the tool tracks. |
+| `ProvenanceOptions` | interface | Options for {@link checkProvenance}. |
 | `QuantakryptoFileConfig` | interface | The slice of options a `quantakrypto.config.json` can set. A subset of |
 | `REMEDIATE_RUBRIC` | const | The system rubric for a fix proposal. |
 | `ReadinessReport` | interface |  |
@@ -111,6 +115,8 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `RemediateRequest` | interface | A remediation request bundle for the host agent. |
 | `Remediation` | interface | A remediation recommendation for a classical algorithm. |
 | `RemediationResult` | interface |  |
+| `RepoHeadOutcome` | type | Outcome of a HEAD request to a declared repository URL. |
+| `RepoHeadRequester` | type | Injected HEAD requester. Implemented by the (networked) caller — qScan supplies |
 | `ReportFormat` | type | Output formats qScan / reporters can emit. |
 | `ReportOptions` | interface | Options shared by the structured reporters ({@link toSarif} / {@link toJson}). |
 | `RuleMeta` | interface | Declarative metadata for a single rule a detector can emit. This is the |
@@ -119,6 +125,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `STANDARDS_PROFILES` | const | Built-in regime profiles. Facts reflect each authority's published PQC-transition |
 | `STATEFUL_HBS_NOTE` | const | Guidance for stateful hash-based signatures (SP 800-208: LMS / XMSS / HSS). |
 | `SarifLog` | interface | Minimal SARIF 2.1.0 log shape (kept permissive on purpose). |
+| `ScanAdvisoriesOptions` | interface | Options for {@link scanAdvisories}. |
 | `ScanChunk` | interface | One unit of work dispatched to a worker. |
 | `ScanDiagnostics` | interface | Non-fatal things that happened during a scan that reduce coverage. Surfaced so |
 | `ScanOptions` | interface | Options controlling a scan. |
@@ -154,6 +161,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `buildTriageRequest` | function | Build a triage request bundle for a set of findings. Offline: for non-metadata |
 | `changedFiles` | function | Return the list of changed files (relative POSIX paths) under `root`. |
 | `checkPatchPolicy` | function | Decide whether `patch` may be applied under `ctx`. |
+| `checkProvenance` | function | Check a project's declared-source-repository provenance. |
 | `codemodFor` | function | The first codemod that applies to `finding`, or undefined. |
 | `codemodRegistry` | const | All registered codemods, in priority order. |
 | `compareFindings` | function | Stable comparator: by file, then line, then ruleId. Exported for reuse. |
@@ -186,6 +194,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `meetsThreshold` | function | True when `severity` is at or above `threshold` (i.e. at least as severe). |
 | `mergeCboms` | function | Merge CBOMs into one. Components with the same `bom-ref` (same algorithm + |
 | `moscaFactor` | function | M - the Mosca factor (0..1). `X` is the data's protection horizon |
+| `normalizeRepoUrl` | function | Normalize a declared repository reference to an https(s) URL, or null when it |
 | `parseCryptoPolicy` | function | Validate + normalize a parsed policy object (from an operator's JSON file). |
 | `parseHndlMap` | function | Validate a parsed `hndl.yml` object into a typed {@link HndlMap}. Applies |
 | `remediateFindings` | function | Run each finding through patchSource → policy → verify, collecting the patches |
@@ -197,6 +206,7 @@ Public entry: `packages/core/src/index.ts` - 199 exported symbols.
 | `saveBaseline` | function | Write a baseline derived from the given findings to disk as pretty JSON |
 | `scaffoldHndlYaml` | function | Scaffold an `hndl.yml` document seeded from a scan's findings. Config-scope, |
 | `scan` | function | Recursively scan a directory (or single file, or explicit file list) for |
+| `scanAdvisories` | function | Scan `root` for dependency security advisories by shelling out to each present |
 | `scanParallel` | function | Scan in parallel across a worker-thread pool, falling back to the in-process |
 | `severityRank` | function | Rank of a severity within {@link SEVERITY_ORDER} (0 = most severe). Lower |
 | `signReadinessReport` | function | Fill a readiness report's attestation with a detached signature and/or RFC-3161 |

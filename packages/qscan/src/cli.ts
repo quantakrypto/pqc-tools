@@ -225,6 +225,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write(`qscan: suppressed ${run.suppressed.length} finding(s) via baseline\n`);
   }
 
+  if (!options.quiet && run.auditDiagnostics) {
+    for (const d of run.auditDiagnostics) {
+      process.stderr.write(`qscan: audit: ${d}\n`);
+    }
+  }
+
   return run.exitCode;
 }
 

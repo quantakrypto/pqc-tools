@@ -44,6 +44,7 @@ import { proxyDetector } from "./detectors/proxy.js";
 import { webauthnDetector } from "./detectors/webauthn.js";
 import { codesignDetector } from "./detectors/codesign.js";
 import { weakHashDetector } from "./detectors/weak-hash.js";
+import { pqcParameterDetector } from "./detectors/pqc-parameter.js";
 import { cloudformationDetector } from "./detectors/cloudformation.js";
 import { bicepDetector } from "./detectors/bicep.js";
 import { pulumiDetector } from "./detectors/pulumi.js";
@@ -194,6 +195,7 @@ export const builtinDetectors: Detector[] = [
   webauthnDetector,
   codesignDetector,
   weakHashDetector,
+  pqcParameterDetector,
   cloudformationDetector,
   bicepDetector,
   pulumiDetector,

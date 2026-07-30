@@ -6,6 +6,56 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-31
+
+### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)
+
+Three new supply-chain capabilities. SemVer: **minor** (additive API + CLI
+surface; the `Finding` / category / severity contract and every existing report
+format and exit code are unchanged). The `Finding.category` reuses the existing
+`dependency` (advisories, provenance) and `kem` (PQC parameter) categories - no
+new public type.
+
+- **Dependency-advisory scanning** (opt-in via `--audit`). New
+  `@quantakrypto/core` `scanAdvisories(root, opts)` shells out - `execFile`, a
+  timeout, a bounded `maxBuffer`, all in a try/catch (the blessed `changed.ts`
+  pattern) - to each present ecosystem's own audit tool: `Cargo.toml`/`Cargo.lock`
+  → `cargo audit --json`, `requirements*.txt`/`pyproject.toml` →
+  `pip-audit --format json`, `package-lock.json` → `npm audit --json`. Advisories
+  become `dep-advisory` (`category: "dependency"`) findings - severity from the
+  advisory, message `<pkg>@<ver>: <summary> (<ID>)`, remediation = the patched
+  version, located at the manifest. A missing tool (`ENOENT`) or any error
+  degrades to a diagnostic (`cargo audit not available, skipped`), never a
+  failure. Complements the built-in quantum-vulnerable-dependency database
+  (package *purpose*) with **known-CVE** coverage. `DEP_ADVISORY_RULE` is the
+  generic SARIF catalog entry (merged in like `DEP_VULNERABLE_RULE`).
+- **PQC parameter / size verification** - a new **default** detector
+  (`pqc-parameter`, config scope) that inspects code which has already reached for
+  a post-quantum KEM: `pqc-prestandard-kem` (medium) flags pre-standard round-3
+  CRYSTALS-Kyber (`pqc_kyber`, `pqcrypto-kyber`, `Kyber768`, the reference
+  `crypto_kem_kyber768_*` API, …) claimed as FIPS 203 ML-KEM, with confidence
+  **raised** when a FIPS-203/ML-KEM/NIST claim sits in the same file;
+  `pqc-parameter-mismatch` (medium, deliberately conservative, low confidence)
+  fires only when a distinctive ML-KEM/Kyber byte size (pk/sk/ct) names one
+  parameter set while the code advertises a different one (e.g. `1184` present but
+  the code says `ML-KEM-1024`). Both are `category: "kem"`, `hndl: false`. Full
+  positive/negative/gating tests.
+- **Provenance / declared source repository.** New `@quantakrypto/core`
+  `checkProvenance(root, opts)` reads the root manifest's repository URL
+  (`package.json` `repository`, `Cargo.toml` `repository`, `pyproject.toml`
+  `[project.urls]`). No repository declared → `provenance-repo-missing` (info,
+  "builds cannot be verified against source"); under `--audit`, a declared URL
+  that 404s / does not resolve → `provenance-repo-unresolved` (medium). Per
+  **ADR-0005** core stays offline: the `node:https` HEAD request is **injected**
+  by qScan (the networked plane), so the core module imports no outbound network
+  module. `PROVENANCE_RULES` are the generic SARIF catalog entries.
+- **`@quantakrypto/qscan`**: the new `--audit` flag wires the advisory + provenance
+  checks into `runQscan` - findings merge into the report and the inventory is
+  rebuilt so counts stay consistent, and they **count toward the exit code** (a
+  known-vulnerable dependency can gate CI). Diagnostics surface on stderr
+  (`qscan: audit: …`). New public API: `scanAdvisories`, `DEP_ADVISORY_RULE`,
+  `checkProvenance`, `normalizeRepoUrl`, `PROVENANCE_RULES`, and their types.
+
 ### Added - compliance mandate gate (`qscan --mandate`, deadline-aware policy-as-code)
 
 Enforceable, dated compliance mandates: the two PQC regimes that carry hard

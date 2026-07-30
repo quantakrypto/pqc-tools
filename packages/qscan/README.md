@@ -80,6 +80,7 @@ qscan [path] [options]
 | `--since <git-ref>` | With `--changed`, diff against `<git-ref>` (implies `--changed`). | working tree |
 | `--parallel` | Scan using a worker-thread pool when the workload is large enough. | off |
 | `--concurrency <n>` | Worker count for `--parallel` (implies `--parallel`). `0`/`1` forces serial. | CPU count |
+| `--audit` | Opt-in supply-chain checks (see below): dependency advisories via each ecosystem's own audit tool, plus a declared-source-repository (provenance) check. Findings merge into the report and the exit code; a missing tool or network hiccup degrades to a stderr diagnostic. | off |
 | `--triage` | BYOK LLM pass that re-ranks findings by real exposure and explains them. Never suppresses; never changes the exit code. Needs an API key. | off |
 | `--triage-floor <level>` | With `--triage`, only triage findings at/above this level. | `medium` |
 | `--context <level>` | How much source is shared with the LLM: `metadata`, `snippet`, `function`, `file` (secrets always redacted). | `snippet` |
@@ -196,6 +197,52 @@ stays serial for small inputs, so `--parallel` is safe to leave on:
 qscan . --parallel               # auto worker count (CPU cores)
 qscan . --concurrency 4          # pin the worker count (implies --parallel)
 ```
+
+## Supply-chain audit (`--audit`, opt-in)
+
+`--audit` layers three supply-chain checks on top of the normal scan. It is
+**opt-in** because two of them shell out (dependency advisories) or make a network
+request (provenance); a default `qscan .` stays offline. Every check **degrades
+gracefully** — a missing tool, an unparseable output, or a network hiccup becomes
+a `qscan: audit: …` diagnostic on stderr, never a hard failure. Any findings it
+does produce merge into the report **and the exit code**, so a known-vulnerable
+dependency can gate CI.
+
+```bash
+qscan . --audit                       # add advisory + provenance checks
+qscan . --audit --format sarif -o qscan.sarif
+```
+
+1. **Dependency advisories.** For each ecosystem present at the scan root, qScan
+   runs that ecosystem's own audit tool and turns its advisories into
+   `dependency` findings (`ruleId: dep-advisory`, severity from the advisory,
+   `<pkg>@<ver>: <summary> (<ID>)`, remediation = the patched version):
+   - Rust — `Cargo.toml` / `Cargo.lock` → `cargo audit --json`
+   - Python — `requirements*.txt` / `pyproject.toml` → `pip-audit --format json`
+   - npm — `package-lock.json` → `npm audit --json`
+
+   The tool must be on `PATH`; if it is not, that ecosystem is skipped with a
+   diagnostic (`cargo audit not available, skipped`). This complements the
+   built-in **quantum-vulnerable-dependency** database (which flags packages whose
+   *purpose* is classical public-key crypto) with **known-CVE** coverage.
+
+2. **PQC parameter / size verification** *(a default detector, always on — not
+   gated behind `--audit`)*. Flags code that has already reached for a
+   post-quantum KEM but got it subtly wrong: a **pre-standard round-3 Kyber**
+   (`pqc_kyber`, `pqcrypto-kyber`, `Kyber768`, …) used where FIPS 203 ML-KEM is
+   intended (`pqc-prestandard-kem`, confidence raised when a FIPS-203/ML-KEM/NIST
+   claim is in the same file), and an **ML-KEM/Kyber byte size that names a
+   different parameter set** than the code advertises (`pqc-parameter-mismatch`,
+   conservative — fires only on an exact size against a conflicting advertised
+   level).
+
+3. **Provenance / declared source repository.** Reads the root manifest's
+   repository URL (`package.json` `repository`, `Cargo.toml` `repository`,
+   `pyproject.toml` `[project.urls]`). A manifest that declares **no** repository
+   yields an info finding (`provenance-repo-missing`); with `--audit`, a declared
+   URL that **404s or does not resolve** yields `provenance-repo-unresolved`
+   (medium). The HEAD request is the only network call qScan itself makes;
+   transient network errors are skipped silently.
 
 ## CBOM (CycloneDX)
 

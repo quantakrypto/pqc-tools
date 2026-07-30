@@ -95,6 +95,16 @@ OPTIONS
                                 inequality). Adds exposure fields to json/sarif;
                                 additive, never changes the exit code. Scaffold
                                 the map with "qscan hndl init". See docs/HNDL.md
+  --audit                       Opt-in supply-chain audit: run each present
+                                ecosystem's advisory tool (cargo audit / pip-audit
+                                / npm audit) for known-vulnerable pinned
+                                dependencies, and verify the declared source
+                                repository resolves (provenance). Findings merge
+                                into the report and the exit code. A missing tool
+                                or a network hiccup degrades to a diagnostic on
+                                stderr, never a failure. Requires the ecosystem's
+                                audit tool on PATH; the provenance HEAD request is
+                                the only network call qScan itself makes
   --crypto-agility              Emit a crypto-agility posture manifest instead of a
                                 scan report (equivalent to "crypto-agility emit";
                                 always exits 0). A well-known-URL JSON document any
@@ -137,6 +147,7 @@ EXAMPLES
   qscan . --cbom -o qscan-cbom.json
   qscan hndl init               Scaffold hndl.yml seeded with detected assets
   qscan . --hndl --format json  Emit per-finding HNDL exposure + a repo summary
+  qscan . --audit               Add dependency-advisory + provenance checks
   qscan . --crypto-agility -o .well-known/crypto-agility.json
   qscan crypto-agility validate .well-known/crypto-agility.json
 `;
