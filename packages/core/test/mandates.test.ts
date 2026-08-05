@@ -202,10 +202,37 @@ describe("evaluateMandates + org policy composition", () => {
     assert.equal(prohibited.findings[0].policyVerdict, "violation");
   });
 
-  it("tallies acknowledgement per row (one prohibited finding × two mandates)", () => {
+  it("does not acknowledge a family the policy also PROHIBITS (prohibited wins)", () => {
+    // A plausible merge of two policy fragments lists RSA in both lists. The
+    // verdict must resolve to violation AND not be acknowledged — otherwise the
+    // row is self-contradictory (verdict violation, yet exempt from the gate).
+    const overlap: CryptoPolicy = { name: "org", prohibited: ["RSA"], permitted: ["RSA"] };
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, overlap);
+    assert.equal(ev.findings[0].policyVerdict, "violation");
+    assert.equal(ev.findings[0].acknowledged, false);
+    assert.equal(ev.acknowledged, 0);
+    assert.equal(mandateGateFails(ev, { failNow: true }), true, "still trips --fail-now");
+  });
+
+  it("does not acknowledge an unlisted family under a permissive defaultVerdict", () => {
+    // defaultVerdict:"conformant" yields a non-violation policyVerdict, but silence
+    // is not consent: the family is not explicitly managed, so it is NOT exempt.
+    const permissive: CryptoPolicy = { name: "org", defaultVerdict: "conformant" };
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, permissive);
+    assert.equal(ev.findings[0].policyVerdict, "conformant");
+    assert.equal(ev.findings[0].acknowledged, false);
+    assert.equal(ev.acknowledged, 0);
+    assert.equal(mandateGateFails(ev, { failNow: true }), true, "unmanaged crypto still fails");
+  });
+
+  it("tallies acknowledgement per FINDING, not per row (one finding × two mandates)", () => {
     const ev = evaluateMandates([rsa], ["cnsa-2.0", "nist-ir-8547"], DUE_NOW, permitRsa);
-    assert.equal(ev.findings.length, 2);
-    assert.equal(ev.acknowledged, 2);
+    assert.equal(ev.findings.length, 2, "two verdict rows (one per mandate)");
+    assert.equal(ev.acknowledged, 1, "but one distinct acknowledged finding");
+    assert.ok(
+      ev.findings.every((v) => v.acknowledged),
+      "every row still carries the flag",
+    );
   });
 });
 
@@ -272,5 +299,7 @@ describe("mandateGateFails + org policy composition", () => {
     assert.equal(ack.findings[0].acknowledged, true);
     assert.equal(mandateGateFails(ack), true);
     assert.equal(mandateGateFails(ack, { failNow: true }), true);
+    // ...and under every early-gate option, including leadMonths.
+    assert.equal(mandateGateFails(ack, { leadMonths: 6 }), true);
   });
 });

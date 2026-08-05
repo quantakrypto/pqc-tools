@@ -68,24 +68,22 @@ test("content hash is reproducible across scan time but changes with the commit"
   assert.notEqual(a.attestation.contentHash, c.attestation.contentHash);
 });
 
-test("mandateMapping is date-pinned, hashed, and reproducible within a day", () => {
+test("mandateMapping is date-pinned, hashed, and reproducible across the whole day", () => {
   const result = resultWith("2026-01-01T00:00:01Z"); // RSA finding — mandate-prohibited.
-  // Two evaluations on the SAME calendar day but different clock times.
-  const morning = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-01T09:00:00Z"));
-  const afternoon = evaluateMandates(
-    result.findings,
-    ["cnsa-2.0"],
-    new Date("2026-01-01T15:00:00Z"),
-  );
-  const a = buildReadinessReport(result, { commit: "c1", mandate: morning });
+  // 2026-01-14 is a month-rounding boundary day: before `now` was pinned to UTC
+  // midnight, an early-morning and a late-evening run rounded monthsUntilDisallow
+  // differently and produced DIFFERENT hashes. Use the two extremes of the day.
+  const early = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-14T00:30:00Z"));
+  const late = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-14T23:30:00Z"));
+  const a = buildReadinessReport(result, { commit: "c1", mandate: early });
   const b = buildReadinessReport(
     resultWith("2026-06-06T06:06:06Z"), // different scan time, same commit + same mandate day
-    { commit: "c1", mandate: afternoon },
+    { commit: "c1", mandate: late },
   );
   // The stored `now` is a plain date, not the full timestamp it was evaluated at.
-  assert.equal(a.mandateMapping?.now, "2026-01-01");
+  assert.equal(a.mandateMapping?.now, "2026-01-14");
   assert.match(a.mandateMapping?.now ?? "", /^\d{4}-\d{2}-\d{2}$/);
-  // Same commit + same compliance DAY → identical attestation hash.
+  // Same commit + same compliance DAY → identical attestation hash, at any hour.
   assert.equal(a.attestation.contentHash, b.attestation.contentHash);
   assert.equal(verifyReadinessReport(a).valid, true);
 });

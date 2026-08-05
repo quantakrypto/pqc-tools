@@ -12165,10 +12165,13 @@ function monthsBetween(fromMs, toMs) {
   return Math.round((toMs - fromMs) / MONTH_MS);
 }
 function policyAcknowledges(algo2, policy) {
+  if (policy.prohibited?.includes(algo2))
+    return false;
   return Boolean(policy.permitted?.includes(algo2) || policy.inTransition?.includes(algo2));
 }
 function evaluateMandates(findings, mandateIdList, now, policy) {
-  const nowMs = now.getTime();
+  const nowMs = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const nowIso = new Date(nowMs).toISOString();
   const selected = mandateIdList.map(getMandate).filter((m) => Boolean(m));
   const rows = [];
   const perFindingWorst = [];
@@ -12182,10 +12185,14 @@ function evaluateMandates(findings, mandateIdList, now, policy) {
       continue;
     }
     let worst = "conformant";
+    const family = algo2;
+    const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+    let producedRow = false;
     for (const mandate of selected) {
       const applicable = mandate.rules.filter((r) => r.prohibits.includes(algo2)).sort((a, b) => a.effective.localeCompare(b.effective));
       if (applicable.length === 0)
         continue;
+      producedRow = true;
       const passed = applicable.filter((r) => nowMs >= new Date(r.effective).getTime());
       const passedDisallow = passed.filter((r) => r.tier === "disallow");
       let status;
@@ -12211,10 +12218,6 @@ function evaluateMandates(findings, mandateIdList, now, policy) {
       }
       if (STATUS_RANK[status] > STATUS_RANK[worst])
         worst = status;
-      const family = algo2;
-      const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
-      if (isAcknowledged)
-        acknowledged++;
       rows.push({
         ruleId: f.ruleId,
         algorithm: algo2,
@@ -12232,6 +12235,8 @@ function evaluateMandates(findings, mandateIdList, now, policy) {
         acknowledged: isAcknowledged
       });
     }
+    if (producedRow && isAcknowledged)
+      acknowledged++;
     perFindingWorst.push(worst);
   }
   const summary = {
@@ -12243,7 +12248,7 @@ function evaluateMandates(findings, mandateIdList, now, policy) {
   for (const s of perFindingWorst)
     summary[s]++;
   return {
-    now: now.toISOString(),
+    now: nowIso,
     mandates: selected.map((m) => m.id),
     summary,
     notInScope,
@@ -13463,7 +13468,8 @@ async function runQscan(opts, hooks = {}) {
   let mandateEval;
   if (options.mandates.length > 0) {
     assertKnownMandates(options.mandates);
-    mandateEval = evaluateMandates(result.findings, options.mandates, /* @__PURE__ */ new Date(), policy);
+    const mandateFindings = [...result.findings, ...suppressed];
+    mandateEval = evaluateMandates(mandateFindings, options.mandates, /* @__PURE__ */ new Date(), policy);
     if (mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })) {
       exitCode = EXIT.FINDINGS;
     }
@@ -13831,7 +13837,9 @@ function buildMandateSection(ev) {
   lines.push("### Compliance mandates");
   lines.push("");
   lines.push(
-    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} \xB7 **Violations:** ${ev.summary.violation} \xB7 **Deprecated:** ${ev.summary.deprecated} \xB7 **Due:** ${ev.summary.due}` + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : "")
+    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} \xB7 **Violations:** ${ev.summary.violation} \xB7 **Deprecated:** ${ev.summary.deprecated} \xB7 **Due:** ${ev.summary.due}` + // Policy composition: how many rows the org is knowingly managing (exempt
+    // from the early gate), so a reader sees why fail-now may not have fired.
+    (ev.acknowledged > 0 ? ` \xB7 **Acknowledged:** ${ev.acknowledged}${ev.policyName ? ` (${mdCell(ev.policyName)})` : ""}` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : "")
   );
   lines.push("");
   if (ev.findings.length === 0) {
@@ -13842,26 +13850,34 @@ function buildMandateSection(ev) {
     if (a.status !== b.status) return MANDATE_ROW_ORDER[a.status] - MANDATE_ROW_ORDER[b.status];
     return a.effective.localeCompare(b.effective);
   });
-  lines.push("| Status | Clause | Deadline | File | Algorithm |");
-  lines.push("| --- | --- | --- | --- | --- |");
+  const withPolicy = ev.policyName !== null;
+  lines.push(
+    withPolicy ? "| Status | Clause | Deadline | File | Algorithm | Policy |" : "| Status | Clause | Deadline | File | Algorithm |"
+  );
+  lines.push(withPolicy ? "| --- | --- | --- | --- | --- | --- |" : "| --- | --- | --- | --- | --- |");
   for (const r of rows.slice(0, 50)) {
     const icon = r.status === "violation" ? "\u{1F534}" : r.status === "deprecated" ? "\u{1F7E0}" : "\u{1F7E1}";
     const loc = mdCell(`${r.file}:${r.line}`);
-    lines.push(
-      `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`
-    );
+    const base = `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`;
+    if (withPolicy) {
+      const policyCell = r.acknowledged ? `${mdCell(r.policyVerdict ?? "acknowledged")} \u2713` : r.policyVerdict ?? "\u2014";
+      lines.push(`${base} ${policyCell} |`);
+    } else {
+      lines.push(base);
+    }
   }
-  if (rows.length > 50) lines.push(`| \u2026 | | | | _${rows.length - 50} more_ |`);
+  if (rows.length > 50) {
+    lines.push(withPolicy ? `| \u2026 | | | | | _${rows.length - 50} more_ |` : `| \u2026 | | | | _${rows.length - 50} more_ |`);
+  }
   return lines.join("\n");
 }
 function mandateGateRows(ev, opts = {}) {
   if (ev.hasViolation) return ev.findings.filter((v) => v.status === "violation");
-  if (opts.failNow) return ev.findings;
+  const gated = ev.findings.filter((v) => !v.acknowledged);
+  if (opts.failNow) return gated;
   if (opts.leadMonths !== void 0) {
     const lead = opts.leadMonths;
-    return ev.findings.filter(
-      (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead
-    );
+    return gated.filter((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead);
   }
   return [];
 }
@@ -14049,15 +14065,17 @@ async function run(env = process.env) {
   });
   const baseline = inputs.baseline ? await loadBaselineSet(inputs.baseline, env) : { version: 1, fingerprints: [] };
   const { newFindings } = applyBaseline(result.findings, baseline);
-  let policy;
-  if (inputs.policy) {
-    const policyPath = resolveInWorkspace(inputs.policy, env);
-    policy = parseCryptoPolicy(JSON.parse(await readFile8(policyPath, "utf8")));
-  }
   let mandateEval;
   if (inputs.mandates.length > 0) {
+    let policy;
+    if (inputs.policy) {
+      const policyPath = resolveInWorkspace(inputs.policy, env);
+      policy = parseCryptoPolicy(JSON.parse(await readFile8(policyPath, "utf8")));
+    }
     assertKnownMandates(inputs.mandates);
     mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date(), policy);
+  } else if (inputs.policy) {
+    info("quantakrypto: 'policy' input is set but 'mandate' is not; the policy has no effect.");
   }
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir3(dirname5(outputPath), { recursive: true });

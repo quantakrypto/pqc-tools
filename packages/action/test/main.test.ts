@@ -421,6 +421,40 @@ test("run: an org --policy composes into the written SARIF mandateMapping", asyn
   assert.equal(mandate.findings[0].policyVerdict, "transition-pending");
 });
 
+test("run rejects a policy path that escapes the workspace via ../", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  // The policy is read only with a mandate; the workspace-escape guard must reject
+  // the traversal before any file read (same guard as output/baseline paths).
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_MANDATE: "cnsa-2.0",
+    INPUT_POLICY: "../../../etc/passwd",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  await assert.rejects(() => run(env), /escapes the workspace/);
+});
+
+test("mandateGateRows / describeMandateFailure exclude policy-acknowledged rows", () => {
+  const rsa = makeFinding({ algorithm: "RSA", location: { file: "a.ts", line: 1 } });
+  const ecdh = makeFinding({ algorithm: "ECDH", location: { file: "b.ts", line: 2 } });
+  // Org acknowledges RSA (in transition) but not ECDH; before the disallow date.
+  const ev = evaluateMandates([rsa, ecdh], ["cnsa-2.0"], new Date("2026-01-01"), {
+    name: "org",
+    inTransition: ["RSA"],
+  });
+  const rows = mandateGateRows(ev, { failNow: true });
+  assert.equal(rows.length, 1, "only the unacknowledged ECDH row trips --fail-now");
+  assert.equal(rows[0].algorithm, "ECDH");
+  // ...so the failure message names ECDH's clause, not the acknowledged RSA one.
+  const msg = describeMandateFailure(ev, { failNow: true });
+  assert.ok(msg.length > 0, "a failure reason is produced");
+});
+
 test("readInputs parses redact-snippets (default false)", () => {
   assert.equal(readInputs({}).redactSnippets, false);
   assert.equal(readInputs({ "INPUT_REDACT-SNIPPETS": "true" }).redactSnippets, true);

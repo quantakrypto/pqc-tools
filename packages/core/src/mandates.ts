@@ -241,8 +241,10 @@ export interface MandateEvaluation {
   /** Name of the org policy composed in via `policy`, or null when none was supplied. */
   policyName: string | null;
   /**
-   * How many verdict rows the org policy explicitly acknowledged (family listed
-   * as `permitted` or `inTransition`). 0 when no policy was supplied.
+   * How many distinct prohibited FINDINGS the org policy explicitly acknowledged
+   * (family listed as `permitted` or `inTransition`) — counted per finding, not
+   * per verdict row, so a family prohibited by two mandates counts once, matching
+   * the per-finding `summary`. 0 when no policy was supplied.
    */
   acknowledged: number;
 }
@@ -266,8 +268,15 @@ const STATUS_RANK: Record<MandateStatus, number> = {
  * family or one covered only by the policy's default fallback is NOT
  * acknowledged: silence is not consent, so an unnamed family never earns a gate
  * exemption.
+ *
+ * `prohibited` takes precedence, matching {@link verdictForAlgorithm}: a policy
+ * that lists a family in BOTH `prohibited` and `permitted` (a plausible merge of
+ * two policy fragments) resolves to `violation`, and must not then be silently
+ * acknowledged away — that would produce a self-contradictory verdict (verdict
+ * `violation`, yet exempt from the gate).
  */
 function policyAcknowledges(algo: AlgorithmFamily, policy: CryptoPolicy): boolean {
+  if (policy.prohibited?.includes(algo)) return false;
   return Boolean(policy.permitted?.includes(algo) || policy.inTransition?.includes(algo));
 }
 
@@ -291,7 +300,16 @@ export function evaluateMandates(
   now: Date,
   policy?: CryptoPolicy,
 ): MandateEvaluation {
-  const nowMs = now.getTime();
+  // A compliance verdict is as-of a DAY: the clauses take effect on date
+  // boundaries (YYYY-MM-DD), so the exact clock time carries no compliance
+  // meaning. Pin `now` to UTC midnight of its date before any arithmetic — this
+  // makes the whole evaluation (statuses AND the monthsUntil / monthsUntilDisallow
+  // counters) identical for any two runs on the same day, which is what keeps the
+  // attested evidence hash reproducible per commit per day. Truncating changes no
+  // status: every `effective` date is itself UTC-midnight, so `nowMs >= effMs` has
+  // the same truth value at midnight as at any other time that day.
+  const nowMs = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const nowIso = new Date(nowMs).toISOString();
   const selected = mandateIdList.map(getMandate).filter((m): m is Mandate => Boolean(m));
 
   const rows: MandateFindingVerdict[] = [];
@@ -307,12 +325,20 @@ export function evaluateMandates(
       continue;
     }
     let worst: MandateStatus = "conformant";
+    // Acknowledgement is a property of the FAMILY (fixed for this finding), so it
+    // is computed once here and stamped on every row. The tally counts distinct
+    // acknowledged findings (not rows), so one family under two mandates is one
+    // acknowledgement, matching the per-finding status counts in `summary`.
+    const family = algo as AlgorithmFamily;
+    const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+    let producedRow = false;
     for (const mandate of selected) {
       // The applicable clauses for this family, earliest deadline first.
       const applicable = mandate.rules
         .filter((r) => r.prohibits.includes(algo as AlgorithmFamily))
         .sort((a, b) => a.effective.localeCompare(b.effective));
       if (applicable.length === 0) continue;
+      producedRow = true;
 
       // Tier the clauses so both stay live: a passed DISALLOW clause is a
       // violation; a passed DEPRECATE clause (disallow still ahead) is the
@@ -345,9 +371,6 @@ export function evaluateMandates(
         }
       }
       if (STATUS_RANK[status] > STATUS_RANK[worst]) worst = status;
-      const family = algo as AlgorithmFamily;
-      const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
-      if (isAcknowledged) acknowledged++;
       rows.push({
         ruleId: f.ruleId,
         algorithm: algo,
@@ -365,6 +388,9 @@ export function evaluateMandates(
         acknowledged: isAcknowledged,
       });
     }
+    // Count the acknowledged FINDING once (it produced at least one prohibited
+    // row and the org policy owns/tracks its family), not once per mandate row.
+    if (producedRow && isAcknowledged) acknowledged++;
     perFindingWorst.push(worst);
   }
 
@@ -377,7 +403,7 @@ export function evaluateMandates(
   for (const s of perFindingWorst) summary[s]++;
 
   return {
-    now: now.toISOString(),
+    now: nowIso,
     mandates: selected.map((m) => m.id),
     summary,
     notInScope,
