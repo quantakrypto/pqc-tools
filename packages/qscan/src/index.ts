@@ -292,15 +292,21 @@ export async function runQscan(
 
   // --mandate: policy-as-code compliance gate. Deadline-aware — reports every
   // mandate-prohibited finding with its named clause + deadline, but fails the build
-  // only once a deadline has passed (or early with --lead-months / --fail-now). Uses
-  // the same RAW findings as the exit code, so triage can never flip the gate.
+  // only once a deadline has passed (or early with --lead-months / --fail-now).
+  //
+  // Evaluated on the PRE-baseline findings (kept + suppressed), matching the GitHub
+  // Action: a `--baseline` accepts a finding for the SEVERITY gate, but a regulatory
+  // deadline must never be waivable by baselining — otherwise `--write-baseline`
+  // then `--baseline` would be a self-service deadline waiver. Triage runs later, so
+  // it can never flip the gate either.
   let mandateEval: MandateEvaluation | undefined;
   if (options.mandates.length > 0) {
     assertKnownMandates(options.mandates);
     // Compose the org `--policy` in when one was supplied: acknowledged families
     // (permitted / in-transition) are annotated and exempt from the EARLY gates,
     // though a passed DISALLOW deadline still fails.
-    mandateEval = evaluateMandates(result.findings, options.mandates, new Date(), policy);
+    const mandateFindings = [...result.findings, ...suppressed];
+    mandateEval = evaluateMandates(mandateFindings, options.mandates, new Date(), policy);
     if (
       mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })
     ) {
