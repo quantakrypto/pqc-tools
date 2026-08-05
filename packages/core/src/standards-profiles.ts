@@ -14,6 +14,8 @@
  * legal advice — consult the cited source of record.
  */
 
+import { PQC_STANDARDS } from "./standards.js";
+
 /** Whether classical+PQC hybridization is required during the transition, per regime. */
 export type HybridStance = "required" | "recommended" | "optional";
 
@@ -58,8 +60,10 @@ export const STANDARDS_PROFILES: Readonly<Record<string, StandardsProfile>> = {
     hybridStance: "recommended",
     hybridGuidance:
       "Hybrid key establishment (e.g. X25519MLKEM768) is permitted and recommended during the transition; pure ML-KEM is also acceptable (SP 800-227 / IR 8547).",
-    deprecateAfter: 2030,
-    disallowAfter: 2035,
+    // Derived from the single source of truth so the profile can never drift from
+    // the `nist-ir-8547` mandate gate (the standards drift test asserts this).
+    deprecateAfter: PQC_STANDARDS.transitionTimeline.deprecateAfter,
+    disallowAfter: PQC_STANDARDS.transitionTimeline.disallowAfter,
     citation: "NIST IR 8547 + FIPS 203/204/205",
     asOf: "2026-07",
   },
@@ -71,9 +75,12 @@ export const STANDARDS_PROFILES: Readonly<Record<string, StandardsProfile>> = {
     hybridStance: "optional",
     hybridGuidance:
       "CNSA 2.0 targets pure PQC and does not require hybrids; if a hybrid TLS group is used, it must be SecP384r1MLKEM1024 — X25519MLKEM768's ML-KEM-768 component is sub-CNSA.",
-    deprecateAfter: 2030,
-    disallowAfter: 2035,
-    citation: "NSA CNSA 2.0 (2030/2033/2035 migration milestones)",
+    // CNSA 2.0 carries its OWN exclusive-use milestones (2030 software/firmware
+    // signing, 2033 general NSS) — NOT IR 8547's 2035. Derived from the single
+    // source so `--profile cnsa-2.0` and `--mandate cnsa-2.0` always agree.
+    deprecateAfter: PQC_STANDARDS.cnsaTimeline.deprecateAfter,
+    disallowAfter: PQC_STANDARDS.cnsaTimeline.disallowAfter,
+    citation: "NSA CNSA 2.0 (2030 deprecate / 2033 disallow exclusive-use milestones)",
     asOf: "2026-07",
   },
   "bsi-tr-02102": {

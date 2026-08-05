@@ -36,11 +36,14 @@ const permitRsa: CryptoPolicy = { name: "org", permitted: ["RSA"] };
 const transitionRsa: CryptoPolicy = { name: "org", inTransition: ["RSA"] };
 const prohibitRsa: CryptoPolicy = { name: "org", prohibited: ["RSA"] };
 
-// The catalog derives its deadlines from PQC_STANDARDS.transitionTimeline
-// (2030 / 2035, effective the LAST day of each year — see mandates.ts). The
-// standards drift test (standards.test.ts) asserts that derivation; here we
-// pin the behavioral consequences.
-const DUE_NOW = new Date("2026-01-01"); // before the deprecate date
+// The catalog derives each regime's deadlines from its own PQC_STANDARDS timeline
+// (effective the LAST day of each year — see mandates.ts): nist-ir-8547 from
+// transitionTimeline (2030 / 2035), cnsa-2.0 from cnsaTimeline (2030 / 2033). The
+// standards drift test (standards.test.ts) asserts that derivation; here we pin
+// the behavioral consequences. These constants are chosen so a cnsa-2.0 eval lands
+// in the same tier as the label (2031 is past cnsa deprecate 2030, before its 2033
+// disallow; 2036 is past both regimes' disallow).
+const DUE_NOW = new Date("2026-01-01"); // before every deprecate date
 const DEPRECATED_NOW = new Date("2031-06-01"); // past deprecate, before disallow
 const VIOLATION_NOW = new Date("2036-06-01"); // past disallow
 
