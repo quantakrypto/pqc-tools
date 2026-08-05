@@ -11419,6 +11419,11 @@ function toSarif(result, opts) {
       }))
     }
   ] : [];
+  const runProperties = {};
+  if (opts?.hndl)
+    runProperties.hndl = hndlSummaryBlock(opts.hndl);
+  if (opts?.mandate)
+    runProperties.mandate = opts.mandate;
   return {
     $schema: SARIF_SCHEMA,
     version: "2.1.0",
@@ -11433,7 +11438,7 @@ function toSarif(result, opts) {
           }
         },
         ...taxonomies.length > 0 ? { taxonomies } : {},
-        ...opts?.hndl ? { properties: { hndl: hndlSummaryBlock(opts.hndl) } } : {},
+        ...Object.keys(runProperties).length > 0 ? { properties: runProperties } : {},
         results
       }
     ]
@@ -11472,6 +11477,11 @@ function toJson(result, opts) {
       byAlgorithm: result.inventory.byAlgorithm
     },
     ...hndl ? { hndl: hndlSummaryBlock(hndl) } : {},
+    // Compliance-mandate evaluation (`--mandate`): the machine-readable verdicts
+    // + summary, so a CI job can gate/report on them without re-parsing the human
+    // block. Carries the org `--policy` composition (policyVerdict / acknowledged)
+    // when one was supplied.
+    ...opts?.mandate ? { mandateMapping: opts.mandate } : {},
     findings: result.findings.map((f) => {
       const exposure = exposureFor(f, hndl);
       return {
@@ -12097,6 +12107,7 @@ function buildReadinessReport(result, opts = {}) {
     line: f.location.line
   }));
   const policyMapping = opts.policy ? buildPolicyMapping(result.findings, opts.policy) : void 0;
+  const mandateMapping = opts.mandate ? { ...opts.mandate, now: opts.mandate.now.slice(0, 10) } : void 0;
   const hashableBody = {
     reportType: "quantakrypto-readiness",
     specVersion: 1,
@@ -12108,7 +12119,8 @@ function buildReadinessReport(result, opts = {}) {
     tool: { name: "qScan", version: VERSION },
     inventory: result.inventory,
     findings,
-    ...policyMapping ? { policyMapping } : {}
+    ...policyMapping ? { policyMapping } : {},
+    ...mandateMapping ? { mandateMapping } : {}
   };
   const contentHash = "sha256:" + createHash6("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
   return {
@@ -12152,12 +12164,16 @@ function assertKnownMandates(ids) {
 function monthsBetween(fromMs, toMs) {
   return Math.round((toMs - fromMs) / MONTH_MS);
 }
-function evaluateMandates(findings, mandateIdList, now) {
+function policyAcknowledges(algo2, policy) {
+  return Boolean(policy.permitted?.includes(algo2) || policy.inTransition?.includes(algo2));
+}
+function evaluateMandates(findings, mandateIdList, now, policy) {
   const nowMs = now.getTime();
   const selected = mandateIdList.map(getMandate).filter((m) => Boolean(m));
   const rows = [];
   const perFindingWorst = [];
   let notInScope = 0;
+  let acknowledged = 0;
   let nextDeadlineMs = null;
   for (const f of findings) {
     const algo2 = f.algorithm ?? "unknown";
@@ -12195,6 +12211,10 @@ function evaluateMandates(findings, mandateIdList, now) {
       }
       if (STATUS_RANK[status] > STATUS_RANK[worst])
         worst = status;
+      const family = algo2;
+      const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+      if (isAcknowledged)
+        acknowledged++;
       rows.push({
         ruleId: f.ruleId,
         algorithm: algo2,
@@ -12207,7 +12227,9 @@ function evaluateMandates(findings, mandateIdList, now) {
         monthsUntil: monthsBetween(nowMs, new Date(governing.effective).getTime()),
         disallowEffective: disallowRule ? disallowRule.effective : null,
         monthsUntilDisallow: disallowMs !== null ? monthsBetween(nowMs, disallowMs) : null,
-        citation: mandate.citation
+        citation: mandate.citation,
+        policyVerdict: policy ? verdictForAlgorithm(family, policy).verdict : null,
+        acknowledged: isAcknowledged
       });
     }
     perFindingWorst.push(worst);
@@ -12227,16 +12249,19 @@ function evaluateMandates(findings, mandateIdList, now) {
     notInScope,
     findings: rows,
     nextDeadline: nextDeadlineMs !== null ? new Date(nextDeadlineMs).toISOString().slice(0, 10) : null,
-    hasViolation: summary.violation > 0
+    hasViolation: summary.violation > 0,
+    policyName: policy?.name ?? null,
+    acknowledged
   };
 }
 function mandateGateFails(ev, opts = {}) {
   if (ev.hasViolation)
     return true;
+  const gated = ev.findings.filter((v) => !v.acknowledged);
   if (opts.failNow)
-    return ev.findings.length > 0;
+    return gated.length > 0;
   if (opts.leadMonths !== void 0) {
-    return ev.findings.some((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths);
+    return gated.some((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths);
   }
   return false;
 }
@@ -12245,6 +12270,7 @@ var init_mandates = __esm({
   "../core/dist/mandates.js"() {
     "use strict";
     init_standards();
+    init_policy();
     CLASSICAL_PUBLIC_KEY = [
       "RSA",
       "ECDH",
@@ -13437,7 +13463,7 @@ async function runQscan(opts, hooks = {}) {
   let mandateEval;
   if (options.mandates.length > 0) {
     assertKnownMandates(options.mandates);
-    mandateEval = evaluateMandates(result.findings, options.mandates, /* @__PURE__ */ new Date());
+    mandateEval = evaluateMandates(result.findings, options.mandates, /* @__PURE__ */ new Date(), policy);
     if (mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })) {
       exitCode = EXIT.FINDINGS;
     }
@@ -13512,7 +13538,10 @@ async function runQscan(opts, hooks = {}) {
     ...options.profile ? { profile: options.profile } : {},
     ...policy ? { policy } : {},
     ...mergeCbomsData ? { mergeCboms: mergeCbomsData } : {},
-    ...hndl ? { hndl } : {}
+    ...hndl ? { hndl } : {},
+    // The `--mandate` evaluation feeds the machine-readable JSON/SARIF/evidence
+    // output too (not just the human block appended below).
+    ...mandateEval ? { mandate: mandateEval } : {}
   });
   if (options.format === "evidence" && (signer || timestamper)) {
     const signed = await signReadinessReport(JSON.parse(report), {
@@ -13535,24 +13564,34 @@ async function runQscan(opts, hooks = {}) {
 function renderMandateBlock(ev) {
   const lines = [];
   lines.push(`Compliance mandates: ${ev.mandates.join(", ") || "(none matched)"}`);
-  lines.push(`  ${ev.summary.violation} violation \xB7 ${ev.summary.deprecated} deprecated \xB7 ${ev.summary.due} due \xB7 ${ev.summary.conformant} conformant` + (ev.notInScope > 0 ? ` \xB7 ${ev.notInScope} out of scope` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : ""));
+  lines.push(`  ${ev.summary.violation} violation \xB7 ${ev.summary.deprecated} deprecated \xB7 ${ev.summary.due} due \xB7 ${ev.summary.conformant} conformant` + (ev.notInScope > 0 ? ` \xB7 ${ev.notInScope} out of scope` : "") + // Policy composition: how many of the above the org is knowingly managing.
+  (ev.acknowledged > 0 ? ` \xB7 ${ev.acknowledged} acknowledged${ev.policyName ? ` (${ev.policyName})` : ""}` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : ""));
   const rank = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
   const rows = [...ev.findings].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.effective.localeCompare(b.effective));
   for (const r of rows.slice(0, 12)) {
     const when = r.status === "violation" ? `disallowed since ${r.effective}` : r.status === "deprecated" ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}` : `due ${r.effective} (${r.monthsUntil} mo)`;
-    lines.push(`  [${r.status}] ${r.clause} \xB7 ${r.algorithm} ${r.file}:${r.line} \u2014 ${when}`);
+    const ack = r.acknowledged ? ` \xB7 policy: ${r.policyVerdict ?? "acknowledged"}` : "";
+    lines.push(`  [${r.status}] ${r.clause} \xB7 ${r.algorithm} ${r.file}:${r.line} \u2014 ${when}${ack}`);
   }
   if (rows.length > 12)
     lines.push(`  \u2026 and ${rows.length - 12} more`);
   return lines.join("\n");
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0, mandate = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
   switch (format) {
     case "json":
-      return renderJson(result, { redactSnippets, ...hndl ? { hndl } : {} });
+      return renderJson(result, {
+        redactSnippets,
+        ...hndl ? { hndl } : {},
+        ...mandate ? { mandate } : {}
+      });
     case "sarif":
-      return renderSarif(result, { redactSnippets, ...hndl ? { hndl } : {} });
+      return renderSarif(result, {
+        redactSnippets,
+        ...hndl ? { hndl } : {},
+        ...mandate ? { mandate } : {}
+      });
     case "cbom":
       return renderCbom(result, mergeCboms2);
     case "vex":
@@ -13561,7 +13600,8 @@ function renderReport(result, format, opts = {}) {
       const report = buildReadinessReport(result, {
         repository: process4.env.GITHUB_REPOSITORY,
         commit: process4.env.GITHUB_SHA,
-        ...policy ? { policy } : {}
+        ...policy ? { policy } : {},
+        ...mandate ? { mandate } : {}
       });
       return JSON.stringify(report, null, 2);
     }
@@ -13709,7 +13749,8 @@ function readInputs(env = process.env) {
     mode,
     mandates,
     leadMonths,
-    failNow: getBooleanInput("fail-now", false, env)
+    failNow: getBooleanInput("fail-now", false, env),
+    policy: getInput("policy", env) || void 0
   };
 }
 function shouldFail(blockingCount, failOnFindings) {
@@ -14008,21 +14049,29 @@ async function run(env = process.env) {
   });
   const baseline = inputs.baseline ? await loadBaselineSet(inputs.baseline, env) : { version: 1, fingerprints: [] };
   const { newFindings } = applyBaseline(result.findings, baseline);
+  let policy;
+  if (inputs.policy) {
+    const policyPath = resolveInWorkspace(inputs.policy, env);
+    policy = parseCryptoPolicy(JSON.parse(await readFile8(policyPath, "utf8")));
+  }
+  let mandateEval;
+  if (inputs.mandates.length > 0) {
+    assertKnownMandates(inputs.mandates);
+    mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date(), policy);
+  }
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir3(dirname5(outputPath), { recursive: true });
   await writeFile4(
     outputPath,
-    renderReport(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
+    renderReport(result, inputs.format, {
+      redactSnippets: inputs.redactSnippets,
+      ...mandateEval ? { mandate: mandateEval } : {}
+    }),
     "utf8"
   );
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);
   annotateFindings(newFindings, inputs.severityThreshold);
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, inputs.severityThreshold));
-  let mandateEval;
-  if (inputs.mandates.length > 0) {
-    assertKnownMandates(inputs.mandates);
-    mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date());
-  }
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
   setOutput("sarif-file", inputs.output, env);

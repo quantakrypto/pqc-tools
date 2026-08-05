@@ -34,7 +34,10 @@ OPTIONS
                                 inventory + CBOM + a deterministic content hash
                                 (sign/timestamp it with an external signer)
   --policy <file>               Crypto-policy JSON; adds conformant/violation/
-                                transition verdicts to the evidence report
+                                transition verdicts to the evidence report. With
+                                --mandate, permitted/in-transition families are
+                                acknowledged and exempt from --fail-now/--lead-months
+                                (a passed disallow deadline still fails)
   --sign <command>              Sign the evidence report: its contentHash is
                                 piped to <command> on stdin; stdout is recorded
                                 as the detached signature (needs --format evidence)
@@ -71,7 +74,9 @@ OPTIONS
   --mandate <id>                Gate findings against a compliance mandate's dated
                                 clauses (repeatable): cnsa-2.0 | nist-ir-8547. Reports
                                 each prohibited finding with its clause + deadline;
-                                fails the build only once a deadline has passed
+                                fails the build only once a deadline has passed. The
+                                verdicts also ride in --format json (mandateMapping),
+                                sarif (run.properties.mandate), and evidence (hashed)
   --lead-months <n>             Fail early when a --mandate deadline is within n months
   --fail-now                    Fail on any --mandate-prohibited finding, ignoring the date
   --cache [file]                Reuse findings for unchanged files across runs

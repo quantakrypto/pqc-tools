@@ -297,7 +297,10 @@ export async function runQscan(
   let mandateEval: MandateEvaluation | undefined;
   if (options.mandates.length > 0) {
     assertKnownMandates(options.mandates);
-    mandateEval = evaluateMandates(result.findings, options.mandates, new Date());
+    // Compose the org `--policy` in when one was supplied: acknowledged families
+    // (permitted / in-transition) are annotated and exempt from the EARLY gates,
+    // though a passed DISALLOW deadline still fails.
+    mandateEval = evaluateMandates(result.findings, options.mandates, new Date(), policy);
     if (
       mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })
     ) {
@@ -399,6 +402,9 @@ export async function runQscan(
     ...(policy ? { policy } : {}),
     ...(mergeCbomsData ? { mergeCboms: mergeCbomsData } : {}),
     ...(hndl ? { hndl } : {}),
+    // The `--mandate` evaluation feeds the machine-readable JSON/SARIF/evidence
+    // output too (not just the human block appended below).
+    ...(mandateEval ? { mandate: mandateEval } : {}),
   });
   // Evidence signing is orchestrated here (async: an external signer may be async),
   // after the synchronous renderer has produced the unsigned report (ADR-0004: the
@@ -431,6 +437,10 @@ function renderMandateBlock(ev: MandateEvaluation): string {
   lines.push(
     `  ${ev.summary.violation} violation · ${ev.summary.deprecated} deprecated · ${ev.summary.due} due · ${ev.summary.conformant} conformant` +
       (ev.notInScope > 0 ? ` · ${ev.notInScope} out of scope` : "") +
+      // Policy composition: how many of the above the org is knowingly managing.
+      (ev.acknowledged > 0
+        ? ` · ${ev.acknowledged} acknowledged${ev.policyName ? ` (${ev.policyName})` : ""}`
+        : "") +
       (ev.nextDeadline ? ` · next deadline ${ev.nextDeadline}` : ""),
   );
   const rank: Record<string, number> = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
@@ -445,7 +455,10 @@ function renderMandateBlock(ev: MandateEvaluation): string {
         : r.status === "deprecated"
           ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}`
           : `due ${r.effective} (${r.monthsUntil} mo)`;
-    lines.push(`  [${r.status}] ${r.clause} · ${r.algorithm} ${r.file}:${r.line} — ${when}`);
+    // Flag policy-acknowledged rows so the reader sees why the gate may not fire
+    // on them (exempt from --fail-now / --lead-months, never from a violation).
+    const ack = r.acknowledged ? ` · policy: ${r.policyVerdict ?? "acknowledged"}` : "";
+    lines.push(`  [${r.status}] ${r.clause} · ${r.algorithm} ${r.file}:${r.line} — ${when}${ack}`);
   }
   if (rows.length > 12) lines.push(`  … and ${rows.length - 12} more`);
   return lines.join("\n");
@@ -590,6 +603,13 @@ export interface RenderReportOptions {
   mergeCboms?: CycloneDxBom[];
   /** HNDL exposure analysis (`--hndl`); annotates JSON/SARIF/human output. */
   hndl?: HndlReport;
+  /**
+   * Compliance-mandate evaluation (`--mandate`). Carried into the machine-readable
+   * JSON (`mandateMapping`), SARIF (`run.properties.mandate`), and evidence
+   * (date-pinned, hashed) output. The human block is appended separately by
+   * {@link runQscan}.
+   */
+  mandate?: MandateEvaluation;
 }
 
 /** Render a scan result in the requested format. */
@@ -608,25 +628,36 @@ export function renderReport(
     policy = undefined,
     mergeCboms = undefined,
     hndl = undefined,
+    mandate = undefined,
   } = typeof opts === "boolean" ? { color: opts, policy: undefined } : opts;
   switch (format) {
     case "json":
-      return renderJson(result, { redactSnippets, ...(hndl ? { hndl } : {}) });
+      return renderJson(result, {
+        redactSnippets,
+        ...(hndl ? { hndl } : {}),
+        ...(mandate ? { mandate } : {}),
+      });
     case "sarif":
-      return renderSarif(result, { redactSnippets, ...(hndl ? { hndl } : {}) });
+      return renderSarif(result, {
+        redactSnippets,
+        ...(hndl ? { hndl } : {}),
+        ...(mandate ? { mandate } : {}),
+      });
     case "cbom":
       return renderCbom(result, mergeCboms);
     case "vex":
       return renderVex(result);
     case "evidence": {
       // ISO A.8.24 readiness report; repo/commit come from CI env when present.
-      // A `--policy` file adds the §4 conformant/violation/transition verdicts. The
-      // attestation is left unsigned here; signing is an async step in runQscan (an
-      // external signer may be async), so this renderer stays synchronous.
+      // A `--policy` file adds the §4 conformant/violation/transition verdicts, and
+      // `--mandate` adds the date-pinned, hashed `mandateMapping`. The attestation
+      // is left unsigned here; signing is an async step in runQscan (an external
+      // signer may be async), so this renderer stays synchronous.
       const report = buildReadinessReport(result, {
         repository: process.env.GITHUB_REPOSITORY,
         commit: process.env.GITHUB_SHA,
         ...(policy ? { policy } : {}),
+        ...(mandate ? { mandate } : {}),
       });
       return JSON.stringify(report, null, 2);
     }

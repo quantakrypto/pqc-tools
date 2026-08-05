@@ -353,6 +353,74 @@ test("run warns (does not silently degrade) when the baseline file is missing", 
 // the written report carries no matched source snippet.
 // ---------------------------------------------------------------------------
 
+test("readInputs reads the optional org policy path (default undefined)", () => {
+  assert.equal(readInputs({}).policy, undefined);
+  assert.equal(readInputs({ INPUT_POLICY: "policy.json" }).policy, "policy.json");
+});
+
+/**
+ * Run the action against a workspace with stdout silenced (the action logs a lot
+ * of workflow-command chatter). Does NOT touch `process.exitCode`, so callers
+ * must pick inputs that do not trip a gate — the gate semantics themselves are
+ * covered at the core / qScan level; these tests assert the machine-readable
+ * SARIF the Action writes.
+ */
+async function runQuiet(env: NodeJS.ProcessEnv): Promise<void> {
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (() => true) as typeof process.stdout.write;
+  try {
+    await run(env);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+}
+
+test("run: a --mandate scan writes SARIF carrying run.properties.mandate", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  // severity-threshold critical + fail-on-findings false so the (high) RSA
+  // finding does not gate; RSA is only "due" in 2026 so the mandate gate is quiet
+  // (no setFailed → no process.exitCode pollution).
+  await runQuiet({
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_SEVERITY-THRESHOLD": "critical",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+    INPUT_MANDATE: "cnsa-2.0",
+  });
+  const sarif = JSON.parse(readFileSync(join(ws, "out.sarif.json"), "utf8"));
+  assert.deepEqual(sarif.runs[0].properties.mandate.mandates, ["cnsa-2.0"]);
+});
+
+test("run: an org --policy composes into the written SARIF mandateMapping", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  writeFileSync(join(ws, "policy.json"), JSON.stringify({ name: "org", inTransition: ["RSA"] }));
+  await runQuiet({
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_SEVERITY-THRESHOLD": "critical",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+    INPUT_MANDATE: "cnsa-2.0",
+    INPUT_POLICY: "policy.json",
+  });
+  const mandate = JSON.parse(readFileSync(join(ws, "out.sarif.json"), "utf8")).runs[0].properties
+    .mandate;
+  // The org policy reached evaluateMandates: RSA (inTransition) is acknowledged.
+  assert.equal(mandate.policyName, "org");
+  assert.equal(mandate.acknowledged, 1);
+  assert.equal(mandate.findings[0].acknowledged, true);
+  assert.equal(mandate.findings[0].policyVerdict, "transition-pending");
+});
+
 test("readInputs parses redact-snippets (default false)", () => {
   assert.equal(readInputs({}).redactSnippets, false);
   assert.equal(readInputs({ "INPUT_REDACT-SNIPPETS": "true" }).redactSnippets, true);

@@ -169,6 +169,23 @@ itself make any entity "compliant."
 > independent algorithm date** of their own; they inherit these CNSA 2.0 /
 > IR 8547 timelines, so the same mandate-gate output supports their
 > crypto-risk-management expectations too.
+>
+> **Machine-readable output (v0.9):** the mandate verdicts are no longer confined
+> to the human report. `--mandate --format json` adds a top-level `mandateMapping`
+> block; `--format sarif` carries the same under `run.properties.mandate` (so an
+> uploaded SARIF surfaces it in code scanning); and `--format evidence` embeds a
+> **date-pinned, hashed** `mandateMapping` in the ISO A.8.24 attestation, so an
+> auditor gets a tamper-evident record of which clauses applied on which date.
+> The GitHub Action threads the same verdicts into the SARIF it uploads.
+>
+> **Composing an org policy (v0.9):** pass `--policy <file>` alongside `--mandate`
+> (the same crypto-policy file the evidence report's §4 verdicts use; a `policy`
+> input on the Action). Families the org **explicitly permits or is transitioning**
+> are annotated in every output (`policyVerdict` / `acknowledged`) and **exempted
+> from the early gate** (`--fail-now` / `--lead-months`) — an org running early
+> enforcement is not re-flagged on the very families it is knowingly, traceably
+> migrating. A **passed disallow deadline still fails** regardless: an org cannot
+> self-exempt from a dated regulatory prohibition.
 
 | Mandate | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|

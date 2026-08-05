@@ -21,6 +21,8 @@
  */
 import type { AlgorithmFamily, Finding } from "./types.js";
 import { PQC_STANDARDS } from "./standards.js";
+import { verdictForAlgorithm } from "./policy.js";
+import type { CryptoPolicy, PolicyVerdict } from "./policy.js";
 
 /**
  * All Shor-broken classical asymmetric families — the mandate's SCOPE. A finding
@@ -197,6 +199,21 @@ export interface MandateFindingVerdict {
   /** Whole months from `now` to `disallowEffective`; null when there is none. */
   monthsUntilDisallow: number | null;
   citation: string;
+  /**
+   * The org cryptography policy's verdict on this algorithm family when a policy
+   * was composed in via {@link evaluateMandates}' `policy` argument, else null.
+   * Purely informational — it records the org's own stance next to the mandate's
+   * dated clause so a machine-readable report shows both.
+   */
+  policyVerdict: PolicyVerdict | null;
+  /**
+   * True when the org policy EXPLICITLY permits or is transitioning this family —
+   * an owned, tracked decision. Acknowledged findings are exempt from the EARLY
+   * gates (`failNow` / `leadMonths`); a passed DISALLOW deadline (`violation`)
+   * still fails regardless, because an org cannot self-exempt from a dated legal
+   * disallow. `false` when no policy was supplied.
+   */
+  acknowledged: boolean;
 }
 
 export interface MandateEvaluation {
@@ -221,6 +238,13 @@ export interface MandateEvaluation {
   nextDeadline: string | null;
   /** True when at least one DISALLOW deadline has passed (a `violation` exists). */
   hasViolation: boolean;
+  /** Name of the org policy composed in via `policy`, or null when none was supplied. */
+  policyName: string | null;
+  /**
+   * How many verdict rows the org policy explicitly acknowledged (family listed
+   * as `permitted` or `inTransition`). 0 when no policy was supplied.
+   */
+  acknowledged: number;
 }
 
 const MONTH_MS = 2_629_800_000; // average month
@@ -237,16 +261,35 @@ const STATUS_RANK: Record<MandateStatus, number> = {
 };
 
 /**
+ * True when the org policy EXPLICITLY accepts a family — listed in `permitted`
+ * (an owned exception) or `inTransition` (a tracked migration). A `prohibited`
+ * family or one covered only by the policy's default fallback is NOT
+ * acknowledged: silence is not consent, so an unnamed family never earns a gate
+ * exemption.
+ */
+function policyAcknowledges(algo: AlgorithmFamily, policy: CryptoPolicy): boolean {
+  return Boolean(policy.permitted?.includes(algo) || policy.inTransition?.includes(algo));
+}
+
+/**
  * Evaluate findings against the selected mandates as of `now`. Unknown mandate
  * ids are ignored — callers validate up front with {@link assertKnownMandates}.
  * A finding outside the classical-asymmetric scope is counted in `notInScope`;
  * an in-scope finding no selected mandate prohibits is `conformant`. Neither
  * contributes a verdict row.
+ *
+ * When an org `policy` is supplied (the `--policy` composition), every verdict
+ * row is annotated with the org's own `policyVerdict` and an `acknowledged` flag
+ * (family explicitly permitted / in-transition). Acknowledgement is purely
+ * additive here — it changes no status — but {@link mandateGateFails} honours it
+ * to keep the early gates from double-flagging crypto the org is knowingly,
+ * traceably managing. A passed DISALLOW deadline is never acknowledgeable away.
  */
 export function evaluateMandates(
   findings: readonly Finding[],
   mandateIdList: readonly string[],
   now: Date,
+  policy?: CryptoPolicy,
 ): MandateEvaluation {
   const nowMs = now.getTime();
   const selected = mandateIdList.map(getMandate).filter((m): m is Mandate => Boolean(m));
@@ -254,6 +297,7 @@ export function evaluateMandates(
   const rows: MandateFindingVerdict[] = [];
   const perFindingWorst: MandateStatus[] = [];
   let notInScope = 0;
+  let acknowledged = 0;
   let nextDeadlineMs: number | null = null;
 
   for (const f of findings) {
@@ -301,6 +345,9 @@ export function evaluateMandates(
         }
       }
       if (STATUS_RANK[status] > STATUS_RANK[worst]) worst = status;
+      const family = algo as AlgorithmFamily;
+      const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+      if (isAcknowledged) acknowledged++;
       rows.push({
         ruleId: f.ruleId,
         algorithm: algo,
@@ -314,6 +361,8 @@ export function evaluateMandates(
         disallowEffective: disallowRule ? disallowRule.effective : null,
         monthsUntilDisallow: disallowMs !== null ? monthsBetween(nowMs, disallowMs) : null,
         citation: mandate.citation,
+        policyVerdict: policy ? verdictForAlgorithm(family, policy).verdict : null,
+        acknowledged: isAcknowledged,
       });
     }
     perFindingWorst.push(worst);
@@ -336,6 +385,8 @@ export function evaluateMandates(
     nextDeadline:
       nextDeadlineMs !== null ? new Date(nextDeadlineMs).toISOString().slice(0, 10) : null,
     hasViolation: summary.violation > 0,
+    policyName: policy?.name ?? null,
+    acknowledged,
   };
 }
 
@@ -352,12 +403,21 @@ export interface MandateGateOptions {
  * warning and does not fail the build. `leadMonths` fails early when a disallow
  * deadline is within the window; `failNow` fails on any prohibited finding
  * immediately.
+ *
+ * Policy composition: when a finding was `acknowledged` by the org policy
+ * (`--policy`), it is exempt from the EARLY gates (`failNow` / `leadMonths`) —
+ * the org is knowingly, traceably managing that family, so its own early
+ * enforcement should not re-flag it. A passed DISALLOW deadline (`violation`)
+ * still fails regardless: a dated legal disallow is not something an org can
+ * self-exempt from.
  */
 export function mandateGateFails(ev: MandateEvaluation, opts: MandateGateOptions = {}): boolean {
   if (ev.hasViolation) return true;
-  if (opts.failNow) return ev.findings.length > 0;
+  // Early gates skip policy-acknowledged findings; the hard `violation` above did not.
+  const gated = ev.findings.filter((v) => !v.acknowledged);
+  if (opts.failNow) return gated.length > 0;
   if (opts.leadMonths !== undefined) {
-    return ev.findings.some(
+    return gated.some(
       (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths!,
     );
   }

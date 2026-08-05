@@ -25,12 +25,14 @@ import {
   loadBaseline,
   mandateGateFails,
   meetsThreshold,
+  parseCryptoPolicy,
   remediationFor,
   SEVERITY_ORDER,
 } from "@quantakrypto/core";
 import type {
   AlgorithmFamily,
   Baseline,
+  CryptoPolicy,
   Finding,
   MandateEvaluation,
   MandateFindingVerdict,
@@ -76,6 +78,13 @@ interface ActionInputs {
   leadMonths?: number;
   /** Fail on any mandate-prohibited finding regardless of its deadline. */
   failNow: boolean;
+  /**
+   * Optional path to an org cryptography policy JSON (the same file the CLI's
+   * `--policy` takes). When set alongside `mandate`, families the policy
+   * explicitly permits / is transitioning are annotated + exempt from the early
+   * gate (`lead-months` / `fail-now`); a passed disallow deadline still fails.
+   */
+  policy?: string;
 }
 
 /** Parse + validate the action's inputs from the environment. Pure given `env`. */
@@ -125,6 +134,7 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
     mandates,
     leadMonths,
     failNow: getBooleanInput("fail-now", false, env),
+    policy: getInput("policy", env) || undefined,
   };
 }
 
@@ -603,14 +613,41 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // `redact-snippets` drops `location.snippet` from every finding (sensitive
   // findings are redacted regardless) so the report can be uploaded to code
   // scanning without leaking matched source.
+  // mandate: policy-as-code compliance gate. Deadline-aware — reports every
+  // mandate-prohibited finding with its named clause + deadline, but fails the
+  // build only once a deadline has passed (or early with lead-months / fail-now).
+  // Evaluated on the RAW findings: a baseline can suppress the severity gate,
+  // but must never waive a regulatory deadline. Computed BEFORE the report write
+  // so the machine-readable SARIF/JSON carries the mandate verdicts too.
+  let policy: CryptoPolicy | undefined;
+  if (inputs.policy) {
+    // Parsed strictly (parseCryptoPolicy throws on a malformed file) → the run
+    // fails via the entrypoint catch rather than silently dropping the policy.
+    const policyPath = resolveInWorkspace(inputs.policy, env);
+    policy = parseCryptoPolicy(JSON.parse(await readFile(policyPath, "utf8")));
+  }
+  let mandateEval: MandateEvaluation | undefined;
+  if (inputs.mandates.length > 0) {
+    // A typo'd id throws here and fails the run via the entrypoint's catch —
+    // a compliance gate must never silently gate against nothing. The org policy
+    // (when supplied) composes in: acknowledged families are exempt from the
+    // early gate but never from a passed disallow deadline.
+    assertKnownMandates(inputs.mandates);
+    mandateEval = evaluateMandates(result.findings, inputs.mandates, new Date(), policy);
+  }
+
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir(dirname(outputPath), { recursive: true });
   // qScan's renderReport is the single source of truth for report serialization
   // (and threads redactSnippets + the full SARIF rule catalog, incl. the
-  // dependency rule). The Action and CLI now share it verbatim.
+  // dependency rule). The Action and CLI now share it verbatim. The mandate
+  // evaluation rides along so an uploaded SARIF carries `run.properties.mandate`.
   await writeFile(
     outputPath,
-    renderReport(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
+    renderReport(result, inputs.format, {
+      redactSnippets: inputs.redactSnippets,
+      ...(mandateEval ? { mandate: mandateEval } : {}),
+    }),
     "utf8",
   );
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);
@@ -620,19 +657,6 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
 
   // The findings that gate the build.
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, inputs.severityThreshold));
-
-  // mandate: policy-as-code compliance gate. Deadline-aware — reports every
-  // mandate-prohibited finding with its named clause + deadline, but fails the
-  // build only once a deadline has passed (or early with lead-months / fail-now).
-  // Evaluated on the RAW findings: a baseline can suppress the severity gate,
-  // but must never waive a regulatory deadline.
-  let mandateEval: MandateEvaluation | undefined;
-  if (inputs.mandates.length > 0) {
-    // A typo'd id throws here and fails the run via the entrypoint's catch —
-    // a compliance gate must never silently gate against nothing.
-    assertKnownMandates(inputs.mandates);
-    mandateEval = evaluateMandates(result.findings, inputs.mandates, new Date());
-  }
 
   // Outputs.
   setOutput("findings-count", String(blocking.length), env);

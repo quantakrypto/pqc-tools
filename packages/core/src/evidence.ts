@@ -23,6 +23,7 @@ import { toCbom } from "./cbom.js";
 import { VERSION } from "./version.js";
 import { buildPolicyMapping } from "./policy.js";
 import type { CryptoPolicy, PolicyMapping } from "./policy.js";
+import type { MandateEvaluation } from "./mandates.js";
 
 /** Stable per-finding record for the evidence body (deterministic per commit). */
 export interface EvidenceFinding {
@@ -48,6 +49,14 @@ export interface ReadinessReport {
   findings: EvidenceFinding[];
   /** §4 policy verdicts, present only when a crypto policy was supplied. */
   policyMapping?: PolicyMapping;
+  /**
+   * Compliance-mandate verdicts (`--mandate`), present only when mandates were
+   * evaluated. DATE-PINNED for reproducibility: its `now` is stored as a plain
+   * `YYYY-MM-DD` (not the volatile scan timestamp) so the same scan of the same
+   * commit ON THE SAME DAY yields the same attestation hash, while a genuinely
+   * different compliance date (a passed deadline) correctly changes it.
+   */
+  mandateMapping?: MandateEvaluation;
   cbom: unknown;
   attestation: {
     /** sha256 over the canonicalized deterministic body (excludes scanTimeUtc). */
@@ -90,6 +99,12 @@ export interface ReadinessReportOptions {
   commit?: string;
   /** Optional org cryptography policy — adds the §4 `policyMapping` verdicts. */
   policy?: CryptoPolicy;
+  /**
+   * Optional compliance-mandate evaluation ({@link evaluateMandates}) — adds the
+   * `mandateMapping` block. Date-pinned into the hashed body (see
+   * {@link ReadinessReport.mandateMapping}).
+   */
+  mandate?: MandateEvaluation;
 }
 
 /**
@@ -118,6 +133,16 @@ export function buildReadinessReport(
   // Deterministic (same findings + policy → same mapping), so it is hashed.
   const policyMapping = opts.policy ? buildPolicyMapping(result.findings, opts.policy) : undefined;
 
+  // Compliance mandates: attest the dated verdicts too. The evaluation is a pure
+  // function of (findings, date), and the findings are already hashed — so we
+  // DATE-PIN its `now` to a plain `YYYY-MM-DD` (dropping the volatile scan
+  // timestamp) and hash that. Two runs on the same commit ON THE SAME DAY then
+  // reproduce; a run after a deadline has passed correctly attests a different
+  // status (and a different hash).
+  const mandateMapping = opts.mandate
+    ? { ...opts.mandate, now: opts.mandate.now.slice(0, 10) }
+    : undefined;
+
   const hashableBody = {
     reportType: "quantakrypto-readiness",
     specVersion: 1,
@@ -130,6 +155,7 @@ export function buildReadinessReport(
     inventory: result.inventory,
     findings,
     ...(policyMapping ? { policyMapping } : {}),
+    ...(mandateMapping ? { mandateMapping } : {}),
   };
   const contentHash =
     "sha256:" +
@@ -187,6 +213,7 @@ export function verifyReadinessReport(report: ReadinessReport): VerifyReadinessR
     inventory: report.inventory,
     findings: report.findings,
     ...(report.policyMapping ? { policyMapping: report.policyMapping } : {}),
+    ...(report.mandateMapping ? { mandateMapping: report.mandateMapping } : {}),
   };
   const computedHash =
     "sha256:" +
