@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.8.0";
+    VERSION = "0.9.0";
   }
 });
 
@@ -13854,7 +13854,9 @@ function buildMandateSection(ev) {
   lines.push(
     withPolicy ? "| Status | Clause | Deadline | File | Algorithm | Policy |" : "| Status | Clause | Deadline | File | Algorithm |"
   );
-  lines.push(withPolicy ? "| --- | --- | --- | --- | --- | --- |" : "| --- | --- | --- | --- | --- |");
+  lines.push(
+    withPolicy ? "| --- | --- | --- | --- | --- | --- |" : "| --- | --- | --- | --- | --- |"
+  );
   for (const r of rows.slice(0, 50)) {
     const icon = r.status === "violation" ? "\u{1F534}" : r.status === "deprecated" ? "\u{1F7E0}" : "\u{1F7E1}";
     const loc = mdCell(`${r.file}:${r.line}`);
@@ -13867,7 +13869,9 @@ function buildMandateSection(ev) {
     }
   }
   if (rows.length > 50) {
-    lines.push(withPolicy ? `| \u2026 | | | | | _${rows.length - 50} more_ |` : `| \u2026 | | | | _${rows.length - 50} more_ |`);
+    lines.push(
+      withPolicy ? `| \u2026 | | | | | _${rows.length - 50} more_ |` : `| \u2026 | | | | _${rows.length - 50} more_ |`
+    );
   }
   return lines.join("\n");
 }

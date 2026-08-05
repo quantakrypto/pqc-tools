@@ -6,6 +6,65 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-05
+
+### Added - machine-readable mandate output + `--policy` composition
+
+The `--mandate` compliance gate becomes CI-consumable, and an org cryptography
+policy can compose with it. SemVer: **minor** (additive features). Two exit-code
+behavior changes are called out under **Changed** below - read them before
+upgrading a `--mandate` pipeline.
+
+- **Machine-readable mandate verdicts.** The mandate evaluation is no longer
+  confined to the human report. `qscan --mandate --format json` adds a top-level
+  `mandateMapping` block; `--format sarif` carries the same under
+  `run.properties.mandate` (so an uploaded SARIF surfaces it in code scanning);
+  and `--format evidence` embeds a **date-pinned, hashed** `mandateMapping` in the
+  ISO/IEC 27001 A.8.24 attestation - reproducible per commit per day and
+  tamper-evident via the attestation content hash, mirroring `policyMapping`. The
+  GitHub Action threads the same verdicts into the SARIF it uploads. New optional
+  `ReportOptions.mandate` / `ReadinessReportOptions.mandate` and
+  `ReadinessReport.mandateMapping` (all additive; no export renamed or removed).
+- **`--policy` composes with `--mandate`.** Pass the org crypto-policy file (the
+  same one the evidence report's §4 verdicts use) alongside `--mandate`. Families
+  the policy **explicitly permits or is transitioning** are annotated in every
+  output (`policyVerdict` / `acknowledged`) and **exempted from the early gate**
+  (`--fail-now` / `--lead-months`). A **passed disallow deadline still fails**
+  regardless - an org cannot self-exempt from a dated regulatory prohibition, and
+  `prohibited` always wins over `permitted`. Exposed on the Action as a new
+  `policy` input.
+- **Two forward-looking roadmap notes** under `docs/roadmap/`: attestation as a
+  procurement/underwriting primitive, and a harvest-tripwire (HNDL canary)
+  research note.
+
+### Changed
+
+- **Exit-code loosening (opt-in):** with `--policy` **and** `--mandate`
+  `--fail-now`/`--lead-months`, a family the org lists as `permitted` or
+  `inTransition` no longer trips the early gate (it did in 0.8.0, which had no
+  composition). This only affects runs that pass **both** flags; `--mandate`
+  alone is unchanged. The Action side is opt-in (its `policy` input is new).
+- **Exit-code tightening:** the CLI now evaluates the mandate gate on
+  **pre-baseline** findings (kept + suppressed), matching the GitHub Action. A
+  `--baseline` accepts a finding for the *severity* gate but no longer waives a
+  regulatory **deadline**, so a baselined finding past a disallow date now fails
+  where it silently passed in 0.8.0. Closes a self-service deadline-waiver
+  (`--write-baseline` then `--baseline`).
+- **Pre-1.0 shape change:** `MandateEvaluation` and `MandateFindingVerdict` gained
+  required fields (`policyName`/`acknowledged`, and `policyVerdict`/`acknowledged`
+  respectively). Runtime behavior for existing 3-arg `evaluateMandates` callers is
+  identical; only TypeScript code that *constructs* one of these by hand needs the
+  new fields.
+
+### Fixed
+
+- **Evidence hash reproducibility.** `evaluateMandates` now pins `now` to UTC
+  midnight of its date before any arithmetic, so the `monthsUntil` /
+  `monthsUntilDisallow` counters (and therefore the attested evidence hash) are
+  identical for any two runs on the same day. Previously the counters were
+  computed from the full scan timestamp while `now` was date-pinned, so two
+  same-day runs diverged on ~7% of days (month-rounding boundaries).
+
 ## [0.8.0] - 2026-07-31
 
 ### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)
