@@ -1,6 +1,6 @@
 # Attestation as a procurement / underwriting primitive
 
-_One-pager, 2026-08-05. Roadmap item #12. Status: partnership-gated — the
+_One-pager, 2026-08-05. Frontier roadmap item (attestation as an underwriting primitive). Status: partnership-gated — the
 technology is already live; what is missing is a design partner and a thin
 packaging layer._
 
@@ -13,23 +13,26 @@ answers on faith. Insurers guess, or ignore the dimension entirely. The result i
 that doing the migration work earns a vendor nothing it can show a counterparty,
 and neglecting it costs nothing until it is far too late.
 
-## What we already have
+## What the toolset already ships
 
-quantakrypto ships a working, third-party-verifiable attestation today:
+The building blocks for a verifiable posture credential are in the open-source
+toolset today:
 
 - **A posture score** (0-100 readiness) derived from a deterministic scan, with a
-  CBOM and an ISO/IEC 27001 A.8.24 evidence chain behind it.
+  CBOM and an ISO/IEC 27001 A.8.24 evidence report behind it (`qscan --format
+  evidence`).
 - **A content hash** over the evidence body that is reproducible per commit, plus
   optional external signing and RFC-3161 / transparency-log timestamping
   (`signReadinessReport` / `verifyReadinessReport`).
-- **The `/.well-known/crypto-agility.json` self-manifest** — an agent- and
-  machine-consumable posture document at a stable, backlink-verifiable URL, plus
-  a public validator.
-- **Continuous re-verification.** The manifest is regenerated on every deploy, so
-  the posture a third party reads is current, not a one-time snapshot. This is the
-  property that makes the signal credible to someone with money at stake.
+- **The `/.well-known/crypto-agility.json` self-manifest emitter** — an agent- and
+  machine-consumable posture document (`qscan crypto-agility emit`), plus a
+  schema `validate` command / local validator.
 
-None of this is new engineering. It is shipped and live on quantakrypto.com.
+What that gives us is signed, reproducible, self-describing *evidence*. Turning
+it into a credential a third party will underwrite still needs the pieces below.
+(Where quantakrypto.com itself publishes and re-verifies its own manifest on
+deploy, that is a property of our site deployment, not something this repo can
+substantiate — do not represent it as a shipped product feature.)
 
 ## What this initiative adds
 
@@ -49,10 +52,11 @@ A thin packaging layer plus a go-to-market motion, not new core technology:
 
 ## Why us
 
-We already run the attestation program end to end, and the continuous
-re-verification is the hard, credibility-carrying part that a static PDF or a
-self-reported questionnaire can never match. We are early enough that defining the
-posture-credential format is defining the category.
+We already ship the signed, reproducible evidence layer, and continuous
+re-verification (regenerating the manifest rather than trusting a one-time PDF) is
+the hard, credibility-carrying part a self-reported questionnaire can never match.
+We are early enough that defining the posture-credential format is defining the
+category.
 
 ## The shape of the work
 
@@ -72,4 +76,4 @@ actual intake. No core roadmap capacity is committed until a partner is engaged.
 
 - [`docs/compliance/iso27001-a8.24-evidence.md`](../compliance/iso27001-a8.24-evidence.md) — the evidence chain this builds on.
 - [`docs/CRYPTO-AGILITY-MANIFEST.md`](../CRYPTO-AGILITY-MANIFEST.md) — the self-manifest + validator.
-- Roadmap item #5 (supply-chain CBOM aggregation) consumes these vendor attestations as inputs and should follow, not lead, this item.
+- The supply-chain CBOM-aggregation initiative consumes these vendor attestations as inputs and should follow, not lead, this item.

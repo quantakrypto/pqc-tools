@@ -1,8 +1,8 @@
 /**
  * Minimal, hand-rolled TLS 1.3 ClientHello builder + ServerHello/HelloRetryRequest
  * parser — just enough to detect whether a server supports the post-quantum hybrid
- * key-exchange group X25519MLKEM768 (codepoint 0x11EC, RFC 9370 / draft-kwiatkowski
- * -tls-ecdhe-mlkem). Node's bundled OpenSSL does not offer this group, so it cannot
+ * key-exchange group X25519MLKEM768 (codepoint 0x11EC, registered by
+ * draft-ietf-tls-ecdhe-mlkem). Node's bundled OpenSSL does not offer this group, so it cannot
  * be detected through `node:tls`; we advertise it in a raw ClientHello and read the
  * group the server selects.
  *

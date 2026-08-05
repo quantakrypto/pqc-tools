@@ -45,7 +45,7 @@ ML-DSA / FIPS 204, SLH-DSA / FIPS 205, hybrid `X25519MLKEM768`).
 
 | Package | Objective |
 |---|---|
-| **`@quantakrypto/core`** | The shared engine and single contract: the detector registry (source + config + dependency), the readiness score / inventory, the reporters (human, JSON, SARIF 2.1.0, CycloneDX CBOM, ISO A.8.24 evidence, OpenVEX), the standards source-of-truth, and the offline agent-plane primitives (context redactor, `verify_fix` gate, deterministic codemods, patch policy). Every other package builds on it — see [ADR-0002](adr/0002-shared-core-contract.md). |
+| **`@quantakrypto/core`** | The shared engine and single contract: the detector registry (source + config + dependency), the readiness score / inventory, the reporters (human, JSON, SARIF 2.1.0, CycloneDX CBOM, ISO A.8.24 evidence, OpenVEX), the standards source-of-truth, and the offline agent-plane primitives (context redactor, `verify_fix` gate, deterministic codemods, patch policy). Every package except the standalone `sieve` builds on it (qscan, mcp, action, agent, qprobe) — see [ADR-0002](adr/0002-shared-core-contract.md). |
 | **`@quantakrypto/qscan`** | The CLI: scan a repo, print a readiness score and the concrete next step, and drive the CI exit code. Baselines, incremental/parallel scans, and the opt-in `--triage` / `qremediate` migration path. |
 | **`@quantakrypto/mcp`** | An **offline, key-free** Model Context Protocol server that gives AI coding agents the readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Safe to host because it never phones home and never holds a key — see [ADR-0005](adr/0005-byok-agent-two-planes.md). |
 | **`@quantakrypto/sieve`** | A conformance battery that tests *other people's* ML-KEM / ML-DSA / SLH-DSA implementations over a JSON stdin/stdout protocol. It implements no cryptography and ships no KAT vectors — see [ADR-0004](adr/0004-sieve-no-fabricated-vectors.md). |
@@ -53,8 +53,10 @@ ML-DSA / FIPS 204, SLH-DSA / FIPS 205, hybrid `X25519MLKEM768`).
 | **`@quantakrypto/agent`** | The **only** networked, key-holding plane: a zero-dependency BYOK LLM client (native `fetch`; Anthropic + OpenAI-compatible adapters) that powers `qscan --triage` and `qremediate --llm`. Deliberately isolated from the offline engine — see [ADR-0005](adr/0005-byok-agent-two-planes.md). |
 | **`@quantakrypto/qprobe`** | Actively probes **live TLS/SSH endpoints you own** for PQC-hybrid key exchange and classical certificate posture — the runtime complement to the static scan. Gated behind an ownership attestation; it reports, never modifies. |
 
-`core`, `qscan`, `mcp`, `sieve`, `action`, and the offline half of the agent line
-share one contract; `agent` and `qprobe` are the only network-touching pieces.
+`core`, `qscan`, `mcp`, `action`, `qprobe`, and the offline half of the agent
+line share one contract; `sieve` is standalone (it depends on no other package —
+only the SUT wire protocol); `agent` and `qprobe` are the only network-touching
+pieces.
 
 ## Load-bearing decisions (the "why")
 

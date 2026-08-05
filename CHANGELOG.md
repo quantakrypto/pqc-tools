@@ -67,6 +67,9 @@ upgrading a `--mandate` pipeline.
 
 ## [0.8.0] - 2026-07-31
 
+(There is a `v0.7.0` git tag but no separate 0.7.0 section: its changes were
+consolidated into this 0.8.0 entry — same convention as the 0.3 skip.)
+
 ### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)
 
 Three new supply-chain capabilities. SemVer: **minor** (additive API + CLI
@@ -757,10 +760,12 @@ now single-source:
   DER parse reads how the leaf certificate is *signed* — the CA's algorithm, the
   forgeable-at-Q-day part — which `node:tls` does not expose), and an **SMTP
   STARTTLS** probe mode (`--smtp`, auto on :25/:587) that upgrades the mail session
-  to TLS and inspects the negotiated posture. (Real ML-KEM keygen for definitive
-  hybrid negotiation is intentionally NOT implemented — it would violate the repo's
-  "implements no crypto itself" principle, and the HelloRetryRequest-based detection
-  already works without it.)
+  to TLS and inspects the negotiated posture. (Real ML-KEM keygen remains
+  intentionally NOT implemented — it would violate the repo's "implements no
+  crypto itself" principle, and it isn't needed: the HelloRetryRequest-based
+  detection works without it, and the definitive hybrid negotiation above gets a
+  direct ServerHello selection from an encoded-but-throwaway key_share whose
+  secret is never computed.)
 - **Network transport / VPN detector (`vpn`)** in `@quantakrypto/core` — classical
   key exchange in the tunnels carrying communication between things: **WireGuard**
   (`[Interface]`/`[Peer]` Curve25519 keys — a sharp finding, since WireGuard has no
@@ -1177,9 +1182,8 @@ TypeScript toolset for post-quantum readiness.
   driven over a JSON protocol; ships no KAT vectors and never fabricates them.
 - Project governance, CI, and a multi-discipline audit set under `docs/`.
 
-<!-- Per-version compare links are omitted: releases are currently published from
-`main` rather than immutable `vX.Y.Z` tags (only a moving `v1` Action tag exists).
-Cutting semver tags + a GitHub Release per version is tracked as a release-process
-fix. -->
+<!-- Per-version compare links are omitted for brevity. Immutable `vX.Y.Z` tags
+exist from v0.4.3 onward (v0.4.3 … v0.8.0), and the moving `v1` Action tag is
+auto-moved to each released commit on publish. -->
 [Unreleased]: https://github.com/quantakrypto/pqc-tools/commits/main
 [0.1.0]: https://github.com/quantakrypto/pqc-tools/releases/tag/v0.1.0

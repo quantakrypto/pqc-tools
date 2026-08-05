@@ -74,7 +74,8 @@ OPTIONS
   --mandate <id>                Gate findings against a compliance mandate's dated
                                 clauses (repeatable): cnsa-2.0 | nist-ir-8547. Reports
                                 each prohibited finding with its clause + deadline;
-                                fails the build only once a deadline has passed. The
+                                fails the build only once a disallow deadline has passed
+                                (a passed deprecate date warns). The
                                 verdicts also ride in --format json (mandateMapping),
                                 sarif (run.properties.mandate), and evidence (hashed)
   --lead-months <n>             Fail early when a --mandate deadline is within n months

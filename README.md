@@ -8,10 +8,11 @@
 [![npm @quantakrypto/mcp](https://img.shields.io/npm/v/@quantakrypto/mcp?label=%40quantakrypto%2Fmcp)](https://www.npmjs.com/package/@quantakrypto/mcp)
 [![npm @quantakrypto/sieve](https://img.shields.io/npm/v/@quantakrypto/sieve?label=%40quantakrypto%2Fsieve)](https://www.npmjs.com/package/@quantakrypto/sieve)
 [![npm @quantakrypto/agent](https://img.shields.io/npm/v/@quantakrypto/agent?label=%40quantakrypto%2Fagent)](https://www.npmjs.com/package/@quantakrypto/agent)
+[![npm @quantakrypto/qprobe](https://img.shields.io/npm/v/@quantakrypto/qprobe?label=%40quantakrypto%2Fqprobe)](https://www.npmjs.com/package/@quantakrypto/qprobe)
 ![Node ≥20](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)
 ![Runtime deps: 0](https://img.shields.io/badge/runtime%20deps-0-success)
-[![NIST FIPS 203/204/205](https://img.shields.io/badge/NIST-FIPS%20203%2F204%2F205-7c3aed)](docs/COMPLIANCE.md)
+[![PQC targets: FIPS 203/204/205](https://img.shields.io/badge/PQC%20targets-FIPS%20203%2F204%2F205-7c3aed)](docs/COMPLIANCE.md)
 
 Open-source post-quantum readiness tooling by [quantakrypto](https://quantakrypto.com).
 Find quantum-vulnerable cryptography in any codebase, wire post-quantum readiness
@@ -26,7 +27,7 @@ with **zero runtime dependencies** (Node built-ins only).
 | Tool | What it does | Get it |
 |---|---|---|
 | **[qScan](packages/qscan)** (`@quantakrypto/qscan`) | CLI that finds quantum-vulnerable crypto (RSA, (EC)DH, ECDSA, EdDSA, …) across **14 languages** (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo) and prints a readiness score. SARIF / JSON / CBOM / evidence (ISO 27001 A.8.24) / OpenVEX output, baselines, incremental & parallel scans. Compliance mandate gate: `--mandate cnsa-2.0` / `nist-ir-8547` reports each prohibited finding with its dated clause and fails the build on the mandate's deadlines (`--lead-months`, `--fail-now`). Opt-in `--triage` (BYOK LLM re-rank/explain) and a `qremediate` codemod CLI. | `npx @quantakrypto/qscan ./` |
-| **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (scan, inventory, explain, suggest-hybrid, CBOM). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
+| **[MCP](packages/mcp)** (`@quantakrypto/mcp`) | Model Context Protocol server that gives AI coding agents post-quantum readiness tools (16 tools — scan, inventory, explain, suggest-hybrid, CBOM, plan-migration, triage, remediate, probe-endpoint, …). Local stdio + hostable HTTP. | `claude mcp add quantakrypto npx @quantakrypto/mcp` |
 | **[Sieve](packages/sieve)** (`@quantakrypto/sieve`) | Conformance battery for ML-KEM (FIPS 203), ML-DSA (FIPS 204), and SLH-DSA (FIPS 205) implementations, driven over a JSON stdin/stdout protocol. | `npx @quantakrypto/sieve --help` |
 | **[Action](packages/action)** (`@quantakrypto/action`) | GitHub Action that runs qScan in CI, uploads SARIF, annotates the diff, and fails the build only on **new** quantum-vulnerable crypto. | `uses: quantakrypto/pqc-tools/packages/action@v1` |
 | **[agent](packages/agent)** (`@quantakrypto/agent`) | Optional, zero-dependency BYOK (bring-your-own-key) LLM client (native `fetch`; Anthropic + OpenAI-compatible adapters) that powers qScan `--triage` and `qremediate --llm`. Networked, key-holding — kept isolated (see also qProbe). | `npm i @quantakrypto/agent` |
@@ -94,9 +95,10 @@ the scanner, the CI gate, and the conformance harness you wrap around a real PQC
 library like [liboqs / Open Quantum Safe](https://openquantumsafe.org/). They
 compose: quantakrypto **finds and gates** classical crypto (`qscan`, the Action),
 tells you **what to migrate to and in what order** (`qscan --tier`, MCP
-`plan_migration`, `qremediate`), and **proves the replacement is correct**
-(`sieve` conformance-tests any ML-KEM/ML-DSA/SLH-DSA implementation against
-FIPS 203/204/205). liboqs supplies the primitives.
+`plan_migration`, `qremediate`), and **conformance-tests the replacement**
+(`sieve` runs any ML-KEM/ML-DSA/SLH-DSA implementation against FIPS 203/204/205,
+with exact-value KATs when you supply official NIST ACVP vectors). liboqs
+supplies the primitives.
 
 See the worked end-to-end walkthrough — scan → migrate → verify → gate — in
 **[`examples/liboqs-migration/`](examples/liboqs-migration/README.md)**.
@@ -148,8 +150,9 @@ Full documentation lives in **[`docs/`](docs/README.md)**:
 
 ## License
 
-[Apache-2.0](LICENSE). The methodology is open; the audits, certificates, and
-deliverables are where the [quantakrypto](https://quantakrypto.com) practice lives.
+[Apache-2.0](LICENSE). The methodology is open; the assessments, attestation
+reports, and deliverables are where the [quantakrypto](https://quantakrypto.com)
+practice lives.
 
 ## Support & training
 

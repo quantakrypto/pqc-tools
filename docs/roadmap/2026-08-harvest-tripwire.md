@@ -1,6 +1,6 @@
 # Harvest tripwire: canary tokens for HNDL
 
-_Research note, 2026-08-05. Roadmap item #10. Status: research-first — stake the
+_Research note, 2026-08-05. Frontier roadmap item (harvest tripwire). Status: research-first — stake the
 claim now with this note; build when a hire or a research collaboration appears._
 
 ## The problem
@@ -61,9 +61,11 @@ Each token is a distinct, registered, individually-revocable credential:
 
 ## Evidence value
 
-- The first mechanism to **detect and attribute HNDL in the wild**, rather than
-  reason about it. That is publishable research and, if it ever fires, a genuinely
-  historic data point.
+- A mechanism to **detect decryption of harvested ciphertext in the wild** and
+  trace a firing to a specific planted token, rather than only reason about the
+  threat — with attribution limited to what the token design supports (see the
+  threat model above). That is publishable research and, if it ever fires, a
+  genuinely notable data point.
 - Even a long null result is informative: a large, well-placed token fleet that
   never fires bounds the observed rate of successful harvest-and-decrypt, which is
   itself a number nobody has today.
@@ -99,4 +101,4 @@ credibly here.
 ## Related
 
 - [`docs/HNDL.md`](../HNDL.md) — the exposure model this extends from measurement to detection.
-- Roadmap item #8 (HNDL debt clock) — the shipped quantification this pairs with.
+- The HNDL debt clock (shipped) — the quantification this pairs with.

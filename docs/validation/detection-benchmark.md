@@ -4,15 +4,15 @@ This document records how we **measure** the accuracy of qScan's crypto
 detectors against a known ground truth, the **current measured numbers**
 (precision / recall / F1, overall and per category), and — honestly — the
 **false positives and false negatives** the scanner currently produces. It is a
-companion to the cryptography audit, which reviews
-detector design; this doc quantifies detector behaviour and locks it as a
-regression guard.
+companion to the cryptography audit, which reviews detector design; this doc
+quantifies detector behaviour and locks it as a regression guard.
 
 The benchmark is executed by
 [`packages/core/test/benchmark.test.ts`](../../packages/core/test/benchmark.test.ts)
 as part of the normal `@quantakrypto/core` test suite (`node:test`, zero runtime
-dependencies). The numbers below are reproduced on every run, so this page and
-the test cannot silently drift apart.
+dependencies). It prints the scorecard on every run; re-run it after any detector
+change and update the measured numbers below (see [Updating](#updating)) so this
+page stays in step with the test.
 
 ## What is measured
 
@@ -45,108 +45,92 @@ and is split into `positive/` (crypto that **must** be detected) and `negative/`
 (false-positive **bait** that must produce **zero** findings). The ground-truth
 labels are in
 [`packages/core/test/benchmark/labels.json`](../../packages/core/test/benchmark/labels.json).
-Files span `.ts`, `.js`, `.mjs`, `.pem`, `package.json`, and an
-`authorized_keys` file to exercise every detector surface and language toggle.
 
-### Positives (25 files, 31 expected findings)
+### Positives (61 files, 159 expected findings)
 
-| Category            | What it exercises                                                              | Rule(s)                                       |
-| ------------------- | ----------------------------------------------------------------------------- | --------------------------------------------- |
-| `rsa`               | RSA keygen + `createSign`; RSA `publicEncrypt`                                 | `node-crypto-keygen`, `node-crypto-sign`, `node-crypto-rsa-encrypt` |
-| `signature-oneshot` | one-shot `crypto.sign` / `crypto.verify("sha256", …)`                          | `node-crypto-sign-oneshot`                    |
-| `ecdh`              | `createECDH`; WebCrypto ECDH `deriveKey`                                       | `node-crypto-ecdh`, `webcrypto-classical`     |
-| `ec-keygen`         | `generateKeyPair("ec")` (classified as key-exchange-capable / HNDL)           | `node-crypto-keygen`                          |
-| `ecdsa`             | WebCrypto ECDSA `sign`                                                         | `webcrypto-classical`                         |
-| `dh`                | `createDiffieHellman`; `getDiffieHellman("modp14")`                            | `node-crypto-dh`, `node-crypto-dh-modp`       |
-| `dsa`               | `generateKeyPair("dsa")`                                                       | `node-crypto-keygen`                          |
-| `eddsa`             | `generateKeyPair("ed25519")`                                                   | `node-crypto-keygen`                          |
-| `x25519`            | `generateKeyPair("x25519")`                                                    | `node-crypto-keygen`                          |
-| `jwt-jose`          | JWT `RS256` / `ES256`; JOSE `ECDH-ES+A256KW`                                   | `jwt-classical-alg`, `jose-ecdh-es`           |
-| `library`           | node-forge, elliptic, `@noble/secp256k1`, jsrsasign, node-rsa                 | `forge-rsa-keygen`, `elliptic-ec`, `secp256k1-usage`, `jsrsasign-keygen`, `jsrsasign-sign`, `node-rsa` |
-| `dependency`        | `package.json` depending on node-forge + jsonwebtoken                         | `dep-vulnerable`                              |
-| `pem`               | PEM RSA + EC private keys                                                      | `pem-rsa-private-key`, `pem-ec-private-key`   |
-| `ssh`               | `authorized_keys` with `ssh-rsa` + `ssh-ed25519`                              | `ssh-public-key`                              |
-| `tls`               | legacy TLS version pin + `rejectUnauthorized: false`                          | `tls-legacy-version`, `tls-reject-unauthorized` |
+The positive corpus spans every detector surface and language toggle: JS/TS,
+Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, Swift, C/C++, plus PEM/SSH key
+material, dependency manifests, JWT/JOSE, TLS config, DNSSEC, and IaC
+(Ansible / Bicep / Pulumi / Terraform). Each positive category and its
+expected-finding count is listed in the per-category scorecard under
+[Current measured results](#current-measured-results); the exact
+`(ruleId, algorithm, hndl)` labels per file are in `labels.json`.
 
-### Negatives / false-positive baits (8 files, 0 expected findings)
+### Negatives (22 files, 0 expected findings)
 
-| File                          | Why it is bait                                                                |
-| ----------------------------- | ----------------------------------------------------------------------------- |
-| `password-hashing.ts`         | bcrypt / scrypt / argon2 — symmetric KDFs, not asymmetric crypto              |
-| `symmetric-aead.ts`           | AES-256-GCM + ChaCha20-Poly1305 — symmetric, not Shor-broken                  |
-| `hashing-hmac.js`             | SHA-256 + HMAC — hashes/MACs, not asymmetric                                   |
-| `noble-hashes.mjs`            | `@noble/hashes` — pure hashing (distinct from the flagged `@noble/*` curves)  |
-| `random-base64.txt`           | base64 blobs, no PEM header, no crypto call                                   |
-| `comments-and-names.ts`       | "RSA"/"ECDSA"/"DH" only in comments and identifiers (`rsaToken`, `ecdsaLabel`) |
-| `safe-package.json`           | depends only on express / lodash / `@noble/hashes` / zod / typescript         |
-| `crypto-words-in-comment.ts`  | **known false positive** — a comment containing `createECDH (` (see below)    |
+The negative set is false-positive bait that must produce **zero** findings —
+symmetric crypto (AES-GCM, ChaCha20-Poly1305), KDFs (bcrypt / scrypt / argon2),
+hashes/MACs (SHA-256, HMAC, `@noble/hashes`), base64 blobs with no PEM header,
+crypto terms appearing only in comments and identifiers, and manifests that
+depend only on safe packages. Any finding on a negative file is a false positive
+and fails the build.
 
 ## Current measured results
 
-Measured by `packages/core/test/benchmark.test.ts` (Node 20, `@quantakrypto/core`
-v0.1.0). The test prints this exact scorecard on each run.
+Measured by `packages/core/test/benchmark.test.ts` (Node 20,
+`@quantakrypto/core` v0.9.0). The test prints this exact scorecard on each run.
 
-**Overall: precision 0.969 · recall 1.000 · F1 0.984** (TP = 31, FP = 1, FN = 0).
+**Overall: precision 1.000 · recall 1.000 · F1 1.000** (TP = 159, FP = 0, FN = 0).
 
-| Category            | TP  | FP  | FN  | Precision | Recall | F1    |
-| ------------------- | --- | --- | --- | --------- | ------ | ----- |
-| rsa                 | 3   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| signature-oneshot   | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| ecdh                | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| ec-keygen           | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| ecdsa               | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| dh                  | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| dsa                 | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| eddsa               | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| x25519              | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| jwt-jose            | 3   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| library             | 6   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| dependency          | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| pem                 | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| ssh                 | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| tls                 | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
-| negative            | 0   | 1   | 0   | 0.000\*   | 1.000  | 0.000\* |
-| **OVERALL**         | 31  | 1   | 0   | **0.969** | **1.000** | **0.984** |
-
-\* The `negative` row has no true positives by construction, so its
-per-category precision/F1 are 0 whenever a single FP appears. The meaningful
-signal for the negative set is the **FP count** (1), not its F1. Overall
-precision (0.969) already reflects that one FP.
+| Category          | TP  | FP  | FN  | Precision | Recall | F1    |
+| ----------------- | --- | --- | --- | --------- | ------ | ----- |
+| c                 | 18  | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| csharp            | 6   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| dependency        | 6   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| dh                | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| dnssec            | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| dsa               | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| ec-keygen         | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| ecdh              | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| ecdsa             | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| eddsa             | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| go                | 13  | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| iac-ansible       | 3   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| iac-bicep         | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| iac-pulumi        | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| iac-terraform     | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| java              | 23  | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| jwt-jose          | 4   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| library           | 6   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| negative          | 0   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| pem               | 5   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| pem-embedded-key  | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| python            | 17  | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| rsa               | 3   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| ruby              | 9   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| rust              | 14  | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| signature         | 9   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| signature-oneshot | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| ssh               | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| swift             | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| tls               | 2   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| x25519            | 1   | 0   | 0   | 1.000     | 1.000  | 1.000 |
+| **OVERALL**       | 159 | 0   | 0   | **1.000** | **1.000** | **1.000** |
 
 ### Regression thresholds (the guard)
 
 The test asserts thresholds set **just below** the measured values, so a real
-regression fails the build but normal variance does not:
+regression fails the build but the numbers above are not brittle:
 
-- overall precision ≥ **0.95** (measured 0.969)
+- overall precision ≥ **0.98** (measured 1.000)
 - overall recall ≥ **0.99** (measured 1.000)
-- overall F1 ≥ **0.97** (measured 0.984)
+- overall F1 ≥ **0.98** (measured 1.000)
+- at least **30** true positives (measured 159)
 - **false negatives must be exactly 0** (`recall is perfect` test) — any missed
   detection is a hard failure.
-- the negative set is **strict**: the set of false positives must equal exactly
-  the one documented known FP. Any _new_ false positive fails the build.
+- the negative set is **strict**: **zero** false positives are allowed. Any new
+  false positive fails the build.
 
 ## Known false positives / false negatives
 
 We surface these on purpose rather than tuning the corpus to hide them.
 
-### False positives (1)
+### False positives (0)
 
-- **`createECDH (` (or any detected API name) inside a comment** — file
-  `negative/crypto-words-in-comment.ts`, rule `node-crypto-ecdh`,
-  `algorithm: ECDH`, `hndl: true`. The Node-`crypto` regexes allow optional
-  whitespace before the call's `(` (e.g. `/createECDH\s*\(/`). A comment such as
-  `// … createECDH (deprecated since 2019)` therefore matches even though there
-  is no code. This is a general property of the whitespace-tolerant call
-  patterns (`createDiffieHellman`, `createSign`/`createVerify`, `publicEncrypt`,
-  …): the detectors do not strip comments or strings before matching, so prose
-  that mentions an API immediately followed by a space and `(` will misfire.
-  - **Impact:** low. It needs the exact `name (` shape in prose; the far more
-    common bare mentions (no following `(`) and identifier/variable uses do
-    **not** misfire (verified by `comments-and-names.ts`, which is clean).
-  - **Status:** measured and asserted as the single accepted FP. Fixing it
-    requires comment/string stripping or anchoring the call patterns, which is a
-    detector-source change tracked separately — see _Known gaps_.
+None in the current corpus (precision 1.000). An earlier accepted FP — an API
+name such as `createECDH (` appearing inside a comment — has been suppressed, so
+the negative set now produces zero findings. This is a property of _this_ corpus,
+not a guarantee that no prose can ever misfire (see Known gaps).
 
 ### False negatives (0)
 
@@ -156,37 +140,33 @@ caveats below.
 
 ### Known gaps (detector behaviour observed while measuring)
 
-These are detector limitations the benchmark exposed. They are **documented, not
-fixed here** — editing detector source is a separate task. They are not (yet)
-counted as benchmark failures because the corpus is built around the detectors'
+These are detector limitations, **documented, not necessarily counted as
+benchmark failures**, because the corpus is built around the detectors'
 documented lexical contract.
 
-1. **No comment/string stripping (root cause of the one FP above).** Because
-   matching runs over raw text, API names in comments that are followed by `(`
-   can be flagged. Tightening this (comment-aware scanning, or requiring a
-   receiver like `crypto.`/an identifier before the call) would remove the FP
-   class.
+1. **Comment/string awareness is limited.** Matching runs over raw text, so an
+   API name followed by `(` inside prose can in principle be flagged. The
+   specific comment-FP case in the corpus is suppressed, but comment-aware
+   scanning (or requiring a receiver like `crypto.` before the call) would harden
+   the whole whitespace-tolerant call-pattern family.
 2. **EdDSA one-shot signing via `crypto.sign(null, …)` is not detected.** The
-   one-shot rule requires a **quoted** algorithm as the first argument
-   (`/(?:crypto\.)?(sign|verify)\s*\(\s*['"`][\w.-]+['"`]\s*,/`). Idiomatic
+   one-shot rule requires a **quoted** algorithm as the first argument. Idiomatic
    Ed25519 signing passes `null` as the algorithm (`crypto.sign(null, msg, key)`)
    and is therefore missed. The corpus uses `crypto.sign("sha256", …)` for the
-   one-shot positive precisely because the `null` form is a known miss. This is
-   a true false-negative class not represented as a "must-detect" label to avoid
-   asserting behaviour the detector does not claim.
+   one-shot positive precisely because the `null` form is a known miss.
 3. **WebCrypto algorithm proximity window.** `webcrypto-classical` only fires
    when the algorithm token (`ECDH`, `ECDSA`, `RSA-OAEP`, …) sits within ~400
    characters of a `subtle.*` call. Algorithm constants defined far from their
-   use site would be missed. Not exercised as a negative here.
+   use site would be missed.
 
 ## Caveats
 
-- The corpus is **small and curated** to cover each detector once or twice with
-  unambiguous cases. High precision/recall here means "the detectors do what
-  they claim on canonical inputs and don't fire on the obvious traps" — it is
-  **not** a statement about real-world recall over messy code.
-- Findings are matched on `(ruleId, algorithm, hndl)`, not on line/column, so
-  the benchmark validates _what_ is detected, not _where_.
+- The corpus is **curated** to cover each detector on unambiguous cases. High
+  precision/recall here means "the detectors do what they claim on canonical
+  inputs and don't fire on the obvious traps" — it is **not** a statement about
+  real-world recall over messy code.
+- Findings are matched on `(ruleId, algorithm, hndl)`, not on line/column, so the
+  benchmark validates _what_ is detected, not _where_.
 
 ## Reproducing
 

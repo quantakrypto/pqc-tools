@@ -81,17 +81,29 @@ qscan [path] [options]
 | `--parallel` | Scan using a worker-thread pool when the workload is large enough. | off |
 | `--concurrency <n>` | Worker count for `--parallel` (implies `--parallel`). `0`/`1` forces serial. | CPU count |
 | `--audit` | Opt-in supply-chain checks (see below): dependency advisories via each ecosystem's own audit tool, plus a declared-source-repository (provenance) check. Findings merge into the report and the exit code; a missing tool or network hiccup degrades to a stderr diagnostic. | off |
+| `--mandate <id>` | Gate findings against a compliance mandate's dated clauses (`cnsa-2.0`, `nist-ir-8547`; repeatable). Reports each prohibited finding with its clause + deadline; fails the build only once a disallow deadline has passed. Verdicts also ride in `--format json` (`mandateMapping`), `sarif` (`run.properties.mandate`), and `evidence` (hashed). | off |
+| `--lead-months <n>` | Fail early when a `--mandate` disallow deadline is within `n` months. | — |
+| `--fail-now` | Fail on any `--mandate`-prohibited finding, ignoring the deadline. | off |
+| `--policy <file>` | Org crypto-policy JSON: adds §4 verdicts to `--format evidence`; with `--mandate`, permitted/in-transition families are acknowledged and exempt from the early gate (`--fail-now`/`--lead-months`), but a passed disallow deadline still fails. | — |
+| `--profile <id>` | Standards regime for the migration-targets footer: `nist`, `cnsa-2.0`, `bsi-tr-02102`, `anssi`, `uk-ncsc`. | `nist` |
+| `--tier <id>` | CNSA security tier for migration targets: `category-3`, `category-5` (alias for a profile). | — |
+| `--hndl` | Score findings by harvest-now-decrypt-later exposure (reads `hndl.yml`; `qscan hndl init` scaffolds one). Annotates only; never changes the exit code. | off |
 | `--triage` | BYOK LLM pass that re-ranks findings by real exposure and explains them. Never suppresses; never changes the exit code. Needs an API key. | off |
 | `--triage-floor <level>` | With `--triage`, only triage findings at/above this level. | `medium` |
-| `--context <level>` | How much source is shared with the LLM: `metadata`, `snippet`, `function`, `file` (secrets always redacted). | `snippet` |
+| `--context <level>` | How much source is shared with the LLM: `metadata`, `snippet`, `function`, `file` (key material redacted, best-effort — review with `--dry-run`). | `snippet` |
 | `--dry-run` | With `--triage`, print the exact payload that would be sent and exit without contacting the provider. | off |
 | `--llm-provider <name>` | BYOK provider: `anthropic` or `openai-compatible`. | `anthropic` |
 | `--llm-model <id>` | Model id for the BYOK provider. | provider default |
-| `--baseline <file>` | Suppress findings whose fingerprint is in the baseline file. | — |
+| `--baseline <file>` | Suppress findings whose fingerprint is in the baseline file (severity gate only — the `--mandate` gate is evaluated on pre-baseline findings, so a baseline can't waive a regulatory deadline). | — |
 | `--write-baseline <file>` | Write current findings as a baseline, then exit 0. | — |
 | `--quiet` | Suppress the human summary banner. | off |
 | `-v, --version` | Print version and exit. | — |
 | `-h, --help` | Print help and exit. | — |
+
+This table covers the common flags. Run `qscan --help` for the authoritative,
+complete list (including `--sign`/`--timestamp`, `--crypto-agility`, `--merge`,
+`--cache`, `--top`, `--max-findings`, `--no-snippets`, `--color`), plus the
+subcommands `qscan hndl init` and `qscan crypto-agility emit|validate`.
 
 ### Exit codes
 
@@ -303,9 +315,10 @@ qscan . --triage --dry-run
 ```
 
 `--context` controls how much source leaves the machine (`metadata` | `snippet` |
-`function` | `file`, default `snippet`); secrets are always redacted. `--dry-run`
-prints the exact, redacted payload and exits **without contacting the provider**,
-so you can review what triage would send before enabling it.
+`function` | `file`, default `snippet`); key material is redacted on every payload
+(best-effort — pattern-based, so review with `--dry-run`). `--dry-run` prints the
+exact, redacted payload and exits **without contacting the provider**, so you can
+review what triage would send before enabling it.
 
 ## Remediation (`qremediate`)
 

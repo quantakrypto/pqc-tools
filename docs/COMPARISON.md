@@ -31,11 +31,11 @@ cryptodeps (csnp, part of the QRAMM ecosystem) is a dependency-and-import crypto
 | Dimension | quantakrypto/pqc-tools | cryptodeps (csnp) |
 |---|---|---|
 | What it is | PQC-readiness toolchain: scanner + CI gate + MCP + conformance harness + active prober | Dependency / import crypto scanner focused on quantum-vulnerable libraries |
-| Primary detection approach | 52 detectors emitting 297 rules (verified against `defaultRegistry`): regex-and-heuristic content detectors per language and per config surface, plus a curated 81-entry vulnerable-dependency catalog | Curated 1,100+ package database + per-ecosystem import-pattern matching + language-specific AST parsing + Go-only call-graph reachability |
-| Dependency-manifest coverage | 7 ecosystems: npm, PyPI, Cargo, Go modules, Maven, RubyGems, NuGet (verified in `dependencies.ts`) | Documented import patterns for Go, npm, Python, Java; broader package DB behind them |
+| Primary detection approach | 53 detectors emitting 299 rules (verified against `defaultRegistry`): regex-and-heuristic content detectors per language and per config surface, plus a curated 90-entry vulnerable-dependency catalog | Curated 1,100+ package database + per-ecosystem import-pattern matching + language-specific AST parsing + Go-only call-graph reachability |
+| Dependency-manifest coverage | 8 ecosystems: npm, PyPI, Cargo, Go modules, Maven, RubyGems, NuGet, Composer (verified in `dependencies.ts`) | Documented import patterns for Go, npm, Python, Java; broader package DB behind them |
 | Source-code coverage | 14 language packs (JS/TS, Python, Go, Java/Kotlin/Scala, C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo) | AST analysis for its documented ecosystems |
 | Reachability / call-graph | None. Detectors are pure per-file matchers (`Detector.detect` sees one file at a time). This is a real gap. | Go call-graph reachability determines which crypto is actually invoked. A genuine strength quantakrypto does not have. |
-| Infrastructure / config surfaces | Extensive (35 config-scope detectors): TLS, SSH, cloud KMS, JWK/JWKS, JOSE/JWE, Terraform/OpenTofu, CloudFormation, Bicep, Pulumi, Ansible, k8s / cert-manager / Istio / SPIFFE-SPIRE, DNSSEC, DKIM, messaging (Kafka/MQTT), database (pgcrypto/TDE), PKCS#11/HSM, keystores, PEM material, secrets-at-rest, Vault, VPN, code-signing, WebAuthn, XML-DSig/SAML, stateful-HBS | Focused on dependencies and imports; not a documented infrastructure scanner |
+| Infrastructure / config surfaces | Extensive (36 config-scope detectors): TLS, SSH, cloud KMS, JWK/JWKS, JOSE/JWE, Terraform/OpenTofu, CloudFormation, Bicep, Pulumi, Ansible, k8s / cert-manager / Istio / SPIFFE-SPIRE, DNSSEC, DKIM, messaging (Kafka/MQTT), database (pgcrypto/TDE), PKCS#11/HSM, keystores, PEM material, secrets-at-rest, Vault, VPN, code-signing, WebAuthn, XML-DSig/SAML, stateful-HBS | Focused on dependencies and imports; not a documented infrastructure scanner |
 | Active / live probing | qProbe probes owned TLS/SSH endpoints for X25519MLKEM768 hybrid key exchange and classical cert posture (ownership-gated) | Static only |
 | Risk model | 5-level severity (critical/high/medium/low/info) plus a harvest-now-decrypt-later (HNDL) boolean per finding | VULNERABLE / PARTIAL / SAFE classification with a per-algorithm severity |
 | Standards regimes | Selectable profiles: NIST (default), CNSA 2.0, BSI TR-02102, ANSSI, UK NCSC; plus `--tier category-3/category-5` | NIST FIPS 203/204/205 and CNSA 2.0 referenced in its docs |
@@ -91,7 +91,7 @@ Marks reflect what quantakrypto actually detects and classifies, verified in cod
 |---|---|---|
 | ML-KEM (FIPS 203) | Yes | Primary KEM remediation target; recognized as PQC in qProbe; conformance-tested by Sieve. |
 | ML-DSA (FIPS 204) | Yes | Primary signature remediation target; conformance-tested by Sieve. |
-| SLH-DSA (FIPS 205) | Yes (remediation) / Partial (conformance) | Named as a signature remediation target; Sieve SLH-DSA vectors advertised but not yet functional (per COMPLIANCE.md). |
+| SLH-DSA (FIPS 205) | Yes | Named as a signature remediation target; conformance-tested by Sieve. |
 | Kyber / Dilithium / SPHINCS+ (pre-standard names) | Yes | Recognized as already-PQC. |
 | Stateful HBS: LMS / HSS / XMSS / XMSSMT (SP 800-208) | Yes (extra) | Dedicated `stateful-hbs` detector. Not a cryptodeps row. |
 
@@ -106,7 +106,7 @@ Marks reflect what quantakrypto actually detects and classifies, verified in cod
 | Go modules | 8 | golang.org/x/crypto, golang-jwt, go-jose, tink-go |
 | Maven | 7 | BouncyCastle (bcprov), java-jwt, jjwt, nimbus-jose-jwt, tink |
 
-Total curated vulnerable-dependency catalog: 81 entries (npm 35, PyPI 14, Cargo 9, Go 8, Maven 7, RubyGems 4, NuGet 4).
+Total curated vulnerable-dependency catalog: 90 entries (npm 35, PyPI 14, Cargo 9, Composer 9, Go 8, Maven 7, RubyGems 4, NuGet 4).
 
 Every quantum-vulnerable public-key package cryptodeps documents is now in the catalog, including Google Tink (`com.google.crypto.tink` / `tink-crypto/tink-go` / PyPI `tink`), which is listed across all the ecosystems it ships in. See the note below for the one cryptodeps entry we deliberately leave out.
 
@@ -115,12 +115,13 @@ Every quantum-vulnerable public-key package cryptodeps documents is now in the c
 **Additional dependency ecosystems** (beyond cryptodeps' documented Go/npm/Python/Java):
 
 - Cargo / Rust (9 entries: rsa, ring, p256, p384, k256, secp256k1, ed25519-dalek, x25519-dalek, openssl)
+- Composer / PHP (9 entries: phpseclib/phpseclib, paragonie/sodium_compat, paragonie/halite, paragonie/paseto, firebase/php-jwt, lcobucci/jwt, web-token/jwt-framework, mdanter/ecc, simplito/elliptic-php)
 - NuGet / .NET (4 entries: BouncyCastle.Cryptography, Portable.BouncyCastle, System.IdentityModel.Tokens.Jwt, Microsoft.IdentityModel.Tokens)
 - RubyGems / Ruby (4 entries: jwt, net-ssh, rbnacl, ed25519)
 
 **Additional source languages**: C#, Rust, Ruby, PHP, Elixir, C/C++, Swift, Objective-C, Dart, Solidity/Move/Cairo (14 packs total).
 
-**Detection surfaces beyond dependencies and source imports** (35 config-scope detectors):
+**Detection surfaces beyond dependencies and source imports** (36 config-scope detectors):
 
 - Transport: TLS config and cipher suites, reverse-proxy/gRPC TLS, VPN, service mesh (Istio), messaging (Kafka/MQTT), database TLS/TDE (pgcrypto, libpq sslmode)
 - Identity and keys: SSH and SSH-CA, JWK/JWKS, JOSE/JWE, PEM material, keystores, PKCS#11/HSM, cloud KMS, WebAuthn/FIDO2, DNSSEC, DKIM, XML-DSig/SAML, SPIFFE/SPIRE
@@ -132,7 +133,7 @@ Every quantum-vulnerable public-key package cryptodeps documents is now in the c
 
 ### Where cryptodeps is stronger (honest)
 
-- **Package database is much larger.** cryptodeps ships 1,100+ curated packages; quantakrypto's catalog is 81 asymmetric-focused entries and leans on its source/config detectors to catch usage the catalog does not name.
+- **Package database is much larger.** cryptodeps ships 1,100+ curated packages; quantakrypto's catalog is 90 asymmetric-focused entries and leans on its source/config detectors to catch usage the catalog does not name.
 - **Go call-graph reachability.** cryptodeps can tell whether flagged crypto is actually reached, cutting false positives on dead or unused imports. quantakrypto has no reachability analysis in any language; every detector is a per-file matcher.
 
 Correction to a common assumption: **Nimbus JOSE+JWT is covered.** The Maven artifact `nimbus-jose-jwt` is present in our catalog (verified), as is BouncyCastle (`bcprov-jdk18on`). Neither is a gap.
@@ -141,7 +142,7 @@ Deliberate exclusions (symmetric, hash, and password hashing): `crypto-js`, Argo
 
 ## 1.4 Verdict
 
-quantakrypto trades cryptodeps' larger package database and Go reachability for much broader surface coverage (14 source languages, 35 infrastructure/config surfaces, live probing), a richer risk model (HNDL), selectable standards regimes, and standards-grade outputs (CBOM/SARIF/VEX) plus a conformance harness. On the algorithm taxonomy the two agree on everything asymmetric and on the JWT/JWS family; they diverge on symmetric/HMAC/general-hash, which quantakrypto leaves out by design. The two tools are complementary more than competing: cryptodeps answers "which of my dependencies contain reachable quantum-vulnerable crypto," quantakrypto answers "what is my whole system's PQC readiness, across code and infrastructure, and how do I gate and fix it."
+quantakrypto trades cryptodeps' larger package database and Go reachability for much broader surface coverage (14 source languages, 36 infrastructure/config surfaces, live probing), a richer risk model (HNDL), selectable standards regimes, and standards-grade outputs (CBOM/SARIF/VEX) plus a conformance harness. On the algorithm taxonomy the two agree on everything asymmetric and on the JWT/JWS family; they diverge on symmetric/HMAC/general-hash, which quantakrypto leaves out by design. The two tools are complementary more than competing: cryptodeps answers "which of my dependencies contain reachable quantum-vulnerable crypto," quantakrypto answers "what is my whole system's PQC readiness, across code and infrastructure, and how do I gate and fix it."
 
 ---
 
@@ -153,10 +154,10 @@ NIST is not a tool; it is the standards baseline. This comparison reads NIST's p
 
 | NIST prescribed step (IR 8547 / NCCoE / CNSA 2.0) | quantakrypto behavior (verified) |
 |---|---|
-| **Discover and inventory** all uses of quantum-vulnerable public-key crypto across code, systems, and third-party components | qscan produces a per-algorithm inventory across 14 source languages, 7 dependency ecosystems, and 35 infrastructure surfaces; exports a CycloneDX 1.6 CBOM of cryptographic assets |
+| **Discover and inventory** all uses of quantum-vulnerable public-key crypto across code, systems, and third-party components | qscan produces a per-algorithm inventory across 14 source languages, 8 dependency ecosystems, and 36 infrastructure surfaces; exports a CycloneDX 1.6 CBOM of cryptographic assets |
 | **Prioritize** by data sensitivity and exposure window (harvest-now-decrypt-later) | Per-finding HNDL boolean plus 5-level severity; a 0-100 readiness score aggregates the posture |
 | **Migrate** to the standardized algorithms (FIPS 203/204/205) on the CNSA 2.0 / IR 8547 timelines | Remediation names ML-KEM / ML-DSA / SLH-DSA targets, hybrids for transition, and the deprecate-after-2030 / disallow-after-2035 timeline; deterministic codemods with a `verify_fix` gate apply the change |
-| **Validate** implementations against the FIPS test vectors | Sieve conformance-tests third-party ML-KEM/ML-DSA implementations against FIPS 203/204 vectors (SLH-DSA battery advertised, not yet functional) |
+| **Validate** implementations against the FIPS test vectors | Sieve conformance-tests third-party ML-KEM/ML-DSA/SLH-DSA implementations against FIPS 203/204/205 vectors |
 
 quantakrypto positions itself at the discovery, prioritization, gating, and assisted-remediation layers of the NIST migration lifecycle. It informs and drives migration; it does not supply the PQC primitives themselves (those come from a real library such as liboqs).
 
@@ -168,7 +169,7 @@ quantakrypto tracks a dated, cited standards snapshot in `packages/core/src/stan
 |---|---|
 | FIPS 203 (ML-KEM) | Primary KEM remediation target. Category-3 default ML-KEM-768; Category-5 ML-KEM-1024. Hybrid X25519MLKEM768 recommended for transition; SecP384r1MLKEM1024 at the 1024 level. Sieve conformance-tests ML-KEM. |
 | FIPS 204 (ML-DSA) | Primary signature remediation target. ML-DSA-65 (Category 3) / ML-DSA-87 (Category 5). Sieve conformance-tests ML-DSA. |
-| FIPS 205 (SLH-DSA) | Alternative signature target for long-lived signatures. Sieve SLH-DSA battery advertised but not yet functional (documented in COMPLIANCE.md). |
+| FIPS 205 (SLH-DSA) | Alternative signature target for long-lived signatures. Sieve conformance-tests SLH-DSA. |
 | SP 800-208 (stateful HBS: LMS/HSS, XMSS/XMSSMT) | Dedicated `stateful-hbs` detector; remediation surfaces LMS/XMSS/HSS for firmware/boot signing with an explicit state-management hazard warning. No Sieve stateful-signature battery yet. |
 | CNSA 2.0 (Category 5 / NSS) | `--profile cnsa-2.0` and `--tier category-5` are wired into the qscan CLI (verified in `args.ts` / `help.ts`). They mandate ML-KEM-1024 / ML-DSA-87 and correctly refuse to surface X25519MLKEM768 as CNSA-compliant (its ML-KEM-768 component is sub-CNSA), pointing at SecP384r1MLKEM1024 instead. `--mandate cnsa-2.0` additionally gates findings against CNSA 2.0's dated deprecate/disallow clauses (family-level; see §2.4). |
 | NIST IR 8547 (transition to PQC) | Deprecate-after-2030 / disallow-after-2035 timeline is encoded in every standards profile and surfaced in the transition note. Now also enforceable: `--mandate nist-ir-8547` gates findings against those dated clauses (warns after the deprecation date, fails after the disallow date; `--lead-months` / `--fail-now` tighten it). Aligns with the discovery-and-inventory phase IR 8547 calls for (per-algorithm inventory, HNDL count, 0-100 readiness score). |
@@ -184,7 +185,6 @@ quantakrypto tracks a dated, cited standards snapshot in `packages/core/src/stan
 ## 2.4 Gaps vs NIST
 
 - **CNSA 2.0 enforcement is now a dated, family-level gate — but still not parameter-level.** `--mandate cnsa-2.0` (repeatable; also `nist-ir-8547`) gates findings against the mandate's dated, named clauses: every prohibited classical public-key finding (RSA/ECDH/ECDSA/EdDSA/DH/DSA/ECIES) is reported with its clause, deadline, and citation; it warns once the 2030 deprecation date passes and fails the build only once the 2035 disallow date passes (`--lead-months <n>` fails early inside a lead window, `--fail-now` fails immediately). X25519/X448 are deliberately not flagged by the gate — they are the classical half of the recommended hybrids, so hybrid deployments do not false-positive. What remains missing is the *parameter-level* check: no policy detector flags a sub-CNSA PQC choice already in the code (for example ML-KEM-768 where 1024 is required). Documented honestly in COMPLIANCE.md.
-- **SLH-DSA (FIPS 205) conformance is not yet functional.** The Sieve battery is advertised but not wired to real vectors.
 - **No stateful-signature (SP 800-208) conformance battery.** The detector flags stateful HBS usage, but Sieve does not yet test LMS/XMSS state-reuse or exhaustion.
 
 ---
@@ -194,7 +194,7 @@ quantakrypto tracks a dated, cited standards snapshot in `packages/core/src/stan
 In rough priority order, drawn from the honest gap lists above.
 
 1. **Reachability analysis.** The single clearest capability cryptodeps has and quantakrypto lacks. A call-graph or import-usage reachability pass (starting with Go, then JS/TS and Python) would cut false positives on imported-but-unreached libraries.
-2. **Grow the dependency catalog.** Move from 81 curated entries toward cryptodeps-scale coverage. The named public-key packages cryptodeps documents are now all present (Google Tink was the last); the remaining growth is breadth across the long tail of smaller libraries.
+2. **Grow the dependency catalog.** Move from 90 curated entries toward cryptodeps-scale coverage. The named public-key packages cryptodeps documents are now all present (Google Tink was the last); the remaining growth is breadth across the long tail of smaller libraries.
 3. **CNSA 2.0 parameter-level policy.** *(Partially shipped.)* The dated, family-level half now exists: `--mandate cnsa-2.0` gates classical public-key findings against CNSA 2.0's named clauses and 2030/2035 deadlines (see §2.4), so a CNSA readiness check is no longer report-footer guidance only. Still open is the parameter-level half: a profile that asserts ML-KEM-1024 / ML-DSA-87 and flags sub-CNSA PQC choices (for example ML-KEM-768 where 1024 is required), making the check end-to-end pass/fail on the PQC side too.
-4. **SLH-DSA and stateful-signature conformance.** Make the Sieve SLH-DSA (FIPS 205) battery functional and add a stateful-signature (SP 800-208) category with state-reuse and exhaustion checks.
+4. **Stateful-signature conformance.** Add a Sieve stateful-signature (SP 800-208) category with state-reuse and exhaustion checks.
 5. **Optional symmetric/hash breadth.** If parity with cryptodeps' full algorithm table is wanted, add an opt-in mode that inventories symmetric ciphers, HMAC, and general hashes (currently out of scope by the tool's asymmetric-plus-quantum-adjacent framing).

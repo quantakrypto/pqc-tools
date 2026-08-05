@@ -237,11 +237,13 @@ data_asset_id, exposure_score, rationale) tables - see the implementation plan.
 
 Exposures are keyed by finding fingerprint so the website can join them to
 `posture_snapshot` rows. `findingFingerprint(f)` prefers a `finding.fingerprint`
-field when a build supplies one (another workstream is adding it to core's `Finding`
-type + reporters), and falls back to the canonical
+field when a build supplies one, and falls back to the canonical
 `fingerprintFinding()` hash - `sha256(ruleId | file | normalizedSnippet)` - otherwise.
-Today this code path uses the fallback. When `Finding.fingerprint` lands, exposure
-keying switches to it transparently, with no caller change.
+Since 0.6.0 the JSON/SARIF reporters emit exactly that canonical value as each
+finding's `fingerprint` field, so exposure keys and reported fingerprints already
+agree; the in-memory `Finding` type does not yet carry the field, so this code
+path computes the hash itself. If `Finding.fingerprint` lands on the type,
+exposure keying switches to it transparently, with no caller change.
 
 ## 10. Calibration
 

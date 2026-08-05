@@ -1,7 +1,8 @@
 # quantakrypto-tools — Threat Model
 
 Scope: the zero-dependency TypeScript monorepo — `@quantakrypto/`**core**,
-**qscan**, **mcp**, **action**, **sieve**, and (since v0.4) **agent**. This
+**qscan**, **mcp**, **action**, **sieve**, (since v0.4) **agent**, and (since
+v0.4.4) **qprobe**. This
 document states the trust boundaries the code already implies, the data flows
 that cross them, and a STRIDE analysis per tool. It is the security reference for
 the toolchain; the `Q-*` labels in the tables below are internal finding IDs used
@@ -77,7 +78,8 @@ CI-guarded by `scripts/check-offline-boundary.mjs`; §6.5 details the verdicts.
 **Stated trust assumptions (the model that the rest of this doc enforces):**
 - Scanned repo = **untrusted**. Everything under `root` is attacker-influenced.
 - MCP **stdio** = **trusted local user** scanning their own machine (the tool's purpose).
-- MCP **HTTP** = **untrusted network**. Not safe to host as-is (TB-3, see §5).
+- MCP **HTTP** = **untrusted network**. Hardened for hosting since 0.2.0 —
+  loopback default bind, bearer-token auth, filesystem tools gated off (TB-3, see §5/§8).
 - Sieve SUT = **trusted-unless-sandboxed**. It runs with the harness's privileges (TB-4, see §6).
 - CI Action = runs with a **write token** on potentially untrusted PRs (TB-2).
 - Agent line (`--triage`/`qremediate --llm`) = **opt-in, off by default**, requires an explicit BYOK key. The **LLM provider is a third party** and the **model response is untrusted** (TB-5, see §4.6/§6.5). The **MCP never holds a key and never calls a provider** — it exposes triage/remediate as deterministic request/apply tools and the *host* agent reasons.
@@ -94,7 +96,8 @@ CI-guarded by `scripts/check-offline-boundary.mjs`; §6.5 details the verdicts.
 3. **MCP flow:** JSON-RPC `params` → tool handler → `scan({root: params.path})`
    → result (incl. snippets) serialized back to caller. Tainted: the entire
    request, especially `path` and `Mcp-Session-Id`. (TB-3)
-4. **Sieve flow:** `--impl` cmdline → `spawn(bin, args, {env: {...process.env}})`
+4. **Sieve flow:** `--impl` cmdline → `spawn(bin, args, {env})` (a scrubbed
+   allow-list since 0.2.0; was the full `{...process.env}`)
    → NDJSON requests in / `decodeResponse`+base64 out. Tainted: every SUT
    response line; the SUT process itself holds A4. (TB-4)
 5. **Agent flow (opt-in):** `Finding[]` (+ bounded code snippets, from TB-1) →
@@ -134,13 +137,19 @@ no network, no write token.
 
 ### 4.3 `@quantakrypto/mcp` (HOSTED HTTP transport is the dominant risk surface)
 
+The rows below record the exposure the audit found in the **pre-0.2.0** HTTP
+transport; the shipped `http.ts` mitigates them since 0.2.0 (loopback default
+bind, `QUANTAKRYPTO_MCP_TOKEN` bearer auth, filesystem tools gated behind
+`QUANTAKRYPTO_MCP_ALLOW_FS`, per-tool timeouts + response caps, snippet
+stripping, generic errors) — see §8.
+
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|
-| **S**poof | No authentication on `POST /mcp`; default bind `0.0.0.0`. Any network peer invokes any tool. | Q-02 | **critical** |
+| **S**poof | No authentication on `POST /mcp`; default bind `0.0.0.0`. Any network peer invokes any tool. | Q-02 | **critical** (mitigated since 0.2.0 — see §8) |
 | **T**amper | Client-supplied `Mcp-Session-Id` reflected unvalidated — a fixation vector once sessions carry state. | Q-14 | low |
-| **I**nfo | `scan_path`/`inventory_crypto` read **arbitrary server paths** and return matched-line snippets → content-disclosure oracle (A1, A2). | Q-01 | **critical** |
+| **I**nfo | `scan_path`/`inventory_crypto` read **arbitrary server paths** and return matched-line snippets → content-disclosure oracle (A1, A2). | Q-01 | **critical** (mitigated since 0.2.0 — see §8) |
 | **I**nfo | Internal error messages (incl. filesystem paths) returned verbatim to the client. | Q-13 | low–medium |
-| **D**oS | No per-tool timeout, no response-size cap, no concurrency limit; a big/pathological scan holds the connection and blocks the event loop. | Q-03 | high |
+| **D**oS | No per-tool timeout, no response-size cap, no concurrency limit; a big/pathological scan holds the connection and blocks the event loop. | Q-03 | high (mitigated since 0.2.0 — see §8) |
 | **E**oP | No server-side enforcement of the advertised `inputSchema`; handlers hand-check `typeof`. | Q-20 | low |
 
 Over **stdio** these collapse to the trusted-local-user case (the tool's intended
@@ -160,7 +169,7 @@ mode) and are acceptable. See §5 for the hosted boundary in detail.
 
 | STRIDE | Threat | Finding | Severity |
 |---|---|---|---|
-| **I**nfo | SUT inherits the **full parent environment** (`{...process.env}`) → all harness secrets (A4) handed to untrusted SUT code. | Q-17 | medium |
+| **I**nfo | SUT inherited the **full parent environment** (`{...process.env}`) → all harness secrets (A4) handed to untrusted SUT code. | Q-17 | medium (mitigated since 0.2.0: scrubbed, allow-listed env — see §8) |
 | **D**oS | Per-request timeout exists, but **no global wall-clock budget**; a SUT answering just under the timeout across thousands of iterations runs unbounded in CI. | Q-18 | low–medium |
 | **T**amper | `decodeResponse`/`fromB64` parse hostile SUT output lines — hand-rolled parser, a fuzz target per P1-10. | (no shell: argv array) | low |
 | **E**oP | `spawn(bin, args)` with an argv array and **no** `shell:true` — no shell-injection surface; `--impl` whitespace split is a *correctness* bug, not a hole. | Q-16 (info) | low (control present) |
@@ -210,11 +219,11 @@ This is the single most important boundary in the toolset. Over **stdio**, the
 client is a local agent the user already trusts with their filesystem; the
 path-taking tools (`scan_path`, `inventory_crypto`) are the *point* of the tool.
 The moment the same `McpServer` is exposed over the **HTTP transport**
-(`http.ts`, default bind `0.0.0.0`, no auth), the trust model inverts: the caller
-is an **untrusted network peer**, but the tools still take a server-side `path`
-and still return matched-line snippets.
+(`http.ts` — which before 0.2.0 bound `0.0.0.0` with no auth), the trust model
+inverts: the caller is an **untrusted network peer**, but the tools still take a
+server-side `path` and still return matched-line snippets.
 
-**Attacker capability if hosted as-is:** `scan_path {path:"/etc"}`,
+**Attacker capability if hosted without the 0.2.0 guards:** `scan_path {path:"/etc"}`,
 `{path:"/root/.ssh"}`, `{path:"/proc/self/environ"}`, `{path:"../../"}` —
 arbitrary-directory read (A1) with **secret exfiltration** through the snippet
 field (A2), no auth (Q-02), no timeout (Q-03), and server paths leaked in errors
@@ -232,30 +241,36 @@ scanned root is partially returned in the finding snippet.
    generic errors with a correlation id.
 
 The design path for these controls is documented in
-[`packages/mcp/HOSTING.md`](../packages/mcp/HOSTING.md); the gap is that the
-*shipped* `http.ts` implements none of them yet.
+[`packages/mcp/HOSTING.md`](../packages/mcp/HOSTING.md); since 0.2.0 the
+*shipped* `http.ts` implements them — filesystem tools gated OFF by default
+(`QUANTAKRYPTO_MCP_ALLOW_FS`), `QUANTAKRYPTO_MCP_TOKEN` bearer auth, default
+bind `127.0.0.1`, per-tool timeouts + response caps, stripped snippets, and
+generic errors (see §8).
 
 ## 6. The Sieve-spawns-SUT boundary (TB-4) — deep treatment
 
 Sieve's premise is **driving someone else's implementation**: many invocations
 run a third-party or candidate ML-KEM/ML-DSA SUT, frequently in CI. The SUT is a
-child process launched via `spawn(bin, args, {env: {...process.env, ...opts.env}})`.
+child process launched via `spawn(bin, args, {env})` — before 0.2.0 that env was
+the full `{...process.env, ...opts.env}` spread.
 
 - **No shell-injection surface** (argv array, no `shell:true`) — Q-16, a control
   that is *present and correct*; the `--impl` whitespace split is a correctness
   bug for paths-with-spaces, not a security hole.
-- **The real exposure is confidentiality (A4):** the SUT receives the **entire**
-  harness environment — `GITHUB_TOKEN`, `NPM_TOKEN`, cloud creds, signing keys.
-  A malicious or merely curious SUT reads and exfiltrates them (Q-17).
+- **The real exposure was confidentiality (A4):** before 0.2.0 the SUT received
+  the **entire** harness environment — `GITHUB_TOKEN`, `NPM_TOKEN`, cloud creds,
+  signing keys — for a malicious or merely curious SUT to read and exfiltrate
+  (Q-17, mitigated since 0.2.0: the runner passes a scrubbed, allow-listed env — see §8).
 - **Availability (A7):** the per-request timeout (with `unref`) bounds a single
   hang, but there is no global run deadline (Q-18); an adversarial SUT can burn
   unbounded CI time by staying just under the per-request limit.
 
-**Boundary controls:** default to an **allow-listed** env (`PATH`, `HOME`,
-`LANG`, plus explicit `opts.env`) with an opt-in `inheritEnv` for trusted local
-runs; add a `deadlineMs` enforced across the whole run; document that an
-unsandboxed SUT runs with the harness's privileges and should be treated as
-trusted code (or wrapped in a container/seccomp profile) unless sandboxed.
+**Boundary controls:** the runner now defaults to a scrubbed, **allow-listed**
+env (`PATH`, `HOME`, `LANG`, plus explicit `opts.env`) with an opt-in
+`inheritEnv` for trusted local runs (since 0.2.0 — see §8). Still recommended:
+add a `deadlineMs` enforced across the whole run; document that an unsandboxed
+SUT runs with the harness's privileges and should be treated as trusted code
+(or wrapped in a container/seccomp profile) unless sandboxed.
 
 ## 6.5 The agent↔LLM boundary (TB-5) — deep treatment
 

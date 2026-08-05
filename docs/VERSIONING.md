@@ -38,8 +38,9 @@ post-1.0 breaking-change rules.
 ### Independent versions, coordinated bumps
 
 Each package versions independently (it has its own `package.json` and publishes
-on its own line). But because four tools consume `@quantakrypto/core` — qScan, MCP,
-the Action, and agent ([ADR-0002](adr/0002-shared-core-contract.md)):
+on its own line). But because five tools consume `@quantakrypto/core` — qScan, MCP,
+the Action, agent, and qProbe ([ADR-0002](adr/0002-shared-core-contract.md);
+Sieve is standalone and depends on no other package):
 
 - A **MAJOR** bump of `@quantakrypto/core` that changes the contract forces, at minimum,
   a **MINOR** bump of every consumer that adopts the new core (a new compatible
@@ -62,6 +63,7 @@ path, `dist` layout) are **not** part of the contract and may change in a PATCH.
 | `@quantakrypto/action` | The **action interface**: `action.yml` inputs, outputs, and documented exit behavior; the `uses:` ref. |
 | `@quantakrypto/sieve` | The **SUT protocol** (`PROTOCOL.md`, `PROTOCOL_VERSION`), the CLI flags/exit codes, and `runSieve`/`formatHuman`. |
 | `@quantakrypto/agent` | The exported BYOK client API: `resolveClient`, `triageFindings`, `proposeFix`, `validateAgainstSchema`, the `LlmClient`/`LlmConfig`/`LlmRequest` types, and the prompt-version constants (`TRIAGE_PROMPT_VERSION`, `FIX_PROMPT_VERSION`). The internal provider adapters (`anthropicClient`, `openAiCompatibleClient`) and the response-cache layout are *not* the contract. |
+| `@quantakrypto/qprobe` | The **`qprobe` CLI** (flags — incl. the ownership attestation `--i-own-this`/`--owned-hosts` — exit codes, output-format *shape*) and the programmatic API: `runProbe`, `parseTarget`, `authorizeTargets`, the classify/report helpers, and their types. The internal wire parsers are *not* the contract. |
 
 Non-API-but-still-contract surfaces — the **qScan exit codes** (0/1/2), the
 **SARIF 2.1.0** output schema, the **Sieve wire protocol**, the **baseline file
@@ -127,7 +129,7 @@ We deprecate before we remove. The window scales with the change's blast radius.
 | **File formats** (baseline, SARIF additions) | additive only within a MAJOR; format removal/restructuring is MAJOR with a documented migration. |
 
 Security fixes are exempt from deprecation windows where a window would prolong an
-exposure: a [P0 security change](THREAT-MODEL.md#8-mitigations--roadmap-p0-mapping)
+exposure: a [P0 security change](THREAT-MODEL.md#8-boundary-controls-status)
 may change behavior in a MINOR (e.g. hosting filesystem MCP tools OFF by default),
 documented clearly in the CHANGELOG as a security-driven break.
 
