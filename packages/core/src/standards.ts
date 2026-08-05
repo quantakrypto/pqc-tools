@@ -59,11 +59,27 @@ export interface PqcStandards {
   /** Stateful hash-based signatures (firmware / boot signing). */
   readonly statefulHbs: StandardsCitation; // SP 800-208
 
-  /** The migration deadline the transition note surfaces. */
+  /** The NIST IR 8547 migration deadline the transition note surfaces. */
   readonly transitionTimeline: {
     /** Year after which classical public-key crypto is deprecated. */
     readonly deprecateAfter: number;
     /** Year after which it is disallowed. */
+    readonly disallowAfter: number;
+    readonly source: string;
+    readonly asOf: string;
+  };
+
+  /**
+   * CNSA 2.0's OWN migration milestones — distinct from the IR 8547 timeline
+   * above. CNSA 2.0 sets exclusive-use dates per system class; the `cnsa-2.0`
+   * mandate encodes the earliest hard milestone as `deprecate` and the general
+   * exclusive-use milestone as `disallow`. Kept separate so the two mandates
+   * ({@link MANDATES}) each derive from their own dated source.
+   */
+  readonly cnsaTimeline: {
+    /** Year after which classical PKC is deprecated (2030: software/firmware signing exclusive). */
+    readonly deprecateAfter: number;
+    /** Year after which it is disallowed (2033: general NSS exclusive use). */
     readonly disallowAfter: number;
     readonly source: string;
     readonly asOf: string;
@@ -122,6 +138,14 @@ export const PQC_STANDARDS: PqcStandards = {
     deprecateAfter: 2030,
     disallowAfter: 2035,
     source: "NIST IR 8547 (transition to post-quantum cryptography standards)",
+    asOf: "2026-07",
+  },
+
+  cnsaTimeline: {
+    deprecateAfter: 2030,
+    disallowAfter: 2033,
+    source:
+      "NSA CNSA 2.0 (exclusive-use milestones: 2030 software/firmware signing, 2033 general NSS)",
     asOf: "2026-07",
   },
 

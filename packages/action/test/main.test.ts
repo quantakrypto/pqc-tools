@@ -571,9 +571,9 @@ test("readInputs parses mode and rejects an invalid one", () => {
 const rsaFinding = makeFinding();
 /** Before every deadline (2026): prohibited but only `due`. */
 const evDue = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2026-01-01"));
-/** Between deprecate (2030) and disallow (2035): `deprecated`, still no failure. */
+/** Between deprecate (2030) and CNSA's disallow (2033): `deprecated`, still no failure. */
 const evDeprecated = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2031-01-01"));
-/** After the DISALLOW deadline (2035): a `violation`. */
+/** After the CNSA 2.0 DISALLOW deadline (2033): a `violation`. */
 const evViolation = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2036-01-01"));
 
 test("readInputs parses mandate ids from a comma/space-separated list", () => {
@@ -609,7 +609,7 @@ test("mandateGateRows: deadline-aware default — due/deprecated rows do not tri
 
 test("mandateGateRows: fail-now trips on any prohibited row; lead-months on the disallow window", () => {
   assert.equal(mandateGateRows(evDue, { failNow: true }).length, 1);
-  // Disallow (2035-01-01) is ~108 months from the pinned 2026 `now`.
+  // CNSA disallow (2033-12-31) is ~95 months from the pinned 2026 `now`.
   assert.equal(mandateGateRows(evDue, { leadMonths: 120 }).length, 1);
   assert.deepEqual(mandateGateRows(evDue, { leadMonths: 12 }), []);
 });
@@ -618,7 +618,7 @@ test("describeMandateFailure names the clause, deadline, and citation — not ju
   const msg = describeMandateFailure(evViolation);
   // Expected dates come from the evaluation rows so the test tracks the catalog.
   const deadline = evViolation.findings[0]?.effective;
-  assert.match(msg, /"CNSA 2\.0 — disallow classical PKC after 2035"/);
+  assert.match(msg, /"CNSA 2\.0 — disallow classical PKC after 2033"/);
   assert.ok(msg.includes(`(deadline ${deadline} passed)`), `names the deadline: ${msg}`);
   assert.match(msg, /NSA Commercial National Security Algorithm Suite 2\.0/);
   assert.match(msg, /1 prohibited finding\(s\)/);
@@ -642,7 +642,7 @@ test("buildMandateSection lists verdicts with clause + deadline, violations firs
   assert.match(md, /### Compliance mandates/);
   assert.match(md, /`cnsa-2\.0`/);
   assert.ok(md.includes(`overdue since ${evViolation.findings[0]?.effective}`));
-  assert.match(md, /CNSA 2\.0 — disallow classical PKC after 2035/);
+  assert.match(md, /CNSA 2\.0 — disallow classical PKC after 2033/);
   assert.ok(md.indexOf("🔴 violation") < md.indexOf("🟡 due"), "violation row listed first");
 });
 

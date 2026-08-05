@@ -11932,6 +11932,12 @@ var init_standards = __esm({
         source: "NIST IR 8547 (transition to post-quantum cryptography standards)",
         asOf: "2026-07"
       },
+      cnsaTimeline: {
+        deprecateAfter: 2030,
+        disallowAfter: 2033,
+        source: "NSA CNSA 2.0 (exclusive-use milestones: 2030 software/firmware signing, 2033 general NSS)",
+        asOf: "2026-07"
+      },
       emerging: [
         {
           summary: "HQC \u2014 NIST's code-based backup KEM (selected March 2025; draft FIPS expected ~2026), a diversity hedge against ML-KEM's lattice assumption.",
@@ -12270,7 +12276,7 @@ function mandateGateFails(ev, opts = {}) {
   }
   return false;
 }
-var CLASSICAL_PUBLIC_KEY, PROHIBITED_FAMILIES, deprecateAfter, disallowAfter, DEPRECATE_EFFECTIVE, DISALLOW_EFFECTIVE, MANDATES, mandateIds, getMandate, MONTH_MS, STATUS_RANK;
+var CLASSICAL_PUBLIC_KEY, PROHIBITED_FAMILIES, IR8547, CNSA, NIST_DEPRECATE_EFFECTIVE, NIST_DISALLOW_EFFECTIVE, CNSA_DEPRECATE_EFFECTIVE, CNSA_DISALLOW_EFFECTIVE, MANDATES, mandateIds, getMandate, MONTH_MS, STATUS_RANK;
 var init_mandates = __esm({
   "../core/dist/mandates.js"() {
     "use strict";
@@ -12288,9 +12294,12 @@ var init_mandates = __esm({
       "ECIES"
     ];
     PROHIBITED_FAMILIES = CLASSICAL_PUBLIC_KEY.filter((family) => family !== "X25519" && family !== "X448");
-    ({ deprecateAfter, disallowAfter } = PQC_STANDARDS.transitionTimeline);
-    DEPRECATE_EFFECTIVE = `${deprecateAfter}-12-31`;
-    DISALLOW_EFFECTIVE = `${disallowAfter}-12-31`;
+    IR8547 = PQC_STANDARDS.transitionTimeline;
+    CNSA = PQC_STANDARDS.cnsaTimeline;
+    NIST_DEPRECATE_EFFECTIVE = `${IR8547.deprecateAfter}-12-31`;
+    NIST_DISALLOW_EFFECTIVE = `${IR8547.disallowAfter}-12-31`;
+    CNSA_DEPRECATE_EFFECTIVE = `${CNSA.deprecateAfter}-12-31`;
+    CNSA_DISALLOW_EFFECTIVE = `${CNSA.disallowAfter}-12-31`;
     MANDATES = {
       "cnsa-2.0": {
         id: "cnsa-2.0",
@@ -12300,18 +12309,18 @@ var init_mandates = __esm({
         asOf: "2026-07",
         rules: [
           {
-            clause: `CNSA 2.0 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            clause: `CNSA 2.0 \u2014 deprecate classical PKC after ${CNSA.deprecateAfter}`,
             tier: "deprecate",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DEPRECATE_EFFECTIVE,
-            note: "Classical public-key cryptography deprecated; systems should use CNSA 2.0 PQC exclusively."
+            effective: CNSA_DEPRECATE_EFFECTIVE,
+            note: `Classical public-key cryptography deprecated (${CNSA.deprecateAfter}: software/firmware signing exclusive-use); systems should use CNSA 2.0 PQC.`
           },
           {
-            clause: `CNSA 2.0 \u2014 disallow classical PKC after ${disallowAfter}`,
+            clause: `CNSA 2.0 \u2014 disallow classical PKC after ${CNSA.disallowAfter}`,
             tier: "disallow",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DISALLOW_EFFECTIVE,
-            note: "Classical public-key cryptography disallowed; the migration must be complete."
+            effective: CNSA_DISALLOW_EFFECTIVE,
+            note: `Classical public-key cryptography disallowed (${CNSA.disallowAfter}: general NSS exclusive-use milestone); the migration must be complete.`
           }
         ]
       },
@@ -12323,18 +12332,18 @@ var init_mandates = __esm({
         asOf: "2026-07",
         rules: [
           {
-            clause: `NIST IR 8547 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            clause: `NIST IR 8547 \u2014 deprecate classical PKC after ${IR8547.deprecateAfter}`,
             tier: "deprecate",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DEPRECATE_EFFECTIVE,
-            note: `112-bit-security classical public-key algorithms deprecated after ${deprecateAfter}.`
+            effective: NIST_DEPRECATE_EFFECTIVE,
+            note: `112-bit-security classical public-key algorithms deprecated after ${IR8547.deprecateAfter}.`
           },
           {
-            clause: `NIST IR 8547 \u2014 disallow classical PKC after ${disallowAfter}`,
+            clause: `NIST IR 8547 \u2014 disallow classical PKC after ${IR8547.disallowAfter}`,
             tier: "disallow",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DISALLOW_EFFECTIVE,
-            note: `Classical public-key algorithms disallowed after ${disallowAfter}.`
+            effective: NIST_DISALLOW_EFFECTIVE,
+            note: `Classical public-key algorithms disallowed after ${IR8547.disallowAfter}.`
           }
         ]
       }

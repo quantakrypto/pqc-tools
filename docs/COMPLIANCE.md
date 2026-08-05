@@ -164,13 +164,14 @@ itself make any entity "compliant."
 > each prohibited classical public-key finding (RSA, ECDH, ECDSA, EdDSA, DH,
 > DSA, ECIES) with its clause, deadline, and citation. The gate is
 > **deadline-aware**: a prohibited finding is a warning once the deprecation
-> date (2030) passes and fails the build only once the disallow date (2035)
-> passes; `--lead-months <n>` fails early when a deadline is within `n` months,
-> and `--fail-now` fails on any prohibited finding immediately. The deadlines
-> derive from the same dated `PQC_STANDARDS` snapshot (single source of truth).
-> One timeline caveat: the `cnsa-2.0` clauses currently borrow the NIST IR 8547
-> 2030-deprecate / 2035-disallow timeline from `PQC_STANDARDS.transitionTimeline`;
-> CNSA 2.0's own 2030/2033 milestones are not separately encoded yet.
+> date passes and fails the build only once the disallow date passes;
+> `--lead-months <n>` fails early when a disallow deadline is within `n` months,
+> and `--fail-now` fails on any prohibited finding immediately. Each regime uses
+> its OWN dated timeline (single source of truth, `PQC_STANDARDS`): **NIST IR
+> 8547** deprecates classical PKC after 2030 and disallows after **2035**, while
+> **CNSA 2.0** encodes its own exclusive-use milestones — deprecate after 2030,
+> disallow after **2033** (CNSA's general NSS exclusive-use date), so the
+> `cnsa-2.0` gate fails ~two years earlier than `nist-ir-8547`.
 > Scope honesty: this is a *family-level* gate — it does not assert PQC
 > parameter levels (e.g. ML-KEM-768 where CNSA 2.0 requires 1024; see
 > [COMPARISON.md](COMPARISON.md) §2.4), and X25519/X448 are deliberately not

@@ -114,9 +114,10 @@ By default the emitter fills the deadlines from the NIST IR 8547 transition time
 (deprecate after 2030, disallow after 2035). Supplying a crypto policy
 (`--policy <file>`, the same file `--format evidence` accepts) re-labels `source` as
 `operator-declared` and overlays the policy's `transitionDeadline`. CNSA 2.0
-national-security milestones (2030 / 2033) are a valid operator-declared choice.
-(Note: the `--mandate cnsa-2.0` gate currently borrows the NIST IR 8547 2030/2035
-timeline; CNSA's own 2033 milestone is not separately encoded.)
+national-security milestones (2030 / 2033) are a valid operator-declared choice —
+and the `--mandate cnsa-2.0` gate encodes CNSA's own 2030-deprecate / 2033-disallow
+timeline (distinct from IR 8547's 2035), so the manifest and the gate agree on CNSA
+if you declare 2033.
 
 ## 7. How to consume it (agents / CI)
 

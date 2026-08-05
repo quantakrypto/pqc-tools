@@ -3,7 +3,7 @@
  *
  * `CryptoPolicy` (policy.ts) classifies findings by algorithm family but is
  * date-blind. A mandate adds the missing dimension: named clauses with an effective
- * DATE ("CNSA 2.0 disallows classical public-key crypto after 2035"). The evaluator
+ * DATE ("CNSA 2.0 disallows classical public-key crypto after 2033"). The evaluator
  * compares each finding's algorithm against the selected mandates and today's date,
  * so a finding on a prohibited family reads as `due` (every deadline still ahead),
  * `deprecated` (the DEPRECATE deadline has passed — a warning), or `violation` (the
@@ -56,18 +56,24 @@ const PROHIBITED_FAMILIES: readonly AlgorithmFamily[] = CLASSICAL_PUBLIC_KEY.fil
 );
 
 /**
- * Effective dates derived from the standards source of truth
- * (`PQC_STANDARDS.transitionTimeline`), so a quarterly standards update moves the
- * mandate deadlines automatically (test/standards.test.ts asserts they agree).
+ * Effective dates derived from the standards source of truth, so a quarterly
+ * standards update moves the mandate deadlines automatically (test/standards.test.ts
+ * asserts they agree). Each regime uses its OWN dated timeline: NIST IR 8547
+ * disallows after 2035, while CNSA 2.0 sets its general exclusive-use milestone
+ * at 2033 (both deprecate after 2030) — so the two mandates carry different
+ * disallow years rather than sharing one.
  *
  * Boundary choice: "deprecate AFTER 2030" leaves the whole stated year permitted,
  * so each clause takes effect on the LAST day of its year (`YYYY-12-31`) —
  * conservative by a single day, unlike `YYYY-01-01`, which would bite roughly a
  * year early.
  */
-const { deprecateAfter, disallowAfter } = PQC_STANDARDS.transitionTimeline;
-const DEPRECATE_EFFECTIVE = `${deprecateAfter}-12-31`;
-const DISALLOW_EFFECTIVE = `${disallowAfter}-12-31`;
+const IR8547 = PQC_STANDARDS.transitionTimeline; // 2030 deprecate / 2035 disallow
+const CNSA = PQC_STANDARDS.cnsaTimeline; // 2030 deprecate / 2033 disallow
+const NIST_DEPRECATE_EFFECTIVE = `${IR8547.deprecateAfter}-12-31`;
+const NIST_DISALLOW_EFFECTIVE = `${IR8547.disallowAfter}-12-31`;
+const CNSA_DEPRECATE_EFFECTIVE = `${CNSA.deprecateAfter}-12-31`;
+const CNSA_DISALLOW_EFFECTIVE = `${CNSA.disallowAfter}-12-31`;
 
 /** Which enforcement tier a clause encodes: warn (`deprecate`) or fail (`disallow`). */
 export type MandateRuleTier = "deprecate" | "disallow";
@@ -105,18 +111,18 @@ export const MANDATES: Record<string, Mandate> = {
     asOf: "2026-07",
     rules: [
       {
-        clause: `CNSA 2.0 — deprecate classical PKC after ${deprecateAfter}`,
+        clause: `CNSA 2.0 — deprecate classical PKC after ${CNSA.deprecateAfter}`,
         tier: "deprecate",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DEPRECATE_EFFECTIVE,
-        note: "Classical public-key cryptography deprecated; systems should use CNSA 2.0 PQC exclusively.",
+        effective: CNSA_DEPRECATE_EFFECTIVE,
+        note: `Classical public-key cryptography deprecated (${CNSA.deprecateAfter}: software/firmware signing exclusive-use); systems should use CNSA 2.0 PQC.`,
       },
       {
-        clause: `CNSA 2.0 — disallow classical PKC after ${disallowAfter}`,
+        clause: `CNSA 2.0 — disallow classical PKC after ${CNSA.disallowAfter}`,
         tier: "disallow",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DISALLOW_EFFECTIVE,
-        note: "Classical public-key cryptography disallowed; the migration must be complete.",
+        effective: CNSA_DISALLOW_EFFECTIVE,
+        note: `Classical public-key cryptography disallowed (${CNSA.disallowAfter}: general NSS exclusive-use milestone); the migration must be complete.`,
       },
     ],
   },
@@ -128,18 +134,18 @@ export const MANDATES: Record<string, Mandate> = {
     asOf: "2026-07",
     rules: [
       {
-        clause: `NIST IR 8547 — deprecate classical PKC after ${deprecateAfter}`,
+        clause: `NIST IR 8547 — deprecate classical PKC after ${IR8547.deprecateAfter}`,
         tier: "deprecate",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DEPRECATE_EFFECTIVE,
-        note: `112-bit-security classical public-key algorithms deprecated after ${deprecateAfter}.`,
+        effective: NIST_DEPRECATE_EFFECTIVE,
+        note: `112-bit-security classical public-key algorithms deprecated after ${IR8547.deprecateAfter}.`,
       },
       {
-        clause: `NIST IR 8547 — disallow classical PKC after ${disallowAfter}`,
+        clause: `NIST IR 8547 — disallow classical PKC after ${IR8547.disallowAfter}`,
         tier: "disallow",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DISALLOW_EFFECTIVE,
-        note: `Classical public-key algorithms disallowed after ${disallowAfter}.`,
+        effective: NIST_DISALLOW_EFFECTIVE,
+        note: `Classical public-key algorithms disallowed after ${IR8547.disallowAfter}.`,
       },
     ],
   },

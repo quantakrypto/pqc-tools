@@ -55,6 +55,12 @@ upgrading a `--mandate` pipeline.
   respectively). Runtime behavior for existing 3-arg `evaluateMandates` callers is
   identical; only TypeScript code that *constructs* one of these by hand needs the
   new fields.
+- **`--mandate cnsa-2.0` disallow date moved 2035 → 2033.** CNSA 2.0 now encodes
+  its OWN exclusive-use timeline (deprecate after 2030, disallow after **2033** —
+  CNSA's general NSS milestone) from a new `PQC_STANDARDS.cnsaTimeline`, instead of
+  borrowing NIST IR 8547's 2035. `nist-ir-8547` is unchanged (2035). Behavior
+  change: a `--mandate cnsa-2.0` build with prohibited classical crypto now
+  reaches `violation` (and, past 2033, fails) ~two years earlier than in 0.8.0.
 
 ### Fixed
 

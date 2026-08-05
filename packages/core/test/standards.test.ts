@@ -76,14 +76,21 @@ test("review dates are well-formed and ordered, and match the stated interval", 
   }
 });
 
-test("mandate deadlines derive from the standards transition timeline", () => {
-  // The mandate catalog (mandates.ts) must never restate 2030/2035 by hand: its
-  // clause dates are derived from PQC_STANDARDS.transitionTimeline with the
-  // documented boundary "after <year>" = effective the LAST day of that year
-  // (`YYYY-12-31`). If a quarterly review moves the timeline and the mandates
-  // don't follow, this fails.
-  const t = PQC_STANDARDS.transitionTimeline;
+test("mandate deadlines derive from each regime's own standards timeline", () => {
+  // The mandate catalog (mandates.ts) must never restate deadline years by hand:
+  // each regime's clause dates derive from its OWN dated timeline in
+  // PQC_STANDARDS, with the documented boundary "after <year>" = effective the
+  // LAST day of that year (`YYYY-12-31`). nist-ir-8547 uses transitionTimeline
+  // (2035 disallow); cnsa-2.0 uses cnsaTimeline (2033 disallow — CNSA's own
+  // general exclusive-use milestone). If a quarterly review moves a timeline and
+  // the mandates don't follow, this fails.
+  const timelineFor: Record<string, { deprecateAfter: number; disallowAfter: number }> = {
+    "cnsa-2.0": PQC_STANDARDS.cnsaTimeline,
+    "nist-ir-8547": PQC_STANDARDS.transitionTimeline,
+  };
   for (const mandate of Object.values(MANDATES)) {
+    const t = timelineFor[mandate.id];
+    assert.ok(t, `${mandate.id} has a known source timeline`);
     const deprecate = mandate.rules.filter((r) => r.tier === "deprecate");
     const disallow = mandate.rules.filter((r) => r.tier === "disallow");
     assert.ok(deprecate.length > 0, `${mandate.id} has a deprecate clause`);
@@ -98,6 +105,11 @@ test("mandate deadlines derive from the standards transition timeline", () => {
       assert.match(r.clause, new RegExp(String(t.disallowAfter)));
     }
   }
+  // The two regimes carry DIFFERENT disallow years — the whole point of the change.
+  assert.notEqual(
+    PQC_STANDARDS.cnsaTimeline.disallowAfter,
+    PQC_STANDARDS.transitionTimeline.disallowAfter,
+  );
 });
 
 test("standardsReviewStatus is deterministic around nextReview", () => {

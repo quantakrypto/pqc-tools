@@ -100,8 +100,9 @@ describe("evaluateMandates", () => {
     assert.match(v.clause, /deprecate/);
     assert.equal(v.effective, "2030-12-31");
     assert.ok(v.monthsUntil > 0);
-    // ...but the disallow clause is carried alongside for the gate.
-    assert.equal(v.disallowEffective, "2035-12-31");
+    // ...but the disallow clause is carried alongside for the gate. CNSA 2.0's
+    // own general exclusive-use milestone is 2033 (not IR 8547's 2035).
+    assert.equal(v.disallowEffective, "2033-12-31");
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow > v.monthsUntil);
     assert.equal(ev.nextDeadline, "2030-12-31");
   });
@@ -116,9 +117,9 @@ describe("evaluateMandates", () => {
     assert.match(v.clause, /deprecate/);
     assert.equal(v.effective, "2030-12-31");
     assert.ok(v.monthsUntil < 0);
-    // ...while the disallow deadline is still ahead and is the next deadline.
+    // ...while the disallow deadline (CNSA 2033) is still ahead and is next.
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow > 0);
-    assert.equal(ev.nextDeadline, "2035-12-31");
+    assert.equal(ev.nextDeadline, "2033-12-31");
   });
 
   it("treats the deprecate effective date itself as passed", () => {
@@ -132,9 +133,9 @@ describe("evaluateMandates", () => {
     assert.equal(ev.hasViolation, true);
     const v = ev.findings[0];
     assert.equal(v.status, "violation");
-    // Surfaces the DISALLOW clause, not the deprecate one.
+    // Surfaces the DISALLOW clause, not the deprecate one (CNSA disallow: 2033).
     assert.match(v.clause, /disallow/);
-    assert.equal(v.effective, "2035-12-31");
+    assert.equal(v.effective, "2033-12-31");
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow < 0);
     assert.equal(ev.nextDeadline, null);
   });
@@ -260,15 +261,17 @@ describe("mandateGateFails (deadline-aware default)", () => {
     );
   });
   it("leadMonths measures to the DISALLOW date, not the deprecate date", () => {
-    // 2029-08-01: ~17 months to deprecate (2030-12-31) but ~77 to disallow
-    // (2035-12-31). A 24-month lead window must NOT fail (disallow is far out).
+    // 2029-08-01 under cnsa-2.0: ~17 months to deprecate (2030-12-31) but ~53 to
+    // disallow (2033-12-31). A 24-month lead window must NOT fail (it measures to
+    // the disallow date, which is far out); an 80-month window must.
     const due = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2029-08-01"));
     assert.equal(mandateGateFails(due, { leadMonths: 24 }), false);
     assert.equal(mandateGateFails(due, { leadMonths: 80 }), true);
   });
   it("leadMonths fails a deprecated finding when disallow is within the window", () => {
-    // 2035-08-01: deprecated (past 2030-12-31), ~5 months to 2035-12-31.
-    const ev = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2035-08-01"));
+    // 2033-08-01 under cnsa-2.0: deprecated (past 2030-12-31), ~5 months to the
+    // 2033-12-31 disallow.
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2033-08-01"));
     assert.equal(ev.findings[0].status, "deprecated");
     assert.equal(mandateGateFails(ev, { leadMonths: 6 }), true);
     assert.equal(mandateGateFails(ev, { leadMonths: 3 }), false);
