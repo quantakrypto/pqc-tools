@@ -67,6 +67,10 @@ A ready-to-copy workflow lives at
 | `comment-pr` | `false` | When `true` (and a token + PR context exist), post a summary comment on the PR. Never fails the build. |
 | `github-token` | _(none)_ | Token used to comment on the PR. Usually `${{ github.token }}`. |
 | `redact-snippets` | `false` | When `true`, omit the matched source snippet from every finding in the written report. Snippets of sensitive findings (embedded key material) are **always** omitted regardless of this setting. |
+| `mandate` | _(none)_ | Comma/space-separated compliance mandate ids to gate against (`cnsa-2.0`, `nist-ir-8547`). Deadline-aware: reports each prohibited finding with its clause + deadline, fails the build only once a disallow deadline has passed. Independent of `fail-on-findings`; empty disables the gate. |
+| `lead-months` | _(none)_ | Fail early when a `mandate` disallow deadline is within this many months. |
+| `fail-now` | `false` | When `true`, fail on any `mandate`-prohibited finding immediately, regardless of its deadline. |
+| `policy` | _(none)_ | Path to an org crypto-policy JSON (workspace-relative). With `mandate`, families the policy permits/is transitioning are annotated and exempt from the early gate (`lead-months`/`fail-now`); a passed disallow deadline still fails. |
 
 ## Outputs
 
@@ -110,6 +114,10 @@ output; the badge colours itself (green ≥ 80, amber 50–79, red < 50):
 ```markdown
 [![Post-quantum readiness](https://quantakrypto.com/badge?score=82)](https://quantakrypto.com/tools)
 ```
+
+> The badge renders the score you pass it. It is **self-reported by your CI and
+> not independently verified by quantakrypto** — treat it as a status shield, not
+> an attestation.
 
 **Keep the score current from CI** — add this step after the scan (requires
 `permissions: contents: write`). It rewrites the `?score=` in your README on

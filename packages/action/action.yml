@@ -84,6 +84,15 @@ inputs:
       regardless of its deadline. Only meaningful together with "mandate".
     required: false
     default: "false"
+  policy:
+    description: >-
+      Path to an org cryptography policy JSON (same file the CLI's --policy
+      takes), relative to the workspace. When set alongside "mandate", families
+      the policy explicitly permits or is transitioning are annotated in the
+      report and exempted from the early gate (lead-months / fail-now); a passed
+      DISALLOW deadline still fails. Empty disables the composition.
+    required: false
+    default: ""
 
 outputs:
   findings-count:

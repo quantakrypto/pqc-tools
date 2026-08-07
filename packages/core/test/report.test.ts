@@ -12,6 +12,7 @@ import {
   remediationFor,
   buildInventory,
   defaultRegistry,
+  evaluateMandates,
   fingerprintFinding,
   VERSION,
 } from "../src/index.js";
@@ -367,6 +368,29 @@ test("toJson fingerprint is stable regardless of snippet redaction", () => {
     fpOf(toJson(r, { redactSnippets: true })),
     "redacting the emitted snippet must not change identity",
   );
+});
+
+test("toJson carries a mandateMapping only when a mandate evaluation is supplied", () => {
+  const r = sampleResult(); // first finding is ECDH — a mandate-prohibited family.
+  const ev = evaluateMandates(r.findings, ["cnsa-2.0"], new Date("2026-01-01"));
+  const withMandate = toJson(r, { mandate: ev });
+  const mapping = withMandate.mandateMapping as Record<string, unknown>;
+  assert.ok(mapping, "mandateMapping present when opts.mandate is set");
+  assert.deepEqual(mapping.mandates, ["cnsa-2.0"]);
+  assert.ok(Array.isArray(mapping.findings));
+  // Absent by default so existing consumers see no shape change.
+  assert.equal(toJson(r).mandateMapping, undefined);
+});
+
+test("toSarif carries the mandate evaluation under run.properties, alongside hndl", () => {
+  const r = sampleResult();
+  const ev = evaluateMandates(r.findings, ["cnsa-2.0"], new Date("2026-01-01"));
+  const run = toSarif(r, { mandate: ev }).runs[0] as Record<string, any>;
+  assert.ok(run.properties, "run.properties present when a mandate is supplied");
+  assert.deepEqual(run.properties.mandate.mandates, ["cnsa-2.0"]);
+  // No properties bag at all when neither hndl nor mandate is supplied.
+  const bare = toSarif(r).runs[0] as Record<string, any>;
+  assert.equal(bare.properties, undefined);
 });
 
 test("formatSummary is plain text by default and colours on request", () => {

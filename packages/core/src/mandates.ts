@@ -3,7 +3,7 @@
  *
  * `CryptoPolicy` (policy.ts) classifies findings by algorithm family but is
  * date-blind. A mandate adds the missing dimension: named clauses with an effective
- * DATE ("CNSA 2.0 disallows classical public-key crypto after 2035"). The evaluator
+ * DATE ("CNSA 2.0 disallows classical public-key crypto after 2033"). The evaluator
  * compares each finding's algorithm against the selected mandates and today's date,
  * so a finding on a prohibited family reads as `due` (every deadline still ahead),
  * `deprecated` (the DEPRECATE deadline has passed — a warning), or `violation` (the
@@ -21,6 +21,8 @@
  */
 import type { AlgorithmFamily, Finding } from "./types.js";
 import { PQC_STANDARDS } from "./standards.js";
+import { verdictForAlgorithm } from "./policy.js";
+import type { CryptoPolicy, PolicyVerdict } from "./policy.js";
 
 /**
  * All Shor-broken classical asymmetric families — the mandate's SCOPE. A finding
@@ -54,18 +56,24 @@ const PROHIBITED_FAMILIES: readonly AlgorithmFamily[] = CLASSICAL_PUBLIC_KEY.fil
 );
 
 /**
- * Effective dates derived from the standards source of truth
- * (`PQC_STANDARDS.transitionTimeline`), so a quarterly standards update moves the
- * mandate deadlines automatically (test/standards.test.ts asserts they agree).
+ * Effective dates derived from the standards source of truth, so a quarterly
+ * standards update moves the mandate deadlines automatically (test/standards.test.ts
+ * asserts they agree). Each regime uses its OWN dated timeline: NIST IR 8547
+ * disallows after 2035, while CNSA 2.0 sets its general exclusive-use milestone
+ * at 2033 (both deprecate after 2030) — so the two mandates carry different
+ * disallow years rather than sharing one.
  *
  * Boundary choice: "deprecate AFTER 2030" leaves the whole stated year permitted,
  * so each clause takes effect on the LAST day of its year (`YYYY-12-31`) —
  * conservative by a single day, unlike `YYYY-01-01`, which would bite roughly a
  * year early.
  */
-const { deprecateAfter, disallowAfter } = PQC_STANDARDS.transitionTimeline;
-const DEPRECATE_EFFECTIVE = `${deprecateAfter}-12-31`;
-const DISALLOW_EFFECTIVE = `${disallowAfter}-12-31`;
+const IR8547 = PQC_STANDARDS.transitionTimeline; // 2030 deprecate / 2035 disallow
+const CNSA = PQC_STANDARDS.cnsaTimeline; // 2030 deprecate / 2033 disallow
+const NIST_DEPRECATE_EFFECTIVE = `${IR8547.deprecateAfter}-12-31`;
+const NIST_DISALLOW_EFFECTIVE = `${IR8547.disallowAfter}-12-31`;
+const CNSA_DEPRECATE_EFFECTIVE = `${CNSA.deprecateAfter}-12-31`;
+const CNSA_DISALLOW_EFFECTIVE = `${CNSA.disallowAfter}-12-31`;
 
 /** Which enforcement tier a clause encodes: warn (`deprecate`) or fail (`disallow`). */
 export type MandateRuleTier = "deprecate" | "disallow";
@@ -103,18 +111,18 @@ export const MANDATES: Record<string, Mandate> = {
     asOf: "2026-07",
     rules: [
       {
-        clause: `CNSA 2.0 — deprecate classical PKC after ${deprecateAfter}`,
+        clause: `CNSA 2.0 — deprecate classical PKC after ${CNSA.deprecateAfter}`,
         tier: "deprecate",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DEPRECATE_EFFECTIVE,
-        note: "Classical public-key cryptography deprecated; systems should use CNSA 2.0 PQC exclusively.",
+        effective: CNSA_DEPRECATE_EFFECTIVE,
+        note: `Classical public-key cryptography deprecated (${CNSA.deprecateAfter}: software/firmware signing exclusive-use); systems should use CNSA 2.0 PQC.`,
       },
       {
-        clause: `CNSA 2.0 — disallow classical PKC after ${disallowAfter}`,
+        clause: `CNSA 2.0 — disallow classical PKC after ${CNSA.disallowAfter}`,
         tier: "disallow",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DISALLOW_EFFECTIVE,
-        note: "Classical public-key cryptography disallowed; the migration must be complete.",
+        effective: CNSA_DISALLOW_EFFECTIVE,
+        note: `Classical public-key cryptography disallowed (${CNSA.disallowAfter}: general NSS exclusive-use milestone); the migration must be complete.`,
       },
     ],
   },
@@ -126,18 +134,18 @@ export const MANDATES: Record<string, Mandate> = {
     asOf: "2026-07",
     rules: [
       {
-        clause: `NIST IR 8547 — deprecate classical PKC after ${deprecateAfter}`,
+        clause: `NIST IR 8547 — deprecate classical PKC after ${IR8547.deprecateAfter}`,
         tier: "deprecate",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DEPRECATE_EFFECTIVE,
-        note: `112-bit-security classical public-key algorithms deprecated after ${deprecateAfter}.`,
+        effective: NIST_DEPRECATE_EFFECTIVE,
+        note: `112-bit-security classical public-key algorithms deprecated after ${IR8547.deprecateAfter}.`,
       },
       {
-        clause: `NIST IR 8547 — disallow classical PKC after ${disallowAfter}`,
+        clause: `NIST IR 8547 — disallow classical PKC after ${IR8547.disallowAfter}`,
         tier: "disallow",
         prohibits: [...PROHIBITED_FAMILIES],
-        effective: DISALLOW_EFFECTIVE,
-        note: `Classical public-key algorithms disallowed after ${disallowAfter}.`,
+        effective: NIST_DISALLOW_EFFECTIVE,
+        note: `Classical public-key algorithms disallowed after ${IR8547.disallowAfter}.`,
       },
     ],
   },
@@ -197,6 +205,21 @@ export interface MandateFindingVerdict {
   /** Whole months from `now` to `disallowEffective`; null when there is none. */
   monthsUntilDisallow: number | null;
   citation: string;
+  /**
+   * The org cryptography policy's verdict on this algorithm family when a policy
+   * was composed in via {@link evaluateMandates}' `policy` argument, else null.
+   * Purely informational — it records the org's own stance next to the mandate's
+   * dated clause so a machine-readable report shows both.
+   */
+  policyVerdict: PolicyVerdict | null;
+  /**
+   * True when the org policy EXPLICITLY permits or is transitioning this family —
+   * an owned, tracked decision. Acknowledged findings are exempt from the EARLY
+   * gates (`failNow` / `leadMonths`); a passed DISALLOW deadline (`violation`)
+   * still fails regardless, because an org cannot self-exempt from a dated legal
+   * disallow. `false` when no policy was supplied.
+   */
+  acknowledged: boolean;
 }
 
 export interface MandateEvaluation {
@@ -221,6 +244,15 @@ export interface MandateEvaluation {
   nextDeadline: string | null;
   /** True when at least one DISALLOW deadline has passed (a `violation` exists). */
   hasViolation: boolean;
+  /** Name of the org policy composed in via `policy`, or null when none was supplied. */
+  policyName: string | null;
+  /**
+   * How many distinct prohibited FINDINGS the org policy explicitly acknowledged
+   * (family listed as `permitted` or `inTransition`) — counted per finding, not
+   * per verdict row, so a family prohibited by two mandates counts once, matching
+   * the per-finding `summary`. 0 when no policy was supplied.
+   */
+  acknowledged: number;
 }
 
 const MONTH_MS = 2_629_800_000; // average month
@@ -237,23 +269,59 @@ const STATUS_RANK: Record<MandateStatus, number> = {
 };
 
 /**
+ * True when the org policy EXPLICITLY accepts a family — listed in `permitted`
+ * (an owned exception) or `inTransition` (a tracked migration). A `prohibited`
+ * family or one covered only by the policy's default fallback is NOT
+ * acknowledged: silence is not consent, so an unnamed family never earns a gate
+ * exemption.
+ *
+ * `prohibited` takes precedence, matching {@link verdictForAlgorithm}: a policy
+ * that lists a family in BOTH `prohibited` and `permitted` (a plausible merge of
+ * two policy fragments) resolves to `violation`, and must not then be silently
+ * acknowledged away — that would produce a self-contradictory verdict (verdict
+ * `violation`, yet exempt from the gate).
+ */
+function policyAcknowledges(algo: AlgorithmFamily, policy: CryptoPolicy): boolean {
+  if (policy.prohibited?.includes(algo)) return false;
+  return Boolean(policy.permitted?.includes(algo) || policy.inTransition?.includes(algo));
+}
+
+/**
  * Evaluate findings against the selected mandates as of `now`. Unknown mandate
  * ids are ignored — callers validate up front with {@link assertKnownMandates}.
  * A finding outside the classical-asymmetric scope is counted in `notInScope`;
  * an in-scope finding no selected mandate prohibits is `conformant`. Neither
  * contributes a verdict row.
+ *
+ * When an org `policy` is supplied (the `--policy` composition), every verdict
+ * row is annotated with the org's own `policyVerdict` and an `acknowledged` flag
+ * (family explicitly permitted / in-transition). Acknowledgement is purely
+ * additive here — it changes no status — but {@link mandateGateFails} honours it
+ * to keep the early gates from double-flagging crypto the org is knowingly,
+ * traceably managing. A passed DISALLOW deadline is never acknowledgeable away.
  */
 export function evaluateMandates(
   findings: readonly Finding[],
   mandateIdList: readonly string[],
   now: Date,
+  policy?: CryptoPolicy,
 ): MandateEvaluation {
-  const nowMs = now.getTime();
+  // A compliance verdict is as-of a DAY: the clauses take effect on date
+  // boundaries (YYYY-MM-DD), so the exact clock time carries no compliance
+  // meaning. Pin `now` to UTC midnight of its date before any arithmetic — this
+  // makes the whole evaluation (statuses AND the monthsUntil / monthsUntilDisallow
+  // counters) identical for any two runs on the same day, which is what keeps the
+  // attested evidence hash reproducible per commit per day. Truncating changes no
+  // status: every `effective` date is itself UTC-midnight, so `nowMs >= effMs` has
+  // the same truth value at midnight as at any other time that day.
+  const nowMs = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const nowIso = new Date(nowMs).toISOString();
   const selected = mandateIdList.map(getMandate).filter((m): m is Mandate => Boolean(m));
 
   const rows: MandateFindingVerdict[] = [];
   const perFindingWorst: MandateStatus[] = [];
   let notInScope = 0;
+  let acknowledged = 0;
   let nextDeadlineMs: number | null = null;
 
   for (const f of findings) {
@@ -263,12 +331,20 @@ export function evaluateMandates(
       continue;
     }
     let worst: MandateStatus = "conformant";
+    // Acknowledgement is a property of the FAMILY (fixed for this finding), so it
+    // is computed once here and stamped on every row. The tally counts distinct
+    // acknowledged findings (not rows), so one family under two mandates is one
+    // acknowledgement, matching the per-finding status counts in `summary`.
+    const family = algo as AlgorithmFamily;
+    const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+    let producedRow = false;
     for (const mandate of selected) {
       // The applicable clauses for this family, earliest deadline first.
       const applicable = mandate.rules
         .filter((r) => r.prohibits.includes(algo as AlgorithmFamily))
         .sort((a, b) => a.effective.localeCompare(b.effective));
       if (applicable.length === 0) continue;
+      producedRow = true;
 
       // Tier the clauses so both stay live: a passed DISALLOW clause is a
       // violation; a passed DEPRECATE clause (disallow still ahead) is the
@@ -314,8 +390,13 @@ export function evaluateMandates(
         disallowEffective: disallowRule ? disallowRule.effective : null,
         monthsUntilDisallow: disallowMs !== null ? monthsBetween(nowMs, disallowMs) : null,
         citation: mandate.citation,
+        policyVerdict: policy ? verdictForAlgorithm(family, policy).verdict : null,
+        acknowledged: isAcknowledged,
       });
     }
+    // Count the acknowledged FINDING once (it produced at least one prohibited
+    // row and the org policy owns/tracks its family), not once per mandate row.
+    if (producedRow && isAcknowledged) acknowledged++;
     perFindingWorst.push(worst);
   }
 
@@ -328,7 +409,7 @@ export function evaluateMandates(
   for (const s of perFindingWorst) summary[s]++;
 
   return {
-    now: now.toISOString(),
+    now: nowIso,
     mandates: selected.map((m) => m.id),
     summary,
     notInScope,
@@ -336,6 +417,8 @@ export function evaluateMandates(
     nextDeadline:
       nextDeadlineMs !== null ? new Date(nextDeadlineMs).toISOString().slice(0, 10) : null,
     hasViolation: summary.violation > 0,
+    policyName: policy?.name ?? null,
+    acknowledged,
   };
 }
 
@@ -352,12 +435,21 @@ export interface MandateGateOptions {
  * warning and does not fail the build. `leadMonths` fails early when a disallow
  * deadline is within the window; `failNow` fails on any prohibited finding
  * immediately.
+ *
+ * Policy composition: when a finding was `acknowledged` by the org policy
+ * (`--policy`), it is exempt from the EARLY gates (`failNow` / `leadMonths`) —
+ * the org is knowingly, traceably managing that family, so its own early
+ * enforcement should not re-flag it. A passed DISALLOW deadline (`violation`)
+ * still fails regardless: a dated legal disallow is not something an org can
+ * self-exempt from.
  */
 export function mandateGateFails(ev: MandateEvaluation, opts: MandateGateOptions = {}): boolean {
   if (ev.hasViolation) return true;
-  if (opts.failNow) return ev.findings.length > 0;
+  // Early gates skip policy-acknowledged findings; the hard `violation` above did not.
+  const gated = ev.findings.filter((v) => !v.acknowledged);
+  if (opts.failNow) return gated.length > 0;
   if (opts.leadMonths !== undefined) {
-    return ev.findings.some(
+    return gated.some(
       (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths!,
     );
   }

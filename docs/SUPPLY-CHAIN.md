@@ -10,25 +10,26 @@ buys several assurance checks for free; the gaps are process, not dependencies.
 
 ## 1. Targets vs. current status
 
-> **Status as of v0.5.0 (tagged; 0.4.4 published):** provenance is **live**; the remaining
-> gaps are the Scorecard workflow, `reuse lint` in CI, per-package `LICENSE` in
-> tarballs, and — most actionably — the **stale `v1` Action tag** (see §3).
+> **Status as of 0.9.0 (prepared; 0.8.0 published):** provenance is **live**, the
+> Scorecard workflow is **wired**, `reuse lint` runs in CI (advisory), per-package
+> `LICENSE` files ship in the tarballs, and the `v1` Action tag is **auto-moved**
+> to each released commit on publish (see §3). The remaining gap is a repo
+> setting: branch protection + required reviews.
 
 | Pillar | Target | Status | Gap to target |
 |---|---|---|---|
 | **OpenSSF Scorecard** | A published score with a badge; act on findings each run. | **Wired** — [`scorecard.yml`](../.github/workflows/scorecard.yml) runs weekly + on push, uploads SARIF, and publishes the score. | Turn on **branch protection** + required reviews (a repo setting) to lift the remaining checks; add the badge once the first score publishes. |
-| **SLSA provenance** | SLSA build-provenance on every released artifact (L2+: hosted, hardened CI builder). | **Live.** All 5 library packages carry Sigstore provenance attestations (verified via `npm audit signatures`; tarballs reproduce bit-for-bit from source). | Publish from an **immutable release tag** rather than `main` so the attested ref is non-mutable. |
-| **npm provenance** | Each `@quantakrypto/*` package page shows a signed provenance attestation. | **Live** on all 5 published packages via `release.yml` (`--provenance`, GitHub OIDC). | Same as SLSA: pin to a release tag; cut `vX.Y.Z` tags per release. |
+| **SLSA provenance** | SLSA build-provenance on every released artifact (L2+: hosted, hardened CI builder). | **Live.** All 6 published packages carry Sigstore provenance attestations (verified via `npm audit signatures`; tarballs reproduce bit-for-bit from source). | Publish from an **immutable release tag** rather than `main` so the attested ref is non-mutable (the `vX.Y.Z` tags now exist — see §3). |
+| **npm provenance** | Each `@quantakrypto/*` package page shows a signed provenance attestation. | **Live** on all 6 published packages via `release.yml` (`--provenance`, GitHub OIDC). | Same as SLSA: pin the publish to the release tag. |
 | **SPDX / REUSE** | `reuse lint` passes; licensing is machine-verifiable. | [`REUSE.toml`](../REUSE.toml) bulk declaration + `LICENSES/Apache-2.0.txt`; **per-package `LICENSE` now committed** (tarballs carry the Apache-2.0 text) and the stale `graphify-out/**` carve-out dropped. | `reuse lint` runs in CI (advisory) via the `supply-chain` job. |
 | **Zero-dep enforcement** (ADR-0001) | No third-party runtime dep + no install lifecycle scripts, enforced by CI. | **Wired** — `scripts/check-zero-deps.mjs` gates the `supply-chain` CI job (was review-only). | — |
 
 ## 2. OpenSSF Scorecard
 
-**Not yet wired (the one remaining pillar with no implementation).** The repo is
-now public, so the earlier "deferred while private" blocker is gone. The next step
-is a workflow that runs `ossf/scorecard-action` (pin a real release, e.g.
-`@v2.4.3`), uploads SARIF to the Security tab, and publishes the score (OIDC
-`id-token: write`) so a badge can be displayed.
+**Wired.** [`scorecard.yml`](../.github/workflows/scorecard.yml) runs
+`ossf/scorecard-action` weekly + on push, uploads SARIF to the Security tab, and
+publishes the score (OIDC `id-token: write`). The remaining step is to add the
+badge once the first score publishes.
 
 - **Free wins from zero deps:** `Pinned-Dependencies` (no third-party runtime
   deps; pin dev deps via `npm ci` + lockfile), `Vulnerabilities` (minimal surface),
@@ -51,20 +52,20 @@ The plan is the standard GitHub-Actions-native path:
    page. This is also a SLSA-aligned provenance statement.
 3. Record the release in the [CHANGELOG](../CHANGELOG.md) per [VERSIONING.md](VERSIONING.md).
 
-**Status: done (since v0.4).** All 5 library packages publish from `release.yml`
-with provenance; the `NPM_TOKEN` is configured and the Action `dist/index.js` is
+**Status: done (since v0.4).** All 6 published packages (core, qscan, mcp,
+qprobe, sieve, agent) publish from `release.yml` with provenance — the Action
+itself is private (consumed via `uses:`, not npm); the `NPM_TOKEN` is configured and the Action `dist/index.js` is
 committed and guarded by a "dist is fresh" CI gate (`ci.yml`) + a pre-publish gate
 (`release.yml`), with a real `uses:`-path smoke test.
 
-**Two residual release-process gaps (both actionable):**
-- **The `v1` Action tag is stale.** It points at a pre-0.4.2 commit, so
-  `uses: quantakrypto/pqc-tools/packages/action@v1` runs a bundle **without the
-  0.4.2 security fixes** and silently ignores the `mode: comment-plan` input.
-  Fix: force-move `v1` to the release commit as a step in `release.yml` after a
-  successful publish.
-- **No immutable semver tags.** Releases publish from `main`, so provenance pins a
-  mutable ref. Cut `vX.Y.Z` tags + a GitHub Release per version and publish from
-  the tag.
+**Both earlier release-process gaps are closed:**
+- **The `v1` Action tag auto-moves.** Since 0.4.3, `release.yml` force-moves `v1`
+  to the released commit after a successful publish, so
+  `uses: quantakrypto/pqc-tools/packages/action@v1` always runs the latest
+  released bundle.
+- **Immutable semver tags exist.** Every release since v0.4.3 cuts a `vX.Y.Z` tag
+  (v0.4.3 … v0.8.0), so consumers and provenance verifiers can pin a non-mutable
+  ref. The residual refinement is publishing *from* the tag ref rather than `main`.
 
 ## 4. SPDX / REUSE licensing
 

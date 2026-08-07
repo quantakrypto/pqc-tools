@@ -35,8 +35,75 @@ new symbols are exported; no existing field changes shape and no exit code moves
 - Exports: `describeSutError`, `HARNESS_CATEGORY`, and the `Verdict` type.
 - CLI exit codes are unchanged: only `PASS` exits 0, so `ERROR` still exits 1 and
   existing CI gates behave as before. Read `.overall` to distinguish them.
+## [0.9.0] - 2026-08-05
+
+### Added - machine-readable mandate output + `--policy` composition
+
+The `--mandate` compliance gate becomes CI-consumable, and an org cryptography
+policy can compose with it. SemVer: **minor** (additive features). Two exit-code
+behavior changes are called out under **Changed** below - read them before
+upgrading a `--mandate` pipeline.
+
+- **Machine-readable mandate verdicts.** The mandate evaluation is no longer
+  confined to the human report. `qscan --mandate --format json` adds a top-level
+  `mandateMapping` block; `--format sarif` carries the same under
+  `run.properties.mandate` (so an uploaded SARIF surfaces it in code scanning);
+  and `--format evidence` embeds a **date-pinned, hashed** `mandateMapping` in the
+  ISO/IEC 27001 A.8.24 attestation - reproducible per commit per day and
+  tamper-evident via the attestation content hash, mirroring `policyMapping`. The
+  GitHub Action threads the same verdicts into the SARIF it uploads. New optional
+  `ReportOptions.mandate` / `ReadinessReportOptions.mandate` and
+  `ReadinessReport.mandateMapping` (all additive; no export renamed or removed).
+- **`--policy` composes with `--mandate`.** Pass the org crypto-policy file (the
+  same one the evidence report's §4 verdicts use) alongside `--mandate`. Families
+  the policy **explicitly permits or is transitioning** are annotated in every
+  output (`policyVerdict` / `acknowledged`) and **exempted from the early gate**
+  (`--fail-now` / `--lead-months`). A **passed disallow deadline still fails**
+  regardless - an org cannot self-exempt from a dated regulatory prohibition, and
+  `prohibited` always wins over `permitted`. Exposed on the Action as a new
+  `policy` input.
+- **Two forward-looking roadmap notes** under `docs/roadmap/`: attestation as a
+  procurement/underwriting primitive, and a harvest-tripwire (HNDL canary)
+  research note.
+
+### Changed
+
+- **Exit-code loosening (opt-in):** with `--policy` **and** `--mandate`
+  `--fail-now`/`--lead-months`, a family the org lists as `permitted` or
+  `inTransition` no longer trips the early gate (it did in 0.8.0, which had no
+  composition). This only affects runs that pass **both** flags; `--mandate`
+  alone is unchanged. The Action side is opt-in (its `policy` input is new).
+- **Exit-code tightening:** the CLI now evaluates the mandate gate on
+  **pre-baseline** findings (kept + suppressed), matching the GitHub Action. A
+  `--baseline` accepts a finding for the *severity* gate but no longer waives a
+  regulatory **deadline**, so a baselined finding past a disallow date now fails
+  where it silently passed in 0.8.0. Closes a self-service deadline-waiver
+  (`--write-baseline` then `--baseline`).
+- **Pre-1.0 shape change:** `MandateEvaluation` and `MandateFindingVerdict` gained
+  required fields (`policyName`/`acknowledged`, and `policyVerdict`/`acknowledged`
+  respectively). Runtime behavior for existing 3-arg `evaluateMandates` callers is
+  identical; only TypeScript code that *constructs* one of these by hand needs the
+  new fields.
+- **`--mandate cnsa-2.0` disallow date moved 2035 → 2033.** CNSA 2.0 now encodes
+  its OWN exclusive-use timeline (deprecate after 2030, disallow after **2033** —
+  CNSA's general NSS milestone) from a new `PQC_STANDARDS.cnsaTimeline`, instead of
+  borrowing NIST IR 8547's 2035. `nist-ir-8547` is unchanged (2035). Behavior
+  change: a `--mandate cnsa-2.0` build with prohibited classical crypto now
+  reaches `violation` (and, past 2033, fails) ~two years earlier than in 0.8.0.
+
+### Fixed
+
+- **Evidence hash reproducibility.** `evaluateMandates` now pins `now` to UTC
+  midnight of its date before any arithmetic, so the `monthsUntil` /
+  `monthsUntilDisallow` counters (and therefore the attested evidence hash) are
+  identical for any two runs on the same day. Previously the counters were
+  computed from the full scan timestamp while `now` was date-pinned, so two
+  same-day runs diverged on ~7% of days (month-rounding boundaries).
 
 ## [0.8.0] - 2026-07-31
+
+(There is a `v0.7.0` git tag but no separate 0.7.0 section: its changes were
+consolidated into this 0.8.0 entry — same convention as the 0.3 skip.)
 
 ### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)
 
@@ -728,10 +795,12 @@ now single-source:
   DER parse reads how the leaf certificate is *signed* — the CA's algorithm, the
   forgeable-at-Q-day part — which `node:tls` does not expose), and an **SMTP
   STARTTLS** probe mode (`--smtp`, auto on :25/:587) that upgrades the mail session
-  to TLS and inspects the negotiated posture. (Real ML-KEM keygen for definitive
-  hybrid negotiation is intentionally NOT implemented — it would violate the repo's
-  "implements no crypto itself" principle, and the HelloRetryRequest-based detection
-  already works without it.)
+  to TLS and inspects the negotiated posture. (Real ML-KEM keygen remains
+  intentionally NOT implemented — it would violate the repo's "implements no
+  crypto itself" principle, and it isn't needed: the HelloRetryRequest-based
+  detection works without it, and the definitive hybrid negotiation above gets a
+  direct ServerHello selection from an encoded-but-throwaway key_share whose
+  secret is never computed.)
 - **Network transport / VPN detector (`vpn`)** in `@quantakrypto/core` — classical
   key exchange in the tunnels carrying communication between things: **WireGuard**
   (`[Interface]`/`[Peer]` Curve25519 keys — a sharp finding, since WireGuard has no
@@ -1148,9 +1217,8 @@ TypeScript toolset for post-quantum readiness.
   driven over a JSON protocol; ships no KAT vectors and never fabricates them.
 - Project governance, CI, and a multi-discipline audit set under `docs/`.
 
-<!-- Per-version compare links are omitted: releases are currently published from
-`main` rather than immutable `vX.Y.Z` tags (only a moving `v1` Action tag exists).
-Cutting semver tags + a GitHub Release per version is tracked as a release-process
-fix. -->
+<!-- Per-version compare links are omitted for brevity. Immutable `vX.Y.Z` tags
+exist from v0.4.3 onward (v0.4.3 … v0.8.0), and the moving `v1` Action tag is
+auto-moved to each released commit on publish. -->
 [Unreleased]: https://github.com/quantakrypto/pqc-tools/commits/main
 [0.1.0]: https://github.com/quantakrypto/pqc-tools/releases/tag/v0.1.0

@@ -14,7 +14,7 @@ import {
   mandateGateFails,
   mandateIds,
 } from "../src/index.js";
-import type { Finding } from "../src/index.js";
+import type { CryptoPolicy, Finding } from "../src/index.js";
 
 /** Minimal Finding for the fields the evaluator reads. */
 function f(algorithm: string | undefined, i = 0): Finding {
@@ -28,11 +28,22 @@ function f(algorithm: string | undefined, i = 0): Finding {
 
 const rsa = f("RSA", 1);
 
-// The catalog derives its deadlines from PQC_STANDARDS.transitionTimeline
-// (2030 / 2035, effective the LAST day of each year — see mandates.ts). The
-// standards drift test (standards.test.ts) asserts that derivation; here we
-// pin the behavioral consequences.
-const DUE_NOW = new Date("2026-01-01"); // before the deprecate date
+// Org policies for the --policy composition tests: the same RSA finding under
+// three different org stances. `permitted`/`inTransition` are ACKNOWLEDGED (an
+// owned exception / a tracked migration); `prohibited` is not — it reinforces
+// the mandate and never earns a gate exemption.
+const permitRsa: CryptoPolicy = { name: "org", permitted: ["RSA"] };
+const transitionRsa: CryptoPolicy = { name: "org", inTransition: ["RSA"] };
+const prohibitRsa: CryptoPolicy = { name: "org", prohibited: ["RSA"] };
+
+// The catalog derives each regime's deadlines from its own PQC_STANDARDS timeline
+// (effective the LAST day of each year — see mandates.ts): nist-ir-8547 from
+// transitionTimeline (2030 / 2035), cnsa-2.0 from cnsaTimeline (2030 / 2033). The
+// standards drift test (standards.test.ts) asserts that derivation; here we pin
+// the behavioral consequences. These constants are chosen so a cnsa-2.0 eval lands
+// in the same tier as the label (2031 is past cnsa deprecate 2030, before its 2033
+// disallow; 2036 is past both regimes' disallow).
+const DUE_NOW = new Date("2026-01-01"); // before every deprecate date
 const DEPRECATED_NOW = new Date("2031-06-01"); // past deprecate, before disallow
 const VIOLATION_NOW = new Date("2036-06-01"); // past disallow
 
@@ -92,8 +103,9 @@ describe("evaluateMandates", () => {
     assert.match(v.clause, /deprecate/);
     assert.equal(v.effective, "2030-12-31");
     assert.ok(v.monthsUntil > 0);
-    // ...but the disallow clause is carried alongside for the gate.
-    assert.equal(v.disallowEffective, "2035-12-31");
+    // ...but the disallow clause is carried alongside for the gate. CNSA 2.0's
+    // own general exclusive-use milestone is 2033 (not IR 8547's 2035).
+    assert.equal(v.disallowEffective, "2033-12-31");
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow > v.monthsUntil);
     assert.equal(ev.nextDeadline, "2030-12-31");
   });
@@ -108,9 +120,9 @@ describe("evaluateMandates", () => {
     assert.match(v.clause, /deprecate/);
     assert.equal(v.effective, "2030-12-31");
     assert.ok(v.monthsUntil < 0);
-    // ...while the disallow deadline is still ahead and is the next deadline.
+    // ...while the disallow deadline (CNSA 2033) is still ahead and is next.
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow > 0);
-    assert.equal(ev.nextDeadline, "2035-12-31");
+    assert.equal(ev.nextDeadline, "2033-12-31");
   });
 
   it("treats the deprecate effective date itself as passed", () => {
@@ -124,9 +136,9 @@ describe("evaluateMandates", () => {
     assert.equal(ev.hasViolation, true);
     const v = ev.findings[0];
     assert.equal(v.status, "violation");
-    // Surfaces the DISALLOW clause, not the deprecate one.
+    // Surfaces the DISALLOW clause, not the deprecate one (CNSA disallow: 2033).
     assert.match(v.clause, /disallow/);
-    assert.equal(v.effective, "2035-12-31");
+    assert.equal(v.effective, "2033-12-31");
     assert.ok(v.monthsUntilDisallow !== null && v.monthsUntilDisallow < 0);
     assert.equal(ev.nextDeadline, null);
   });
@@ -162,6 +174,72 @@ describe("evaluateMandates", () => {
   });
 });
 
+describe("evaluateMandates + org policy composition", () => {
+  it("carries no policy signal when no policy is supplied", () => {
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW);
+    assert.equal(ev.policyName, null);
+    assert.equal(ev.acknowledged, 0);
+    assert.equal(ev.findings[0].policyVerdict, null);
+    assert.equal(ev.findings[0].acknowledged, false);
+  });
+
+  it("annotates each row with the org verdict + acknowledged and tallies the count", () => {
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, transitionRsa);
+    assert.equal(ev.policyName, "org");
+    assert.equal(ev.acknowledged, 1);
+    const v = ev.findings[0];
+    assert.equal(v.policyVerdict, "transition-pending");
+    assert.equal(v.acknowledged, true);
+    // The mandate STATUS is unchanged by the policy — acknowledgement is additive.
+    assert.equal(v.status, "due");
+    assert.deepEqual(ev.summary, { conformant: 0, due: 1, deprecated: 0, violation: 0 });
+  });
+
+  it("acknowledges a permitted family but not a prohibited one", () => {
+    const permitted = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, permitRsa);
+    assert.equal(permitted.findings[0].acknowledged, true);
+    assert.equal(permitted.findings[0].policyVerdict, "conformant");
+
+    const prohibited = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, prohibitRsa);
+    assert.equal(prohibited.acknowledged, 0);
+    assert.equal(prohibited.findings[0].acknowledged, false);
+    assert.equal(prohibited.findings[0].policyVerdict, "violation");
+  });
+
+  it("does not acknowledge a family the policy also PROHIBITS (prohibited wins)", () => {
+    // A plausible merge of two policy fragments lists RSA in both lists. The
+    // verdict must resolve to violation AND not be acknowledged — otherwise the
+    // row is self-contradictory (verdict violation, yet exempt from the gate).
+    const overlap: CryptoPolicy = { name: "org", prohibited: ["RSA"], permitted: ["RSA"] };
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, overlap);
+    assert.equal(ev.findings[0].policyVerdict, "violation");
+    assert.equal(ev.findings[0].acknowledged, false);
+    assert.equal(ev.acknowledged, 0);
+    assert.equal(mandateGateFails(ev, { failNow: true }), true, "still trips --fail-now");
+  });
+
+  it("does not acknowledge an unlisted family under a permissive defaultVerdict", () => {
+    // defaultVerdict:"conformant" yields a non-violation policyVerdict, but silence
+    // is not consent: the family is not explicitly managed, so it is NOT exempt.
+    const permissive: CryptoPolicy = { name: "org", defaultVerdict: "conformant" };
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, permissive);
+    assert.equal(ev.findings[0].policyVerdict, "conformant");
+    assert.equal(ev.findings[0].acknowledged, false);
+    assert.equal(ev.acknowledged, 0);
+    assert.equal(mandateGateFails(ev, { failNow: true }), true, "unmanaged crypto still fails");
+  });
+
+  it("tallies acknowledgement per FINDING, not per row (one finding × two mandates)", () => {
+    const ev = evaluateMandates([rsa], ["cnsa-2.0", "nist-ir-8547"], DUE_NOW, permitRsa);
+    assert.equal(ev.findings.length, 2, "two verdict rows (one per mandate)");
+    assert.equal(ev.acknowledged, 1, "but one distinct acknowledged finding");
+    assert.ok(
+      ev.findings.every((v) => v.acknowledged),
+      "every row still carries the flag",
+    );
+  });
+});
+
 describe("mandateGateFails (deadline-aware default)", () => {
   it("does not fail while every deadline is ahead", () => {
     assert.equal(mandateGateFails(evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW)), false);
@@ -186,17 +264,48 @@ describe("mandateGateFails (deadline-aware default)", () => {
     );
   });
   it("leadMonths measures to the DISALLOW date, not the deprecate date", () => {
-    // 2029-08-01: ~17 months to deprecate (2030-12-31) but ~77 to disallow
-    // (2035-12-31). A 24-month lead window must NOT fail (disallow is far out).
+    // 2029-08-01 under cnsa-2.0: ~17 months to deprecate (2030-12-31) but ~53 to
+    // disallow (2033-12-31). A 24-month lead window must NOT fail (it measures to
+    // the disallow date, which is far out); an 80-month window must.
     const due = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2029-08-01"));
     assert.equal(mandateGateFails(due, { leadMonths: 24 }), false);
     assert.equal(mandateGateFails(due, { leadMonths: 80 }), true);
   });
   it("leadMonths fails a deprecated finding when disallow is within the window", () => {
-    // 2035-08-01: deprecated (past 2030-12-31), ~5 months to 2035-12-31.
-    const ev = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2035-08-01"));
+    // 2033-08-01 under cnsa-2.0: deprecated (past 2030-12-31), ~5 months to the
+    // 2033-12-31 disallow.
+    const ev = evaluateMandates([rsa], ["cnsa-2.0"], new Date("2033-08-01"));
     assert.equal(ev.findings[0].status, "deprecated");
     assert.equal(mandateGateFails(ev, { leadMonths: 6 }), true);
     assert.equal(mandateGateFails(ev, { leadMonths: 3 }), false);
+  });
+});
+
+describe("mandateGateFails + org policy composition", () => {
+  it("failNow exempts a policy-acknowledged finding but not an unacknowledged one", () => {
+    // inTransition RSA → acknowledged → --fail-now must not trip on it.
+    const ack = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, transitionRsa);
+    assert.equal(mandateGateFails(ack, { failNow: true }), false);
+    // prohibited RSA → not acknowledged → --fail-now still fails.
+    const unack = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, prohibitRsa);
+    assert.equal(mandateGateFails(unack, { failNow: true }), true);
+  });
+
+  it("leadMonths exempts a policy-acknowledged finding", () => {
+    // A wide window that would otherwise trip (permitted → acknowledged → exempt).
+    const ack = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW, permitRsa);
+    assert.equal(mandateGateFails(ack, { leadMonths: 240 }), false);
+    const unack = evaluateMandates([rsa], ["cnsa-2.0"], DUE_NOW);
+    assert.equal(mandateGateFails(unack, { leadMonths: 240 }), true);
+  });
+
+  it("still fails a passed DISALLOW deadline even when the policy acknowledges it", () => {
+    // An org cannot self-exempt from a dated legal disallow: the hard floor wins.
+    const ack = evaluateMandates([rsa], ["cnsa-2.0"], VIOLATION_NOW, permitRsa);
+    assert.equal(ack.findings[0].acknowledged, true);
+    assert.equal(mandateGateFails(ack), true);
+    assert.equal(mandateGateFails(ack, { failNow: true }), true);
+    // ...and under every early-gate option, including leadMonths.
+    assert.equal(mandateGateFails(ack, { leadMonths: 6 }), true);
   });
 });

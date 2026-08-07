@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   buildReadinessReport,
   buildInventory,
+  evaluateMandates,
   signReadinessReport,
   verifyReadinessReport,
 } from "../src/index.js";
@@ -65,6 +66,51 @@ test("content hash is reproducible across scan time but changes with the commit"
   assert.notEqual(a.subject.scanTimeUtc, b.subject.scanTimeUtc);
   // Different commit → different hash.
   assert.notEqual(a.attestation.contentHash, c.attestation.contentHash);
+});
+
+test("mandateMapping is date-pinned, hashed, and reproducible across the whole day", () => {
+  const result = resultWith("2026-01-01T00:00:01Z"); // RSA finding — mandate-prohibited.
+  // 2026-01-14 is a month-rounding boundary day: before `now` was pinned to UTC
+  // midnight, an early-morning and a late-evening run rounded monthsUntilDisallow
+  // differently and produced DIFFERENT hashes. Use the two extremes of the day.
+  const early = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-14T00:30:00Z"));
+  const late = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-14T23:30:00Z"));
+  const a = buildReadinessReport(result, { commit: "c1", mandate: early });
+  const b = buildReadinessReport(
+    resultWith("2026-06-06T06:06:06Z"), // different scan time, same commit + same mandate day
+    { commit: "c1", mandate: late },
+  );
+  // The stored `now` is a plain date, not the full timestamp it was evaluated at.
+  assert.equal(a.mandateMapping?.now, "2026-01-14");
+  assert.match(a.mandateMapping?.now ?? "", /^\d{4}-\d{2}-\d{2}$/);
+  // Same commit + same compliance DAY → identical attestation hash, at any hour.
+  assert.equal(a.attestation.contentHash, b.attestation.contentHash);
+  assert.equal(verifyReadinessReport(a).valid, true);
+});
+
+test("a mandateMapping changes the attestation hash and is tamper-evident", () => {
+  const result = resultWith("2026-01-01T00:00:01Z");
+  const withoutMandate = buildReadinessReport(result, { commit: "c1" });
+  const ev = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-01"));
+  const withMandate = buildReadinessReport(result, { commit: "c1", mandate: ev });
+  // Adding the attested mandate verdicts changes the hashed body.
+  assert.notEqual(withoutMandate.attestation.contentHash, withMandate.attestation.contentHash);
+  // …and the mapping is covered by the hash: editing a verdict fails verification.
+  const tampered = JSON.parse(JSON.stringify(withMandate)) as ReadinessReport;
+  tampered.mandateMapping!.summary.violation = 99;
+  assert.equal(verifyReadinessReport(tampered).valid, false);
+});
+
+test("a mandate evaluated after a deadline attests a different status + hash", () => {
+  const result = resultWith("2026-01-01T00:00:01Z");
+  const due = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2026-01-01")); // pre-deadline
+  const violated = evaluateMandates(result.findings, ["cnsa-2.0"], new Date("2036-06-01")); // post-disallow
+  const a = buildReadinessReport(result, { commit: "c1", mandate: due });
+  const b = buildReadinessReport(result, { commit: "c1", mandate: violated });
+  assert.equal(a.mandateMapping?.hasViolation, false);
+  assert.equal(b.mandateMapping?.hasViolation, true);
+  // A genuinely different compliance date → a different attestation hash.
+  assert.notEqual(a.attestation.contentHash, b.attestation.contentHash);
 });
 
 /** A fake signer that records what it was asked to sign; no crypto, no I/O. */

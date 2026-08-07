@@ -1,15 +1,15 @@
 # quantakrypto-tools — Compliance & Standards Mapping
 
-A standards-and-compliance reference for the `quantakrypto-tools` monorepo (**v0.5.0**, tagged; 0.4.4 published):
-`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/action`,
-`@quantakrypto/sieve`, and `@quantakrypto/agent`.
+A standards-and-compliance reference for the `quantakrypto-tools` monorepo (**v0.9.0** prepared, not yet published or tagged; **0.8.0** is the latest published):
+`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`, `@quantakrypto/qprobe`,
+`@quantakrypto/sieve`, `@quantakrypto/agent`, and the private (unpublished) `@quantakrypto/action`.
 
 This document maps the toolset against post-quantum cryptography standards,
 interchange/output formats, information-security and evaluation standards,
 PQC-migration regulations, and software-supply-chain assurance frameworks for the
 project itself.
 
-> ### ⚠ v0.4 status correction (2026-07-15)
+> ### ⚠ Status correction (2026-07-15, refreshed 2026-08-05)
 > The section bodies below were written at **v0.1.0** and several "would require /
 > not yet / gap" items **have since shipped**. Corrections, so the mapping does not
 > *undersell* the tool:
@@ -17,18 +17,24 @@ project itself.
 >   `taxonomies`), **CycloneDX CBOM** (`toCbom` / `qscan --cbom` / MCP
 >   `generate_cbom`), and **SARIF is CI-validated** (`scripts/validate-sarif.mjs`,
 >   URLs reconciled). §2 is done.
-> - **Project posture** (§5): **CI + release workflows exist**, **npm/Sigstore
->   provenance is LIVE** on all 5 published packages, **`SECURITY.md`** (ISO
->   29147/30111 framing) exists, **`REUSE.toml` + `LICENSES/`** are committed,
->   packages are at **0.5.0** (tagged; 0.4.4 published). **Still genuine gaps:** the **OpenSSF Scorecard
->   workflow is not wired**, `reuse lint` isn't in CI, tarballs lack a per-package
->   `LICENSE`, and releases publish from `main` (no immutable semver tags).
+> - **Project posture** (§5): **CI + release workflows exist**, the **OpenSSF
+>   Scorecard workflow is wired** (`.github/workflows/scorecard.yml`), **npm/Sigstore
+>   provenance is LIVE** on all six published packages (`action` is private, not
+>   published), **`SECURITY.md`** (ISO 29147/30111 framing) exists, **`REUSE.toml` +
+>   `LICENSES/`** are committed, packages are at **0.9.0** (prepared locally, not yet
+>   published or tagged; **0.8.0** is the latest on npm). **Still genuine gaps:**
+>   `reuse lint` isn't in CI, tarballs lack a per-package `LICENSE`, and releases
+>   publish from `main` (no immutable semver tags).
 > - **Crypto coverage:** a **SLH-DSA (FIPS 205) Sieve category** now exists
->   (self-consistency + sizes), but its **ACVP exact-value KAT loader misclassifies
->   FIPS 205 vectors** — advertised, not yet functional. **CNSA 2.0 Category-5**
->   tier logic (`remediationForTier`) is implemented in core **but not surfaced by
->   any CLI flag or MCP tool** — library-API only, so "CNSA-2.0-aware" is not yet an
->   end-to-end claim. **SP 800-208** now has a **detector** — `stateful-hbs` flags LMS/HSS/XMSS/XMSSMT
+>   (self-consistency + sizes), and its **ACVP exact-value KAT loader was fixed in
+>   0.4.3** — the earlier FIPS 205 vector misclassification is resolved. What remains
+>   unproven: no validation run against official NIST ACVP vectors has been
+>   published, so exact-value conformance claims still rest on operator-supplied
+>   authentic vectors. **CNSA 2.0 Category-5** tier logic (`remediationForTier`) is
+>   implemented in core **and surfaced end-to-end** via `--tier category-5` and
+>   `--profile cnsa-2.0` (plus the `--mandate cnsa-2.0` gate, §4); the gate is
+>   **family-level** — it does not assert CNSA parameter levels on adopted PQC.
+>   **SP 800-208** now has a **detector** — `stateful-hbs` flags LMS/HSS/XMSS/XMSSMT
 >   parameter strings and library tokens (a state-management hazard, not broken
 >   crypto); no Sieve conformance category for it yet.
 > - **New compliance surface — the agent/BYOK line.** `qscan --triage` /
@@ -39,8 +45,9 @@ project itself.
 >   feature as out-of-scope for regulated data unless the operator accepts the
 >   egress. See [THREAT-MODEL.md §6.5](THREAT-MODEL.md).
 >
-> The still-open roadmap items (§6) are: **#10** ACVP vector provenance and the
-> SLH-DSA ACVP fix, plus Scorecard/REUSE-lint. Items #1/#2/#3/#4/#5/#6 shipped —
+> The still-open roadmap items (§6) are: **#10** ACVP vector provenance, plus
+> REUSE-lint in CI (the SLH-DSA ACVP loader fix landed in 0.4.3 and the Scorecard
+> workflow is wired). Items #1/#2/#3/#4/#5/#6 shipped —
 > including **#4** (the ISO A.8.24 evidence-chain export: `buildReadinessReport` /
 > `signReadinessReport` / `verifyReadinessReport`, `qscan --format evidence`) and
 > the standards-regime `--profile` wiring.
@@ -93,7 +100,7 @@ the two that have finalized FIPS standards (ML-KEM, ML-DSA).
 | **NIST SP 800-208 (stateful hash-based sigs)** | Guidance for stateful hash signatures (LMS/HSS, XMSS/XMSSMT) and their state-management hazards. | **Touches** via the `stateful-hbs` detector, which flags LMS/HSS/XMSS/XMSSMT parameter strings (`LMS_SHA256_M32_H10`, `XMSS-SHA2_10_256`, …) and library tokens (`pyhsslms`, `xmss_keypair`) — surfaced as a state-management hazard (approved-but-stateful), `category: signature`, `hndl: false`. **Would still require** a Sieve stateful-signature battery (state-reuse/exhaustion checks) to conformance-test an implementation. |
 | **NIST SP 800-227 (KEM guidance, draft)** | Draft recommendations for using KEMs securely (encapsulation/decapsulation, key-derivation, FO transform). | **Touches** conceptually: Sieve's implicit-rejection (`AF-02`) category directly exercises the Fujisaki–Okamoto reject path that SP 800-227 cares about (no-error on bad ct, deterministic reject secret, differs from honest ss). **Helps align** as an implementation-hygiene pre-screen. To **claim** alignment, map each Sieve check to specific draft requirements and track the draft to final. |
 | **NIST IR 8547 (transition to PQC standards)** | NIST's roadmap describing the move off RSA/ECC toward the FIPS 203/204/205 family, and discovery/inventory expectations. | **Helps align** with the *discovery & inventory* phase IR 8547 calls for: qscan/core produce a crypto inventory (`byAlgorithm`/`byCategory`/`bySeverity`), an HNDL count, and a 0–100 readiness score — exactly the "know where your quantum-vulnerable crypto is" step. It does **not** perform the migration; it informs it. |
-| **NSA CNSA 2.0** | NSA's Commercial National Security Algorithm Suite 2.0 — PQC algorithm mandates and timelines for NSS (ML-KEM-1024, ML-DSA-87, LMS/XMSS, SHA-384/512, AES-256). | **Touches**: qscan flags the *classical* algorithms CNSA 2.0 retires (RSA, ECDH, ECDSA). **Helps align** by surfacing non-CNSA-2.0 asymmetric crypto for migration. **Gaps to claim alignment:** core has no "CNSA 2.0 level" policy mode (no detector for whether you reached ML-KEM-**1024** / ML-DSA-**87**, no LMS/XMSS detection per SP 800-208). To say "CNSA 2.0 readiness check" defensibly, **would require** a policy profile that asserts the CNSA-specified parameter levels and flags sub-CNSA PQC choices. |
+| **NSA CNSA 2.0** | NSA's Commercial National Security Algorithm Suite 2.0 — PQC algorithm mandates and timelines for NSS (ML-KEM-1024, ML-DSA-87, LMS/XMSS, SHA-384/512, AES-256). | **Touches**: qscan flags the *classical* algorithms CNSA 2.0 retires (RSA, ECDH, ECDSA). **Helps align** by surfacing non-CNSA-2.0 asymmetric crypto for migration. **Now surfaced:** `--mandate cnsa-2.0` gates the retired classical families with dated clauses (§4), and `--profile cnsa-2.0` / `--tier category-5` apply the CNSA-level remediation advice (ML-KEM-**1024** / ML-DSA-**87**); LMS/XMSS detection exists via `stateful-hbs` (SP 800-208). **Remaining gap to claim alignment:** the gate is family-level — there is no detector for whether *adopted PQC* actually reaches ML-KEM-**1024** / ML-DSA-**87**, so a fully defensible "CNSA 2.0 readiness check" still **would require** parameter-level assertion that flags sub-CNSA PQC choices. |
 | **BSI TR-02102** | German BSI's technical guideline on cryptographic mechanisms & key lengths (incl. PQC recommendations and hybrid guidance). | **Touches**: the classical algorithms qscan flags overlap TR-02102's deprecation guidance; core's hybrid recommendation (`X25519MLKEM768`) matches BSI's preference for hybrid KEX during transition. **Would require** a TR-02102 policy profile (its specific key-length and mechanism allow-lists) to claim "TR-02102-aligned" output. |
 | **ANSSI PQC views** | French ANSSI's position favoring *hybrid* (classical + PQC) deployments and caution on pure-PQC during transition. | **Touches / supports**: the toolset's default remediation is explicitly **hybrid** (`X25519MLKEM768`), consistent with ANSSI's hybrid-first stance. This is alignment-by-default of recommendations, not a formal conformance claim. |
 | **ETSI TC CYBER QSC** | ETSI's Quantum-Safe Cryptography working group — migration frameworks, quantum-safe protocol profiles, and inventory guidance. | **Helps align** with ETSI's migration-inventory guidance via qscan's crypto inventory and readiness scoring. No ETSI-specific report profile exists; relationship is at the methodology level. |
@@ -118,10 +125,10 @@ SP 800-208 stateful sigs, and CNSA-2.0 parameter-level policy are **gaps**.
 | **CBOM (Cryptographic Bill of Materials)** | An SBOM specialized to enumerate cryptographic assets (algorithms, keys, certificates, protocols) and their usage — the emerging primitive for PQC migration tracking. | **Emits today** (shipped since v0.2). `toCbom()` produces a CycloneDX 1.6 cryptographic-BOM mapping each `Finding` to a `cryptographic-asset` component classified by its `assetType` (algorithm / certificate / related-crypto-material / protocol), with location + quantum-posture flags; exposed as **`qscan --cbom`** and the MCP **`generate_cbom`** tool. An **OpenVEX 0.2.0** export (`qscan --format vex`) additionally emits the readiness posture as VEX statements for supply-chain pipelines. |
 | **NIST ACVP vector format** | The JSON test-vector format used by NIST's Automated Cryptographic Validation Protocol (CAVP/ACVTS) for ML-KEM (FIPS 203) and ML-DSA (FIPS 204). | **Consumes (does not emit).** Sieve's `src/vectors.ts` parses standard ACVP JSON (`algorithm`/`mode`/`testGroups[].tests[]`, hex byte fields) for `keyGen`, `encapDecap`, and `sigVer`, normalizing into `kem-keygen`/`kem-encap`/`kem-decap`/`dsa-verify` cases. It **never fabricates** values and records unrecognized files as non-fatal notes. **To claim ACVP-based conformance**, the operator must supply authentic NIST ACVP vectors; Sieve does not redistribute them. Sieve is **not** an ACVP *client/server* and does not talk to ACVTS. |
 
-**Net for Section 2:** **SARIF 2.1.0 is emitted today** (the one true interchange
-claim). **CWE tagging, CycloneDX/SPDX, and a standardized CBOM are not yet
-emitted** but are natural, high-value additions. **ACVP format is consumed** by
-Sieve, not produced.
+**Net for Section 2:** **SARIF 2.1.0, CWE tagging, and a CycloneDX 1.6 CBOM are
+all emitted today** (plus an OpenVEX 0.2.0 export). **SPDX remains un-emitted** —
+a natural but lower-priority addition. **ACVP format is consumed** by Sieve, not
+produced.
 
 ---
 
@@ -136,8 +143,9 @@ Sieve, not produced.
 
 **Net for Section 3:** qscan **helps generate A.8.24 evidence** inside an ISMS the
 org still operates; Sieve **relates to CC/FIPS evaluation as a pre-screen** but
-**certifies nothing**; the project itself currently **lacks** a 29147/30111
-vulnerability-disclosure posture (a concrete, low-effort gap).
+**certifies nothing**; the project itself now **has** a 29147/30111
+vulnerability-disclosure posture (`SECURITY.md`) — a triage SLA and private
+security advisories remain for full alignment.
 
 ---
 
@@ -156,10 +164,14 @@ itself make any entity "compliant."
 > each prohibited classical public-key finding (RSA, ECDH, ECDSA, EdDSA, DH,
 > DSA, ECIES) with its clause, deadline, and citation. The gate is
 > **deadline-aware**: a prohibited finding is a warning once the deprecation
-> date (2030) passes and fails the build only once the disallow date (2035)
-> passes; `--lead-months <n>` fails early when a deadline is within `n` months,
-> and `--fail-now` fails on any prohibited finding immediately. The deadlines
-> derive from the same dated `PQC_STANDARDS` snapshot (single source of truth).
+> date passes and fails the build only once the disallow date passes;
+> `--lead-months <n>` fails early when a disallow deadline is within `n` months,
+> and `--fail-now` fails on any prohibited finding immediately. Each regime uses
+> its OWN dated timeline (single source of truth, `PQC_STANDARDS`): **NIST IR
+> 8547** deprecates classical PKC after 2030 and disallows after **2035**, while
+> **CNSA 2.0** encodes its own exclusive-use milestones — deprecate after 2030,
+> disallow after **2033** (CNSA's general NSS exclusive-use date), so the
+> `cnsa-2.0` gate fails ~two years earlier than `nist-ir-8547`.
 > Scope honesty: this is a *family-level* gate — it does not assert PQC
 > parameter levels (e.g. ML-KEM-768 where CNSA 2.0 requires 1024; see
 > [COMPARISON.md](COMPARISON.md) §2.4), and X25519/X448 are deliberately not
@@ -169,6 +181,23 @@ itself make any entity "compliant."
 > independent algorithm date** of their own; they inherit these CNSA 2.0 /
 > IR 8547 timelines, so the same mandate-gate output supports their
 > crypto-risk-management expectations too.
+>
+> **Machine-readable output (v0.9):** the mandate verdicts are no longer confined
+> to the human report. `--mandate --format json` adds a top-level `mandateMapping`
+> block; `--format sarif` carries the same under `run.properties.mandate` (so an
+> uploaded SARIF surfaces it in code scanning); and `--format evidence` embeds a
+> **date-pinned, hashed** `mandateMapping` in the ISO A.8.24 attestation, so an
+> auditor gets a tamper-evident record of which clauses applied on which date.
+> The GitHub Action threads the same verdicts into the SARIF it uploads.
+>
+> **Composing an org policy (v0.9):** pass `--policy <file>` alongside `--mandate`
+> (the same crypto-policy file the evidence report's §4 verdicts use; a `policy`
+> input on the Action). Families the org **explicitly permits or is transitioning**
+> are annotated in every output (`policyVerdict` / `acknowledged`) and **exempted
+> from the early gate** (`--fail-now` / `--lead-months`) — an org running early
+> enforcement is not re-flagged on the very families it is knowingly, traceably
+> migrating. A **passed disallow deadline still fails** regardless: an org cannot
+> self-exempt from a dated regulatory prohibition.
 
 | Mandate | What it is (one line) | How quantakrypto-tools relates / supports / what'd be needed to claim alignment |
 |---|---|---|
@@ -191,25 +220,30 @@ into mandate-specific report/inventory formats.
 ## 5. Software supply-chain / OSS assurance — for the project itself
 
 This section assesses `quantakrypto-tools` *as a published open-source project*.
-**Updated for v0.5.0:** the six library packages are **published to npm with live
-Sigstore/npm provenance**; the repo has **`ci.yml` + `release.yml`**, **`SECURITY.md`**,
-and **`REUSE.toml` + `LICENSES/`**. The rows below are corrected inline; the
-remaining genuine gaps are the **OpenSSF Scorecard workflow** (not wired),
-`reuse lint` in CI, per-package `LICENSE` in tarballs, and immutable semver tags.
+**Updated for v0.9.0** (prepared, not yet published or tagged; **0.8.0** is the
+latest published): the six library packages are **published to npm with live
+Sigstore/npm provenance** (`action` is private, not published); the repo has
+**`ci.yml` + `release.yml` + `scorecard.yml`**, **`SECURITY.md`**, and
+**`REUSE.toml` + `LICENSES/`**. The rows below are corrected inline; the
+remaining genuine gaps are `reuse lint` in CI, per-package `LICENSE` in
+tarballs, and immutable semver tags.
 
 | Framework | What it is (one line) | Current state in quantakrypto-tools / what'd be needed to claim alignment |
 |---|---|---|
-| **SLSA** | Supply-chain Levels for Software Artifacts — graduated provenance/build-integrity levels for released artifacts. | **Aligned (build provenance live).** `release.yml` publishes all 5 library packages with npm/Sigstore provenance attestations (verified via `npm audit signatures`). Actions are SHA-pinned. Residual to strengthen L3-style claims: publish from an immutable tag rather than `main` so provenance pins a non-mutable ref. |
-| **OpenSSF Scorecard** | Automated checks scoring an OSS repo on security practices (branch protection, CI tests, pinned deps, code review, etc.). | **Not yet wired** (genuine gap). The `ossf/scorecard-action` workflow is **not** present (only `ci.yml`/`release.yml`). The **zero-runtime-dependency** posture + SHA-pinned actions + provenance already satisfy several checks; adding the Scorecard Action + branch protection is the remaining step. |
+| **SLSA** | Supply-chain Levels for Software Artifacts — graduated provenance/build-integrity levels for released artifacts. | **Aligned (build provenance live).** `release.yml` publishes all six library packages with npm/Sigstore provenance attestations (verified via `npm audit signatures`). Actions are SHA-pinned. Residual to strengthen L3-style claims: publish from an immutable tag rather than `main` so provenance pins a non-mutable ref. |
+| **OpenSSF Scorecard** | Automated checks scoring an OSS repo on security practices (branch protection, CI tests, pinned deps, code review, etc.). | **Wired.** The `ossf/scorecard-action` workflow is present (`.github/workflows/scorecard.yml`, alongside `ci.yml`/`release.yml`). The **zero-runtime-dependency** posture + SHA-pinned actions + provenance already satisfy several checks; branch protection is the remaining step, and no score is claimed here. |
 | **OpenSSF Best Practices Badge (formerly CII)** | Self-certified badge for following OSS best practices (reporting process, tests, release notes, crypto hygiene). | **Not held.** Apache-2.0 + an existing `node:test` suite satisfy several criteria already. **Would require** a published vuln-reporting process (ties to ISO 29147/30111 above), documented release process, and completing the questionnaire to earn the *passing* badge. |
 | **SPDX / REUSE (license compliance)** | REUSE.software best practice: every file carries an SPDX license identifier; machine-verifiable licensing. | **Partial.** Top-level `LICENSE` (Apache-2.0) is present and every package declares `"license": "Apache-2.0"`, but per-file `SPDX-License-Identifier` headers and a REUSE-compliant `LICENSES/` layout are **not** in place. **Would require** adding SPDX headers (or `.reuse/dep5`) and running `reuse lint` to claim REUSE compliance. |
-| **SemVer** | Semantic Versioning — `MAJOR.MINOR.PATCH` with documented compatibility semantics. | **Followed in form.** All packages are `0.5.0` (tagged; 0.4.4 published). Under SemVer's 0.x rule the API is still explicitly pre-stable. `docs/VERSIONING.md` documents the public surface; a `CHANGELOG.md` is maintained. Reaching `1.0.0` (with the agent line's surface declared) is the remaining step to make compatibility *promises*. |
-| **npm provenance** | npm's signed build-provenance attestation (Sigstore) shown on the package page, proving which CI built a release. | **Live** (shipped since v0.4). `release.yml` publishes all 5 library packages with `--provenance` via GitHub OIDC; `npm audit signatures` verifies the attestations. Residual: the attestation currently pins `refs/heads/main` rather than an immutable release tag. |
+| **SemVer** | Semantic Versioning — `MAJOR.MINOR.PATCH` with documented compatibility semantics. | **Followed in form.** All seven packages are `0.9.0` (prepared locally, not yet published or tagged; `0.8.0` is the latest on npm). Under SemVer's 0.x rule the API is still explicitly pre-stable. `docs/VERSIONING.md` documents the public surface; a `CHANGELOG.md` is maintained. Reaching `1.0.0` (with the agent line's surface declared) is the remaining step to make compatibility *promises*. |
+| **npm provenance** | npm's signed build-provenance attestation (Sigstore) shown on the package page, proving which CI built a release. | **Live** (shipped since v0.4). `release.yml` publishes all six library packages with `--provenance` via GitHub OIDC; `npm audit signatures` verifies the attestations. Residual: the attestation currently pins `refs/heads/main` rather than an immutable release tag. |
 
 **Net for Section 5:** strong **license clarity** (Apache-2.0 throughout) and an
-excellent **minimal-dependency** security posture, but **no CI, no provenance, no
-security policy, no SBOM/REUSE headers, and pre-1.0 SemVer**. These are the
-project-hygiene items to address before making supply-chain assurance claims.
+excellent **minimal-dependency** security posture, now backed by **CI, live
+npm/Sigstore provenance on all six published packages, a `SECURITY.md`, and a
+wired Scorecard workflow**. Remaining project-hygiene items before stronger
+supply-chain assurance claims: `reuse lint` in CI, per-package `LICENSE` in
+tarballs, immutable release tags, and **pre-1.0 SemVer** (no compatibility
+promises yet).
 
 ---
 
@@ -250,10 +284,11 @@ Blank cells indicate no meaningful relationship.
 | FIPS 140-3 / ISO 19790 | — | — | — | — | R (pre-screen only) |
 | ISO 29147/30111 (project vuln disclosure) | — | — | — | — | — (gap, repo-wide) |
 
-> **MCP note:** `@quantakrypto/mcp` does **not** emit SARIF; its tools (`scan_path`,
-> `inventory_crypto`, `explain_finding`, `suggest_hybrid`, `list_rules`) return
-> MCP text/JSON content. It relates to standards as an **advisory surface** over
-> core's knowledge (remediation table + detector catalog), not as a report emitter.
+> **MCP note:** `@quantakrypto/mcp` does **not** emit SARIF; its **16 registered
+> tools** (`scan_path`, `inventory_crypto`, `explain_finding`, `suggest_hybrid`,
+> `list_rules`, `generate_cbom`, and others) return MCP text/JSON content. It
+> relates to standards as an **advisory surface** over core's knowledge
+> (remediation table + detector catalog), not as a report emitter.
 
 ---
 

@@ -26,7 +26,7 @@ var VERSION;
 var init_version = __esm({
   "../core/dist/version.js"() {
     "use strict";
-    VERSION = "0.8.0";
+    VERSION = "0.9.0";
   }
 });
 
@@ -11419,6 +11419,11 @@ function toSarif(result, opts) {
       }))
     }
   ] : [];
+  const runProperties = {};
+  if (opts?.hndl)
+    runProperties.hndl = hndlSummaryBlock(opts.hndl);
+  if (opts?.mandate)
+    runProperties.mandate = opts.mandate;
   return {
     $schema: SARIF_SCHEMA,
     version: "2.1.0",
@@ -11433,7 +11438,7 @@ function toSarif(result, opts) {
           }
         },
         ...taxonomies.length > 0 ? { taxonomies } : {},
-        ...opts?.hndl ? { properties: { hndl: hndlSummaryBlock(opts.hndl) } } : {},
+        ...Object.keys(runProperties).length > 0 ? { properties: runProperties } : {},
         results
       }
     ]
@@ -11472,6 +11477,11 @@ function toJson(result, opts) {
       byAlgorithm: result.inventory.byAlgorithm
     },
     ...hndl ? { hndl: hndlSummaryBlock(hndl) } : {},
+    // Compliance-mandate evaluation (`--mandate`): the machine-readable verdicts
+    // + summary, so a CI job can gate/report on them without re-parsing the human
+    // block. Carries the org `--policy` composition (policyVerdict / acknowledged)
+    // when one was supplied.
+    ...opts?.mandate ? { mandateMapping: opts.mandate } : {},
     findings: result.findings.map((f) => {
       const exposure = exposureFor(f, hndl);
       return {
@@ -11922,6 +11932,12 @@ var init_standards = __esm({
         source: "NIST IR 8547 (transition to post-quantum cryptography standards)",
         asOf: "2026-07"
       },
+      cnsaTimeline: {
+        deprecateAfter: 2030,
+        disallowAfter: 2033,
+        source: "NSA CNSA 2.0 (exclusive-use milestones: 2030 software/firmware signing, 2033 general NSS)",
+        asOf: "2026-07"
+      },
       emerging: [
         {
           summary: "HQC \u2014 NIST's code-based backup KEM (selected March 2025; draft FIPS expected ~2026), a diversity hedge against ML-KEM's lattice assumption.",
@@ -12097,6 +12113,7 @@ function buildReadinessReport(result, opts = {}) {
     line: f.location.line
   }));
   const policyMapping = opts.policy ? buildPolicyMapping(result.findings, opts.policy) : void 0;
+  const mandateMapping = opts.mandate ? { ...opts.mandate, now: opts.mandate.now.slice(0, 10) } : void 0;
   const hashableBody = {
     reportType: "quantakrypto-readiness",
     specVersion: 1,
@@ -12108,7 +12125,8 @@ function buildReadinessReport(result, opts = {}) {
     tool: { name: "qScan", version: VERSION },
     inventory: result.inventory,
     findings,
-    ...policyMapping ? { policyMapping } : {}
+    ...policyMapping ? { policyMapping } : {},
+    ...mandateMapping ? { mandateMapping } : {}
   };
   const contentHash = "sha256:" + createHash6("sha256").update(JSON.stringify(canonicalize(hashableBody))).digest("hex");
   return {
@@ -12152,12 +12170,19 @@ function assertKnownMandates(ids) {
 function monthsBetween(fromMs, toMs) {
   return Math.round((toMs - fromMs) / MONTH_MS);
 }
-function evaluateMandates(findings, mandateIdList, now) {
-  const nowMs = now.getTime();
+function policyAcknowledges(algo2, policy) {
+  if (policy.prohibited?.includes(algo2))
+    return false;
+  return Boolean(policy.permitted?.includes(algo2) || policy.inTransition?.includes(algo2));
+}
+function evaluateMandates(findings, mandateIdList, now, policy) {
+  const nowMs = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const nowIso = new Date(nowMs).toISOString();
   const selected = mandateIdList.map(getMandate).filter((m) => Boolean(m));
   const rows = [];
   const perFindingWorst = [];
   let notInScope = 0;
+  let acknowledged = 0;
   let nextDeadlineMs = null;
   for (const f of findings) {
     const algo2 = f.algorithm ?? "unknown";
@@ -12166,10 +12191,14 @@ function evaluateMandates(findings, mandateIdList, now) {
       continue;
     }
     let worst = "conformant";
+    const family = algo2;
+    const isAcknowledged = policy ? policyAcknowledges(family, policy) : false;
+    let producedRow = false;
     for (const mandate of selected) {
       const applicable = mandate.rules.filter((r) => r.prohibits.includes(algo2)).sort((a, b) => a.effective.localeCompare(b.effective));
       if (applicable.length === 0)
         continue;
+      producedRow = true;
       const passed = applicable.filter((r) => nowMs >= new Date(r.effective).getTime());
       const passedDisallow = passed.filter((r) => r.tier === "disallow");
       let status;
@@ -12207,9 +12236,13 @@ function evaluateMandates(findings, mandateIdList, now) {
         monthsUntil: monthsBetween(nowMs, new Date(governing.effective).getTime()),
         disallowEffective: disallowRule ? disallowRule.effective : null,
         monthsUntilDisallow: disallowMs !== null ? monthsBetween(nowMs, disallowMs) : null,
-        citation: mandate.citation
+        citation: mandate.citation,
+        policyVerdict: policy ? verdictForAlgorithm(family, policy).verdict : null,
+        acknowledged: isAcknowledged
       });
     }
+    if (producedRow && isAcknowledged)
+      acknowledged++;
     perFindingWorst.push(worst);
   }
   const summary = {
@@ -12221,30 +12254,34 @@ function evaluateMandates(findings, mandateIdList, now) {
   for (const s of perFindingWorst)
     summary[s]++;
   return {
-    now: now.toISOString(),
+    now: nowIso,
     mandates: selected.map((m) => m.id),
     summary,
     notInScope,
     findings: rows,
     nextDeadline: nextDeadlineMs !== null ? new Date(nextDeadlineMs).toISOString().slice(0, 10) : null,
-    hasViolation: summary.violation > 0
+    hasViolation: summary.violation > 0,
+    policyName: policy?.name ?? null,
+    acknowledged
   };
 }
 function mandateGateFails(ev, opts = {}) {
   if (ev.hasViolation)
     return true;
+  const gated = ev.findings.filter((v) => !v.acknowledged);
   if (opts.failNow)
-    return ev.findings.length > 0;
+    return gated.length > 0;
   if (opts.leadMonths !== void 0) {
-    return ev.findings.some((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths);
+    return gated.some((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= opts.leadMonths);
   }
   return false;
 }
-var CLASSICAL_PUBLIC_KEY, PROHIBITED_FAMILIES, deprecateAfter, disallowAfter, DEPRECATE_EFFECTIVE, DISALLOW_EFFECTIVE, MANDATES, mandateIds, getMandate, MONTH_MS, STATUS_RANK;
+var CLASSICAL_PUBLIC_KEY, PROHIBITED_FAMILIES, IR8547, CNSA, NIST_DEPRECATE_EFFECTIVE, NIST_DISALLOW_EFFECTIVE, CNSA_DEPRECATE_EFFECTIVE, CNSA_DISALLOW_EFFECTIVE, MANDATES, mandateIds, getMandate, MONTH_MS, STATUS_RANK;
 var init_mandates = __esm({
   "../core/dist/mandates.js"() {
     "use strict";
     init_standards();
+    init_policy();
     CLASSICAL_PUBLIC_KEY = [
       "RSA",
       "ECDH",
@@ -12257,9 +12294,12 @@ var init_mandates = __esm({
       "ECIES"
     ];
     PROHIBITED_FAMILIES = CLASSICAL_PUBLIC_KEY.filter((family) => family !== "X25519" && family !== "X448");
-    ({ deprecateAfter, disallowAfter } = PQC_STANDARDS.transitionTimeline);
-    DEPRECATE_EFFECTIVE = `${deprecateAfter}-12-31`;
-    DISALLOW_EFFECTIVE = `${disallowAfter}-12-31`;
+    IR8547 = PQC_STANDARDS.transitionTimeline;
+    CNSA = PQC_STANDARDS.cnsaTimeline;
+    NIST_DEPRECATE_EFFECTIVE = `${IR8547.deprecateAfter}-12-31`;
+    NIST_DISALLOW_EFFECTIVE = `${IR8547.disallowAfter}-12-31`;
+    CNSA_DEPRECATE_EFFECTIVE = `${CNSA.deprecateAfter}-12-31`;
+    CNSA_DISALLOW_EFFECTIVE = `${CNSA.disallowAfter}-12-31`;
     MANDATES = {
       "cnsa-2.0": {
         id: "cnsa-2.0",
@@ -12269,18 +12309,18 @@ var init_mandates = __esm({
         asOf: "2026-07",
         rules: [
           {
-            clause: `CNSA 2.0 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            clause: `CNSA 2.0 \u2014 deprecate classical PKC after ${CNSA.deprecateAfter}`,
             tier: "deprecate",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DEPRECATE_EFFECTIVE,
-            note: "Classical public-key cryptography deprecated; systems should use CNSA 2.0 PQC exclusively."
+            effective: CNSA_DEPRECATE_EFFECTIVE,
+            note: `Classical public-key cryptography deprecated (${CNSA.deprecateAfter}: software/firmware signing exclusive-use); systems should use CNSA 2.0 PQC.`
           },
           {
-            clause: `CNSA 2.0 \u2014 disallow classical PKC after ${disallowAfter}`,
+            clause: `CNSA 2.0 \u2014 disallow classical PKC after ${CNSA.disallowAfter}`,
             tier: "disallow",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DISALLOW_EFFECTIVE,
-            note: "Classical public-key cryptography disallowed; the migration must be complete."
+            effective: CNSA_DISALLOW_EFFECTIVE,
+            note: `Classical public-key cryptography disallowed (${CNSA.disallowAfter}: general NSS exclusive-use milestone); the migration must be complete.`
           }
         ]
       },
@@ -12292,18 +12332,18 @@ var init_mandates = __esm({
         asOf: "2026-07",
         rules: [
           {
-            clause: `NIST IR 8547 \u2014 deprecate classical PKC after ${deprecateAfter}`,
+            clause: `NIST IR 8547 \u2014 deprecate classical PKC after ${IR8547.deprecateAfter}`,
             tier: "deprecate",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DEPRECATE_EFFECTIVE,
-            note: `112-bit-security classical public-key algorithms deprecated after ${deprecateAfter}.`
+            effective: NIST_DEPRECATE_EFFECTIVE,
+            note: `112-bit-security classical public-key algorithms deprecated after ${IR8547.deprecateAfter}.`
           },
           {
-            clause: `NIST IR 8547 \u2014 disallow classical PKC after ${disallowAfter}`,
+            clause: `NIST IR 8547 \u2014 disallow classical PKC after ${IR8547.disallowAfter}`,
             tier: "disallow",
             prohibits: [...PROHIBITED_FAMILIES],
-            effective: DISALLOW_EFFECTIVE,
-            note: `Classical public-key algorithms disallowed after ${disallowAfter}.`
+            effective: NIST_DISALLOW_EFFECTIVE,
+            note: `Classical public-key algorithms disallowed after ${IR8547.disallowAfter}.`
           }
         ]
       }
@@ -12328,6 +12368,7 @@ var STANDARDS_PROFILES;
 var init_standards_profiles = __esm({
   "../core/dist/standards-profiles.js"() {
     "use strict";
+    init_standards();
     STANDARDS_PROFILES = {
       nist: {
         id: "nist",
@@ -12336,8 +12377,10 @@ var init_standards_profiles = __esm({
         paramSets: { kem: "ML-KEM-768 (FIPS 203)", signature: "ML-DSA-65 (FIPS 204)" },
         hybridStance: "recommended",
         hybridGuidance: "Hybrid key establishment (e.g. X25519MLKEM768) is permitted and recommended during the transition; pure ML-KEM is also acceptable (SP 800-227 / IR 8547).",
-        deprecateAfter: 2030,
-        disallowAfter: 2035,
+        // Derived from the single source of truth so the profile can never drift from
+        // the `nist-ir-8547` mandate gate (the standards drift test asserts this).
+        deprecateAfter: PQC_STANDARDS.transitionTimeline.deprecateAfter,
+        disallowAfter: PQC_STANDARDS.transitionTimeline.disallowAfter,
         citation: "NIST IR 8547 + FIPS 203/204/205",
         asOf: "2026-07"
       },
@@ -12348,9 +12391,12 @@ var init_standards_profiles = __esm({
         paramSets: { kem: "ML-KEM-1024 (FIPS 203)", signature: "ML-DSA-87 (FIPS 204)" },
         hybridStance: "optional",
         hybridGuidance: "CNSA 2.0 targets pure PQC and does not require hybrids; if a hybrid TLS group is used, it must be SecP384r1MLKEM1024 \u2014 X25519MLKEM768's ML-KEM-768 component is sub-CNSA.",
-        deprecateAfter: 2030,
-        disallowAfter: 2035,
-        citation: "NSA CNSA 2.0 (2030/2033/2035 migration milestones)",
+        // CNSA 2.0 carries its OWN exclusive-use milestones (2030 software/firmware
+        // signing, 2033 general NSS) — NOT IR 8547's 2035. Derived from the single
+        // source so `--profile cnsa-2.0` and `--mandate cnsa-2.0` always agree.
+        deprecateAfter: PQC_STANDARDS.cnsaTimeline.deprecateAfter,
+        disallowAfter: PQC_STANDARDS.cnsaTimeline.disallowAfter,
+        citation: "NSA CNSA 2.0 (2030 deprecate / 2033 disallow exclusive-use milestones)",
         asOf: "2026-07"
       },
       "bsi-tr-02102": {
@@ -13437,7 +13483,8 @@ async function runQscan(opts, hooks = {}) {
   let mandateEval;
   if (options.mandates.length > 0) {
     assertKnownMandates(options.mandates);
-    mandateEval = evaluateMandates(result.findings, options.mandates, /* @__PURE__ */ new Date());
+    const mandateFindings = [...result.findings, ...suppressed];
+    mandateEval = evaluateMandates(mandateFindings, options.mandates, /* @__PURE__ */ new Date(), policy);
     if (mandateGateFails(mandateEval, { leadMonths: options.leadMonths, failNow: options.failNow })) {
       exitCode = EXIT.FINDINGS;
     }
@@ -13512,7 +13559,10 @@ async function runQscan(opts, hooks = {}) {
     ...options.profile ? { profile: options.profile } : {},
     ...policy ? { policy } : {},
     ...mergeCbomsData ? { mergeCboms: mergeCbomsData } : {},
-    ...hndl ? { hndl } : {}
+    ...hndl ? { hndl } : {},
+    // The `--mandate` evaluation feeds the machine-readable JSON/SARIF/evidence
+    // output too (not just the human block appended below).
+    ...mandateEval ? { mandate: mandateEval } : {}
   });
   if (options.format === "evidence" && (signer || timestamper)) {
     const signed = await signReadinessReport(JSON.parse(report), {
@@ -13535,24 +13585,34 @@ async function runQscan(opts, hooks = {}) {
 function renderMandateBlock(ev) {
   const lines = [];
   lines.push(`Compliance mandates: ${ev.mandates.join(", ") || "(none matched)"}`);
-  lines.push(`  ${ev.summary.violation} violation \xB7 ${ev.summary.deprecated} deprecated \xB7 ${ev.summary.due} due \xB7 ${ev.summary.conformant} conformant` + (ev.notInScope > 0 ? ` \xB7 ${ev.notInScope} out of scope` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : ""));
+  lines.push(`  ${ev.summary.violation} violation \xB7 ${ev.summary.deprecated} deprecated \xB7 ${ev.summary.due} due \xB7 ${ev.summary.conformant} conformant` + (ev.notInScope > 0 ? ` \xB7 ${ev.notInScope} out of scope` : "") + // Policy composition: how many of the above the org is knowingly managing.
+  (ev.acknowledged > 0 ? ` \xB7 ${ev.acknowledged} acknowledged${ev.policyName ? ` (${ev.policyName})` : ""}` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : ""));
   const rank = { violation: 0, deprecated: 1, due: 2, conformant: 3 };
   const rows = [...ev.findings].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.effective.localeCompare(b.effective));
   for (const r of rows.slice(0, 12)) {
     const when = r.status === "violation" ? `disallowed since ${r.effective}` : r.status === "deprecated" ? `deprecated since ${r.effective}${r.disallowEffective ? `, disallowed ${r.disallowEffective}` : ""}` : `due ${r.effective} (${r.monthsUntil} mo)`;
-    lines.push(`  [${r.status}] ${r.clause} \xB7 ${r.algorithm} ${r.file}:${r.line} \u2014 ${when}`);
+    const ack = r.acknowledged ? ` \xB7 policy: ${r.policyVerdict ?? "acknowledged"}` : "";
+    lines.push(`  [${r.status}] ${r.clause} \xB7 ${r.algorithm} ${r.file}:${r.line} \u2014 ${when}${ack}`);
   }
   if (rows.length > 12)
     lines.push(`  \u2026 and ${rows.length - 12} more`);
   return lines.join("\n");
 }
 function renderReport(result, format, opts = {}) {
-  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
+  const { color = false, redactSnippets = false, topN = void 0, tier = void 0, profile = void 0, policy = void 0, mergeCboms: mergeCboms2 = void 0, hndl = void 0, mandate = void 0 } = typeof opts === "boolean" ? { color: opts, policy: void 0 } : opts;
   switch (format) {
     case "json":
-      return renderJson(result, { redactSnippets, ...hndl ? { hndl } : {} });
+      return renderJson(result, {
+        redactSnippets,
+        ...hndl ? { hndl } : {},
+        ...mandate ? { mandate } : {}
+      });
     case "sarif":
-      return renderSarif(result, { redactSnippets, ...hndl ? { hndl } : {} });
+      return renderSarif(result, {
+        redactSnippets,
+        ...hndl ? { hndl } : {},
+        ...mandate ? { mandate } : {}
+      });
     case "cbom":
       return renderCbom(result, mergeCboms2);
     case "vex":
@@ -13561,7 +13621,8 @@ function renderReport(result, format, opts = {}) {
       const report = buildReadinessReport(result, {
         repository: process4.env.GITHUB_REPOSITORY,
         commit: process4.env.GITHUB_SHA,
-        ...policy ? { policy } : {}
+        ...policy ? { policy } : {},
+        ...mandate ? { mandate } : {}
       });
       return JSON.stringify(report, null, 2);
     }
@@ -13709,7 +13770,8 @@ function readInputs(env = process.env) {
     mode,
     mandates,
     leadMonths,
-    failNow: getBooleanInput("fail-now", false, env)
+    failNow: getBooleanInput("fail-now", false, env),
+    policy: getInput("policy", env) || void 0
   };
 }
 function shouldFail(blockingCount, failOnFindings) {
@@ -13790,7 +13852,9 @@ function buildMandateSection(ev) {
   lines.push("### Compliance mandates");
   lines.push("");
   lines.push(
-    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} \xB7 **Violations:** ${ev.summary.violation} \xB7 **Deprecated:** ${ev.summary.deprecated} \xB7 **Due:** ${ev.summary.due}` + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : "")
+    `**Mandates:** ${ev.mandates.map((m) => `\`${m}\``).join(", ")} \xB7 **Violations:** ${ev.summary.violation} \xB7 **Deprecated:** ${ev.summary.deprecated} \xB7 **Due:** ${ev.summary.due}` + // Policy composition: how many rows the org is knowingly managing (exempt
+    // from the early gate), so a reader sees why fail-now may not have fired.
+    (ev.acknowledged > 0 ? ` \xB7 **Acknowledged:** ${ev.acknowledged}${ev.policyName ? ` (${mdCell(ev.policyName)})` : ""}` : "") + (ev.nextDeadline ? ` \xB7 next deadline ${ev.nextDeadline}` : "")
   );
   lines.push("");
   if (ev.findings.length === 0) {
@@ -13801,26 +13865,38 @@ function buildMandateSection(ev) {
     if (a.status !== b.status) return MANDATE_ROW_ORDER[a.status] - MANDATE_ROW_ORDER[b.status];
     return a.effective.localeCompare(b.effective);
   });
-  lines.push("| Status | Clause | Deadline | File | Algorithm |");
-  lines.push("| --- | --- | --- | --- | --- |");
+  const withPolicy = ev.policyName !== null;
+  lines.push(
+    withPolicy ? "| Status | Clause | Deadline | File | Algorithm | Policy |" : "| Status | Clause | Deadline | File | Algorithm |"
+  );
+  lines.push(
+    withPolicy ? "| --- | --- | --- | --- | --- | --- |" : "| --- | --- | --- | --- | --- |"
+  );
   for (const r of rows.slice(0, 50)) {
     const icon = r.status === "violation" ? "\u{1F534}" : r.status === "deprecated" ? "\u{1F7E0}" : "\u{1F7E1}";
     const loc = mdCell(`${r.file}:${r.line}`);
+    const base = `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`;
+    if (withPolicy) {
+      const policyCell = r.acknowledged ? `${mdCell(r.policyVerdict ?? "acknowledged")} \u2713` : r.policyVerdict ?? "\u2014";
+      lines.push(`${base} ${policyCell} |`);
+    } else {
+      lines.push(base);
+    }
+  }
+  if (rows.length > 50) {
     lines.push(
-      `| ${icon} ${r.status} | ${mdCell(r.clause)} | ${mandateDeadlinePhrase(r)} | ${loc} | ${mdCell(r.algorithm)} |`
+      withPolicy ? `| \u2026 | | | | | _${rows.length - 50} more_ |` : `| \u2026 | | | | _${rows.length - 50} more_ |`
     );
   }
-  if (rows.length > 50) lines.push(`| \u2026 | | | | _${rows.length - 50} more_ |`);
   return lines.join("\n");
 }
 function mandateGateRows(ev, opts = {}) {
   if (ev.hasViolation) return ev.findings.filter((v) => v.status === "violation");
-  if (opts.failNow) return ev.findings;
+  const gated = ev.findings.filter((v) => !v.acknowledged);
+  if (opts.failNow) return gated;
   if (opts.leadMonths !== void 0) {
     const lead = opts.leadMonths;
-    return ev.findings.filter(
-      (v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead
-    );
+    return gated.filter((v) => v.monthsUntilDisallow !== null && v.monthsUntilDisallow <= lead);
   }
   return [];
 }
@@ -14008,21 +14084,31 @@ async function run(env = process.env) {
   });
   const baseline = inputs.baseline ? await loadBaselineSet(inputs.baseline, env) : { version: 1, fingerprints: [] };
   const { newFindings } = applyBaseline(result.findings, baseline);
+  let mandateEval;
+  if (inputs.mandates.length > 0) {
+    let policy;
+    if (inputs.policy) {
+      const policyPath = resolveInWorkspace(inputs.policy, env);
+      policy = parseCryptoPolicy(JSON.parse(await readFile8(policyPath, "utf8")));
+    }
+    assertKnownMandates(inputs.mandates);
+    mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date(), policy);
+  } else if (inputs.policy) {
+    info("quantakrypto: 'policy' input is set but 'mandate' is not; the policy has no effect.");
+  }
   const outputPath = resolveInWorkspace(inputs.output, env);
   await mkdir3(dirname5(outputPath), { recursive: true });
   await writeFile4(
     outputPath,
-    renderReport(result, inputs.format, { redactSnippets: inputs.redactSnippets }),
+    renderReport(result, inputs.format, {
+      redactSnippets: inputs.redactSnippets,
+      ...mandateEval ? { mandate: mandateEval } : {}
+    }),
     "utf8"
   );
   info(`quantakrypto: wrote ${inputs.format} report to ${inputs.output}`);
   annotateFindings(newFindings, inputs.severityThreshold);
   const blocking = newFindings.filter((f) => meetsThreshold(f.severity, inputs.severityThreshold));
-  let mandateEval;
-  if (inputs.mandates.length > 0) {
-    assertKnownMandates(inputs.mandates);
-    mandateEval = evaluateMandates(result.findings, inputs.mandates, /* @__PURE__ */ new Date());
-  }
   setOutput("findings-count", String(blocking.length), env);
   setOutput("readiness-score", String(result.inventory.readinessScore), env);
   setOutput("sarif-file", inputs.output, env);

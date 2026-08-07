@@ -353,6 +353,108 @@ test("run warns (does not silently degrade) when the baseline file is missing", 
 // the written report carries no matched source snippet.
 // ---------------------------------------------------------------------------
 
+test("readInputs reads the optional org policy path (default undefined)", () => {
+  assert.equal(readInputs({}).policy, undefined);
+  assert.equal(readInputs({ INPUT_POLICY: "policy.json" }).policy, "policy.json");
+});
+
+/**
+ * Run the action against a workspace with stdout silenced (the action logs a lot
+ * of workflow-command chatter). Does NOT touch `process.exitCode`, so callers
+ * must pick inputs that do not trip a gate — the gate semantics themselves are
+ * covered at the core / qScan level; these tests assert the machine-readable
+ * SARIF the Action writes.
+ */
+async function runQuiet(env: NodeJS.ProcessEnv): Promise<void> {
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (() => true) as typeof process.stdout.write;
+  try {
+    await run(env);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+}
+
+test("run: a --mandate scan writes SARIF carrying run.properties.mandate", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  // severity-threshold critical + fail-on-findings false so the (high) RSA
+  // finding does not gate; RSA is only "due" in 2026 so the mandate gate is quiet
+  // (no setFailed → no process.exitCode pollution).
+  await runQuiet({
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_SEVERITY-THRESHOLD": "critical",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+    INPUT_MANDATE: "cnsa-2.0",
+  });
+  const sarif = JSON.parse(readFileSync(join(ws, "out.sarif.json"), "utf8"));
+  assert.deepEqual(sarif.runs[0].properties.mandate.mandates, ["cnsa-2.0"]);
+});
+
+test("run: an org --policy composes into the written SARIF mandateMapping", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  writeFileSync(join(ws, "policy.json"), JSON.stringify({ name: "org", inTransition: ["RSA"] }));
+  await runQuiet({
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_OUTPUT: "out.sarif.json",
+    "INPUT_SEVERITY-THRESHOLD": "critical",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+    INPUT_MANDATE: "cnsa-2.0",
+    INPUT_POLICY: "policy.json",
+  });
+  const mandate = JSON.parse(readFileSync(join(ws, "out.sarif.json"), "utf8")).runs[0].properties
+    .mandate;
+  // The org policy reached evaluateMandates: RSA (inTransition) is acknowledged.
+  assert.equal(mandate.policyName, "org");
+  assert.equal(mandate.acknowledged, 1);
+  assert.equal(mandate.findings[0].acknowledged, true);
+  assert.equal(mandate.findings[0].policyVerdict, "transition-pending");
+});
+
+test("run rejects a policy path that escapes the workspace via ../", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "quantakrypto-ws-"));
+  writeFileSync(
+    join(ws, "crypto.ts"),
+    `const kp = generateKeyPairSync("rsa", { modulusLength: 2048 });\n`,
+  );
+  // The policy is read only with a mandate; the workspace-escape guard must reject
+  // the traversal before any file read (same guard as output/baseline paths).
+  const env: NodeJS.ProcessEnv = {
+    GITHUB_WORKSPACE: ws,
+    INPUT_PATH: ".",
+    INPUT_MANDATE: "cnsa-2.0",
+    INPUT_POLICY: "../../../etc/passwd",
+    "INPUT_FAIL-ON-FINDINGS": "false",
+  };
+  await assert.rejects(() => run(env), /escapes the workspace/);
+});
+
+test("mandateGateRows / describeMandateFailure exclude policy-acknowledged rows", () => {
+  const rsa = makeFinding({ algorithm: "RSA", location: { file: "a.ts", line: 1 } });
+  const ecdh = makeFinding({ algorithm: "ECDH", location: { file: "b.ts", line: 2 } });
+  // Org acknowledges RSA (in transition) but not ECDH; before the disallow date.
+  const ev = evaluateMandates([rsa, ecdh], ["cnsa-2.0"], new Date("2026-01-01"), {
+    name: "org",
+    inTransition: ["RSA"],
+  });
+  const rows = mandateGateRows(ev, { failNow: true });
+  assert.equal(rows.length, 1, "only the unacknowledged ECDH row trips --fail-now");
+  assert.equal(rows[0].algorithm, "ECDH");
+  // ...so the failure message names ECDH's clause, not the acknowledged RSA one.
+  const msg = describeMandateFailure(ev, { failNow: true });
+  assert.ok(msg.length > 0, "a failure reason is produced");
+});
+
 test("readInputs parses redact-snippets (default false)", () => {
   assert.equal(readInputs({}).redactSnippets, false);
   assert.equal(readInputs({ "INPUT_REDACT-SNIPPETS": "true" }).redactSnippets, true);
@@ -469,9 +571,9 @@ test("readInputs parses mode and rejects an invalid one", () => {
 const rsaFinding = makeFinding();
 /** Before every deadline (2026): prohibited but only `due`. */
 const evDue = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2026-01-01"));
-/** Between deprecate (2030) and disallow (2035): `deprecated`, still no failure. */
+/** Between deprecate (2030) and CNSA's disallow (2033): `deprecated`, still no failure. */
 const evDeprecated = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2031-01-01"));
-/** After the DISALLOW deadline (2035): a `violation`. */
+/** After the CNSA 2.0 DISALLOW deadline (2033): a `violation`. */
 const evViolation = evaluateMandates([rsaFinding], ["cnsa-2.0"], new Date("2036-01-01"));
 
 test("readInputs parses mandate ids from a comma/space-separated list", () => {
@@ -507,7 +609,7 @@ test("mandateGateRows: deadline-aware default — due/deprecated rows do not tri
 
 test("mandateGateRows: fail-now trips on any prohibited row; lead-months on the disallow window", () => {
   assert.equal(mandateGateRows(evDue, { failNow: true }).length, 1);
-  // Disallow (2035-01-01) is ~108 months from the pinned 2026 `now`.
+  // CNSA disallow (2033-12-31) is ~95 months from the pinned 2026 `now`.
   assert.equal(mandateGateRows(evDue, { leadMonths: 120 }).length, 1);
   assert.deepEqual(mandateGateRows(evDue, { leadMonths: 12 }), []);
 });
@@ -516,7 +618,7 @@ test("describeMandateFailure names the clause, deadline, and citation — not ju
   const msg = describeMandateFailure(evViolation);
   // Expected dates come from the evaluation rows so the test tracks the catalog.
   const deadline = evViolation.findings[0]?.effective;
-  assert.match(msg, /"CNSA 2\.0 — disallow classical PKC after 2035"/);
+  assert.match(msg, /"CNSA 2\.0 — disallow classical PKC after 2033"/);
   assert.ok(msg.includes(`(deadline ${deadline} passed)`), `names the deadline: ${msg}`);
   assert.match(msg, /NSA Commercial National Security Algorithm Suite 2\.0/);
   assert.match(msg, /1 prohibited finding\(s\)/);
@@ -540,7 +642,7 @@ test("buildMandateSection lists verdicts with clause + deadline, violations firs
   assert.match(md, /### Compliance mandates/);
   assert.match(md, /`cnsa-2\.0`/);
   assert.ok(md.includes(`overdue since ${evViolation.findings[0]?.effective}`));
-  assert.match(md, /CNSA 2\.0 — disallow classical PKC after 2035/);
+  assert.match(md, /CNSA 2\.0 — disallow classical PKC after 2033/);
   assert.ok(md.indexOf("🔴 violation") < md.indexOf("🟡 due"), "violation row listed first");
 });
 

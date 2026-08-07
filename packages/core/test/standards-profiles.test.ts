@@ -91,6 +91,21 @@ test("DRIFT: profile param sets stay aligned with the standards source of truth"
     getStandardsProfile("nist")?.disallowAfter,
     PQC_STANDARDS.transitionTimeline.disallowAfter,
   );
+  // The CNSA 2.0 profile's deadlines track CNSA's OWN timeline (2030/2033), not
+  // IR 8547's — so `--profile cnsa-2.0` can never disagree with `--mandate cnsa-2.0`.
+  assert.equal(
+    getStandardsProfile("cnsa-2.0")?.deprecateAfter,
+    PQC_STANDARDS.cnsaTimeline.deprecateAfter,
+  );
+  assert.equal(
+    getStandardsProfile("cnsa-2.0")?.disallowAfter,
+    PQC_STANDARDS.cnsaTimeline.disallowAfter,
+    "cnsa-2.0 profile disallow tracks cnsaTimeline (2033), not IR 8547's 2035",
+  );
+  assert.notEqual(
+    getStandardsProfile("cnsa-2.0")?.disallowAfter,
+    getStandardsProfile("nist")?.disallowAfter,
+  );
 });
 
 test("every confidentiality + signature family resolves under every profile", () => {

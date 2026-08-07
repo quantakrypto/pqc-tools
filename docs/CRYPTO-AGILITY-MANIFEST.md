@@ -8,8 +8,9 @@ scanner, or CI bot can read its cryptographic posture the way it already reads
 AI coding agents and CI bots increasingly make dependency and cryptography choices,
 but there is no standard place for them to learn a project's crypto posture, policy,
 and migration deadlines. Today every integration is bespoke. The crypto-agility
-manifest is that standard place: a machine-readable summary of a repo or site's PQC
-posture, its CBOM summary, an optional attestation link, and its migration policy.
+manifest is a proposed, machine-readable convention for that place: a summary of a
+repo or site's PQC posture, its CBOM summary, an optional attestation link, and its
+migration policy.
 
 The manifest is deliberately a **summary**, not a replacement for the full CBOM or
 the readiness report. It is small enough to fetch and parse on every CI run and
@@ -113,7 +114,10 @@ By default the emitter fills the deadlines from the NIST IR 8547 transition time
 (deprecate after 2030, disallow after 2035). Supplying a crypto policy
 (`--policy <file>`, the same file `--format evidence` accepts) re-labels `source` as
 `operator-declared` and overlays the policy's `transitionDeadline`. CNSA 2.0
-national-security milestones (2030 / 2033) are a valid operator-declared choice.
+national-security milestones (2030 / 2033) are a valid operator-declared choice —
+and the `--mandate cnsa-2.0` gate encodes CNSA's own 2030-deprecate / 2033-disallow
+timeline (distinct from IR 8547's 2035), so the manifest and the gate agree on CNSA
+if you declare 2033.
 
 ## 7. How to consume it (agents / CI)
 
@@ -174,7 +178,7 @@ tool never makes network calls on a user's behalf.
   "version": 1,
   "manifestType": "crypto-agility",
   "generatedAt": "2026-07-27T04:57:12.323Z",
-  "generator": { "name": "qScan", "version": "0.5.0" },
+  "generator": { "name": "qScan", "version": "0.9.0" },
   "subject": { "root": ".", "repository": null, "commit": null },
   "posture": {
     "readinessScore": 74,

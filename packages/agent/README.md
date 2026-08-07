@@ -36,16 +36,20 @@ const client = resolveClient({
 
 const verdicts = await triageFindings(findings, {
   client,
-  level: "snippet", // metadata | snippet | function | file — secrets always redacted
+  level: "snippet", // metadata | snippet | function | file — key material redacted (best-effort)
   readFile: (p) => fs.promises.readFile(p, "utf8"),
   fingerprint: fingerprintFinding,
 });
 ```
 
-## Guarantees
+## Safety properties
 
-- **Secrets never leave.** Findings whose match is key material are always
-  redacted; a file with any stripped secret is never sent for a full-file rewrite.
+- **Best-effort secret redaction on every egress path.** Findings whose match is
+  key material are never sent as code, and a file with any stripped secret is
+  never sent for a full-file rewrite. Redaction is pattern-based and can miss
+  novel token formats — review the exact payload with `qscan --triage --dry-run`,
+  and do not enable triage on repositories holding regulated data (see
+  [THREAT-MODEL](../../docs/THREAT-MODEL.md)).
 - **Zero third-party runtime deps** — native `fetch` only.
 - **Only the configured endpoint is contacted.** No telemetry.
 

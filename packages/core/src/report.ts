@@ -13,6 +13,7 @@ import type { StandardsProfile } from "./standards-profiles.js";
 import { fingerprintFinding } from "./baseline.js";
 import { findingFingerprint } from "./hndl.js";
 import type { FindingExposure, HndlReport } from "./hndl.js";
+import type { MandateEvaluation } from "./mandates.js";
 
 /** Minimal SARIF 2.1.0 log shape (kept permissive on purpose). */
 export interface SarifLog {
@@ -45,6 +46,14 @@ export interface ReportOptions {
    * Purely additive: it never changes finding identity, ordering, or exit codes.
    */
   hndl?: HndlReport;
+  /**
+   * Optional compliance-mandate evaluation ({@link evaluateMandates}). When
+   * supplied, the JSON report carries a top-level `mandateMapping` block and the
+   * SARIF run carries the same under `run.properties.mandate` — the
+   * machine-readable half of the `--mandate` gate for CI consumption. Purely
+   * additive: it never changes finding identity, ordering, or exit codes.
+   */
+  mandate?: MandateEvaluation;
 }
 
 /** The per-finding exposure block emitted in JSON / SARIF, or undefined. */
@@ -259,6 +268,13 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
         ]
       : [];
 
+  // Run-level properties bag: the repo HNDL summary and/or the compliance-mandate
+  // evaluation, whichever were supplied. Both are additive metadata for SARIF
+  // consumers (our platform ingest, CI) and never affect result identity.
+  const runProperties: Record<string, unknown> = {};
+  if (opts?.hndl) runProperties.hndl = hndlSummaryBlock(opts.hndl);
+  if (opts?.mandate) runProperties.mandate = opts.mandate;
+
   return {
     $schema: SARIF_SCHEMA,
     version: "2.1.0",
@@ -273,7 +289,7 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
           },
         },
         ...(taxonomies.length > 0 ? { taxonomies } : {}),
-        ...(opts?.hndl ? { properties: { hndl: hndlSummaryBlock(opts.hndl) } } : {}),
+        ...(Object.keys(runProperties).length > 0 ? { properties: runProperties } : {}),
         results,
       },
     ],
@@ -316,6 +332,11 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
       byAlgorithm: result.inventory.byAlgorithm,
     },
     ...(hndl ? { hndl: hndlSummaryBlock(hndl) } : {}),
+    // Compliance-mandate evaluation (`--mandate`): the machine-readable verdicts
+    // + summary, so a CI job can gate/report on them without re-parsing the human
+    // block. Carries the org `--policy` composition (policyVerdict / acknowledged)
+    // when one was supplied.
+    ...(opts?.mandate ? { mandateMapping: opts.mandate } : {}),
     findings: result.findings.map((f) => {
       const exposure = exposureFor(f, hndl);
       return {
