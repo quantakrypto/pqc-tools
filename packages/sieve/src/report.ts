@@ -14,6 +14,15 @@ import type { VectorFileProvenance } from "./vectors.js";
 /** Categories that are informational and must not change the overall verdict. */
 const ADVISORY_CATEGORIES = new Set<string>(["timing"]);
 
+/**
+ * The category emitted when the SUT could not be started or spoken to at all.
+ * Its presence means the battery never ran, so the verdict is ERROR, not FAIL.
+ */
+export const HARNESS_CATEGORY = "harness";
+
+/** PASS / FAIL are verdicts on the implementation; ERROR means it never ran. */
+export type Verdict = "PASS" | "FAIL" | "ERROR";
+
 /** Per-category counts. */
 export interface CategoryCounts {
   pass: number;
@@ -32,8 +41,16 @@ export interface SieveReport {
   vectorsDir?: string;
   startedAt: string;
   durationMs: number;
-  /** Overall verdict (advisory categories excluded). */
-  overall: "PASS" | "FAIL";
+  /**
+   * Overall verdict (advisory categories excluded).
+   *
+   * `ERROR` means the implementation under test could not be run at all, so no
+   * conformance conclusion was reached. It is deliberately distinct from `FAIL`:
+   * a `FAIL` is a statement about the implementation, an `ERROR` is a statement
+   * about the harness, and reporting the second as the first invents defects
+   * that were never tested.
+   */
+  overall: Verdict;
   categories: CategoryResult[];
   counts: CategoryCounts;
   /** ACVP vector-file provenance (raw-byte hashes + declared source) — present
@@ -52,8 +69,16 @@ function tally(categories: readonly CategoryResult[]): CategoryCounts {
   return counts;
 }
 
-/** Compute the overall verdict: FAIL if any non-advisory category failed. */
-export function overallVerdict(categories: readonly CategoryResult[]): "PASS" | "FAIL" {
+/**
+ * Compute the overall verdict: ERROR if the SUT could not be run, else FAIL if
+ * any non-advisory category failed, else PASS.
+ *
+ * ERROR wins over everything: if the implementation never ran, nothing else in
+ * the report is a statement about it.
+ */
+export function overallVerdict(categories: readonly CategoryResult[]): Verdict {
+  if (categories.some((c) => c.category === HARNESS_CATEGORY && c.status === "fail"))
+    return "ERROR";
   for (const c of categories) {
     if (ADVISORY_CATEGORIES.has(c.category)) continue;
     if (c.status === "fail") return "FAIL";

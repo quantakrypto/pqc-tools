@@ -25,6 +25,7 @@
  *   - non-deterministic reject secret.
  */
 
+import { describeSutError } from "../runner.js";
 import {
   type Category,
   type CategoryResult,
@@ -154,7 +155,7 @@ export const implicitRejection: Category = async (ctx): Promise<CategoryResult> 
       const detail =
         err instanceof UnexpectedResponse
           ? `SUT returned an unexpected response: ${err.message}`
-          : `harness error (possible crash on bad ct): ${(err as Error).message}`;
+          : `harness error (possible crash on bad ct): ${describeSutError(err)}`;
       checks.push(fail(`trial[${i}]`, detail, BUG));
     }
   }

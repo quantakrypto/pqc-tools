@@ -19,6 +19,7 @@
  * its inputs can read out of bounds or accept malformed material.
  */
 
+import { describeSutError } from "../runner.js";
 import { type Category, type CategoryResult, type Check, fail, pass, rollUp } from "./types.js";
 import {
   kemDecapsRaw,
@@ -95,7 +96,7 @@ export const sizes: Category = async (ctx): Promise<CategoryResult> => {
     const detail =
       err instanceof UnexpectedResponse
         ? `SUT returned an unexpected response: ${err.message}`
-        : `harness error: ${(err as Error).message}`;
+        : `harness error: ${describeSutError(err)}`;
     checks.push(fail("positive-sizes", detail, BUG));
     pkB64 = "";
   }
@@ -206,7 +207,7 @@ async function expectReject(
       fail(
         name,
         `SUT crashed/hung on a wrong-length input instead of returning a defined error: ` +
-          `${(err as Error).message}`,
+          `${describeSutError(err)}`,
         BUG,
       ),
     );

@@ -18,11 +18,11 @@ import { categoriesFor } from "./categories/index.js";
 import type { CategoryResult } from "./categories/types.js";
 import { loadVectors } from "./vectors.js";
 import type { VectorFileProvenance } from "./vectors.js";
-import { Runner } from "./runner.js";
-import { buildReport, type SieveReport } from "./report.js";
+import { Runner, describeSutError } from "./runner.js";
+import { buildReport, HARNESS_CATEGORY, type SieveReport } from "./report.js";
 import { isParamSet, sizesFor, type ParamSet } from "./sizes.js";
 
-export type { SieveReport, CategoryCounts } from "./report.js";
+export type { SieveReport, CategoryCounts, Verdict } from "./report.js";
 export type { CategoryResult, Check, Status, BugClass } from "./categories/types.js";
 export type {
   ParamSet,
@@ -45,7 +45,13 @@ export {
   asSignatureSizes,
 } from "./sizes.js";
 export { CATEGORIES, categoriesFor } from "./categories/index.js";
-export { buildReport, formatHuman, formatJson, overallVerdict } from "./report.js";
+export {
+  buildReport,
+  formatHuman,
+  formatJson,
+  overallVerdict,
+  HARNESS_CATEGORY,
+} from "./report.js";
 export {
   encodeRequest,
   decodeResponse,
@@ -58,6 +64,7 @@ export {
   Runner,
   TimeoutError,
   SutCrashError,
+  describeSutError,
   buildSutEnv,
   DEFAULT_ENV_ALLOWLIST,
 } from "./runner.js";
@@ -99,6 +106,52 @@ export interface RunSieveOptions {
   pipelineDepth?: number;
   /** Restrict to these category names (default: all applicable). */
   only?: readonly string[];
+}
+
+/**
+ * Tell "this implementation is wrong" apart from "I could not run this
+ * implementation", after the fact.
+ *
+ * An `--impl` naming a command that does not exist makes every probe fail with
+ * the same spawn error, so the report reads as dozens of independent
+ * high-severity defects tagged with bug classes that were never exercised. That
+ * is worse than useless: it is confidently wrong about code that never ran.
+ *
+ * The signal is the response count. If the SUT never returned a single protocol
+ * response, it never did anything the battery could judge, and every failure
+ * recorded against it is an artefact of that. Note this costs nothing: it reads
+ * a counter the runner keeps anyway, rather than spending a probe request to ask
+ * a question the run itself already answers.
+ *
+ * An `{ok:false}` reply counts as an answer, so a SUT that starts and refuses
+ * every operation is judged normally: refusals are a genuine conformance signal.
+ * A SUT that dies part-way also keeps its results, because by then it had
+ * answered and the failures are real.
+ *
+ * Returns the harness category to report instead, or null when the SUT spoke.
+ */
+function unusableSut(runner: Runner, results: readonly CategoryResult[]): CategoryResult | null {
+  if (runner.answeredCount > 0) return null;
+  if (!results.some((r) => r.status === "fail")) return null;
+  const fatal = runner.fatalError;
+  return {
+    category: HARNESS_CATEGORY,
+    status: "fail",
+    checks: [
+      {
+        name: "sut-startup",
+        status: "fail",
+        // A dead process carries a crash error with the child's stderr. A SUT
+        // that spawned but never replied has neither, so say exactly that
+        // rather than dressing up silence as a diagnosis.
+        detail: fatal
+          ? describeSutError(fatal)
+          : "SUT started but never returned a protocol response (every request timed out)",
+      },
+    ],
+    summary:
+      "the implementation under test could not be run, so no conformance checks were performed",
+  };
 }
 
 /**
@@ -160,6 +213,14 @@ export async function runSieve(opts: RunSieveOptions): Promise<SieveReport> {
     }
   } finally {
     await runner.close();
+  }
+
+  // If the SUT never answered anything, none of the above is a statement about
+  // it. Replace the whole set with the one true finding.
+  const unusable = unusableSut(runner, results);
+  if (unusable) {
+    results.length = 0;
+    results.push(unusable);
   }
 
   // Record vector-file provenance (raw-byte hashes + declared source) so a `kat`

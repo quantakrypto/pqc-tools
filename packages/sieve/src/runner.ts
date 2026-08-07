@@ -139,6 +139,73 @@ export class SutCrashError extends Error {
   }
 }
 
+/** Longest single stderr line we quote, and the longest quote overall. */
+const STDERR_LINE_CAP = 200;
+const STDERR_QUOTE_CAP = 400;
+
+/**
+ * Lines that actually name a failure, across the runtimes a SUT is written in:
+ * `Error: Cannot find module`, `ModuleNotFoundError`, `Traceback`, `panic:`,
+ * `error while loading shared libraries`, `command not found`.
+ *
+ * A flat alternation of literals, deliberately. An earlier version opened with
+ * `\w*(?:Error|Exception)` to catch prefixed names like `ModuleNotFoundError`,
+ * which backtracks quadratically on a long run of word characters — and this is
+ * applied to the stderr of an UNTRUSTED child process (see Q-17), so a SUT could
+ * emit one 64 KiB word and hang the harness that is meant to be judging it.
+ * Matching `error` as a plain substring catches the same names with no
+ * backtracking at all. It over-matches slightly (a line saying "no errors" would
+ * qualify), which only ever costs us a less apt quote, never a wrong verdict.
+ */
+const ERROR_LINE =
+  /error|exception|traceback|panic:|not found|no such file|cannot open|permission denied/i;
+
+/**
+ * Pick the most diagnostic part of a stderr dump.
+ *
+ * Neither end of the buffer is reliably the answer, and which end matters is
+ * runtime-specific. Node prints an internal loader frame first and its own
+ * version last, burying `Error: Cannot find module` in the middle. Python does
+ * the opposite: `Traceback` opens and the actual exception is the final line.
+ *
+ * So quote the FIRST and LAST lines that name a failure. That is the Node error
+ * line on its own, and both ends of a Python traceback, without dragging in the
+ * stack frames between them.
+ */
+function diagnosticLines(stderr: string): string[] {
+  const lines = stderr
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+  const hits = lines.filter((l) => ERROR_LINE.test(l));
+  if (hits.length === 0) return lines.slice(0, 2);
+  const first = hits[0] as string;
+  const last = hits[hits.length - 1] as string;
+  return first === last ? [first] : [first, last];
+}
+
+/**
+ * Describe a SUT failure in terms the operator can act on.
+ *
+ * `SutCrashError.message` alone is only ever "SUT exited with code 1" or
+ * "SUT exited via signal X", which says nothing about *why*. We already capture
+ * the child's stderr, and that is where the answer lives, so quote the useful
+ * part of it. Every category reports SUT failures through this, so the
+ * diagnosis reaches the report instead of being dropped at the catch site.
+ */
+export function describeSutError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!(err instanceof SutCrashError)) return message;
+  const lines = diagnosticLines(err.stderr);
+  if (lines.length === 0) return `${message} (no stderr)`;
+  const quote = lines
+    .map((l) => (l.length > STDERR_LINE_CAP ? `${l.slice(0, STDERR_LINE_CAP)}…` : l))
+    .join(" | ")
+    .slice(0, STDERR_QUOTE_CAP);
+  return `${message}: ${quote}`;
+}
+
 interface Pending {
   resolve: (r: Response) => void;
   reject: (e: Error) => void;
@@ -171,6 +238,7 @@ export class Runner {
   private stderrBuf = "";
   private closed = false;
   private fatal: Error | undefined;
+  private answered = 0;
   private readonly onStderr?: (line: string) => void;
 
   constructor(opts: RunnerOptions) {
@@ -251,7 +319,29 @@ export class Runner {
     }
     clearTimeout(entry.timer);
     this.pending.delete(resp.id);
+    this.answered += 1;
     entry.resolve(resp);
+  }
+
+  /**
+   * How many protocol responses the SUT has returned, of any kind.
+   *
+   * Zero at the end of a run means the implementation never spoke to us at all,
+   * which is a statement about the harness rather than about the implementation.
+   * An `{ok:false}` reply still counts: refusing an operation is an answer, and
+   * a SUT that answers is one the battery can legitimately judge.
+   */
+  get answeredCount(): number {
+    return this.answered;
+  }
+
+  /**
+   * The first fatal transport error, if the SUT process died or failed to spawn.
+   * Undefined when the SUT is alive (including when requests merely time out),
+   * so callers must not read this as "the run went fine".
+   */
+  get fatalError(): Error | undefined {
+    return this.fatal;
   }
 
   /**
