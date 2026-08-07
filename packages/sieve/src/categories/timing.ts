@@ -12,6 +12,7 @@
  * here as "worth a closer look", not proof.
  */
 
+import { describeSutError } from "../runner.js";
 import { type Category, type CategoryResult, type Check, pass, skip } from "./types.js";
 import { flipBitB64, kemDecapsRaw, kemEncaps, kemKeygen, requireKem } from "./helpers.js";
 import { toB64 } from "../protocol.js";
@@ -44,7 +45,7 @@ export const timing: Category = async (ctx): Promise<CategoryResult> => {
     return {
       category: "timing",
       status: "skip",
-      checks: [skip("setup", `could not set up timing probe: ${(err as Error).message}`)],
+      checks: [skip("setup", `could not set up timing probe: ${describeSutError(err)}`)],
       summary: "skipped — setup failed",
     };
   }

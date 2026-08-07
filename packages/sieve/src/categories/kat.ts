@@ -17,6 +17,7 @@
  * user's NIST files, not from Sieve.
  */
 
+import { describeSutError } from "../runner.js";
 import {
   type Category,
   type CategoryResult,
@@ -55,7 +56,7 @@ export const kat: Category = async (ctx): Promise<CategoryResult> => {
       category: "kat",
       status: "fail",
       checks: [
-        fail("load", `could not load vectors from ${ctx.vectorsDir}: ${(err as Error).message}`),
+        fail("load", `could not load vectors from ${ctx.vectorsDir}: ${describeSutError(err)}`),
       ],
       summary: "vector load failed",
     };
@@ -99,7 +100,7 @@ export const kat: Category = async (ctx): Promise<CategoryResult> => {
         checks.push(fail(`${v.kind}[${idx}]`, result.detail, undefined));
       }
     } catch (err) {
-      checks.push(fail(`${v.kind}[${idx}]`, `harness error: ${(err as Error).message}`));
+      checks.push(fail(`${v.kind}[${idx}]`, `harness error: ${describeSutError(err)}`));
     }
   }
 

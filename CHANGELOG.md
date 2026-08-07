@@ -6,6 +6,34 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed - Sieve: an implementation that cannot be run is no longer reported as a failing implementation
+
+Pointing `--impl` at a command that does not exist produced a **FAIL** report
+with ~35 high-severity checks, each tagged with a bug class that was never
+exercised, and each detailing only `SUT exited with code 1`. That is a confident
+verdict about code that never executed, and it says nothing about how to fix it.
+
+SemVer: **minor** (additive). `SieveReport.overall` gains a third value and two
+new symbols are exported; no existing field changes shape and no exit code moves.
+
+- **New `ERROR` verdict.** Sieve now issues one `keygen` before the battery. If
+  the SUT cannot be spawned, dies, or never answers, the report carries a single
+  `harness` category and `overall: "ERROR"`. `ERROR` outranks `FAIL`: if the
+  implementation never ran, nothing else in the report is a statement about it.
+  A SUT that starts and replies `{"ok": false}` is *not* an ERROR — it is alive
+  and speaking the protocol, so the full battery runs.
+- **The reported cause is now actionable.** `SutCrashError` already captured the
+  child's stderr, but every category discarded it and reported
+  `(err as Error).message`. New exported `describeSutError` quotes the
+  diagnostic part of the dump, anchoring on the first and last lines that name a
+  failure — Node buries `Error: Cannot find module` between an internal loader
+  frame and its version banner, Python puts the exception last. All 14 category
+  call sites now report through it, so a run says
+  `Error: Cannot find module '/repo/my-impl.js'` instead of `exited with code 1`.
+- Exports: `describeSutError`, `HARNESS_CATEGORY`, and the `Verdict` type.
+- CLI exit codes are unchanged: only `PASS` exits 0, so `ERROR` still exits 1 and
+  existing CI gates behave as before. Read `.overall` to distinguish them.
+
 ## [0.8.0] - 2026-07-31
 
 ### Added - supply-chain checks (`qscan --audit`: dependency advisories, PQC parameter verification, provenance)

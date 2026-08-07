@@ -155,6 +155,34 @@ process.exit(report.overall === "PASS" ? 0 : 1);
 The overall verdict is **FAIL** if any non-advisory category fails, else
 **PASS**. A `skip` (e.g. KAT with no vectors) never causes a failure.
 
+### ERROR: when the implementation could not be run
+
+There is a third verdict, **ERROR**, and it outranks both. Before the battery
+runs, Sieve issues a single `keygen`. If the SUT cannot be spawned, dies, or
+never answers, the report contains one `harness` category and nothing else:
+
+```
+[FAIL] harness — the implementation under test could not be run, so no conformance checks were performed
+      - FAIL sut-startup: SUT exited with code 1: Error: Cannot find module '/repo/my-impl.js'
+
+checks: 0 pass, 1 fail, 0 skip
+OVERALL: ERROR
+```
+
+This distinction matters. A **FAIL** is a statement about your implementation;
+an **ERROR** is a statement about the harness. Reporting the second as the first
+is how a misconfigured `--impl` used to produce ~35 high-severity findings
+tagged with bug classes that were never exercised — a confident verdict about
+code that never executed.
+
+A SUT that starts and replies `{"ok": false}` is *not* an ERROR: it is alive and
+speaking the protocol, so its refusals are a genuine conformance signal and the
+full battery runs.
+
+The CLI still exits **1** for ERROR, as it does for FAIL — only a PASS exits 0,
+so existing CI gates are unaffected. Read `.overall` from the JSON report to
+tell the two apart.
+
 ## Honest stance on KAT vectors
 
 Sieve ships **no** test vectors. Hard-coding "expected" ciphertext or

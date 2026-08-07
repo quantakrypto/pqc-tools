@@ -325,7 +325,7 @@ Public entry: `packages/mcp/src/index.ts` - 25 exported symbols.
 
 ## @quantakrypto/sieve
 
-Public entry: `packages/sieve/src/index.ts` - 46 exported symbols.
+Public entry: `packages/sieve/src/index.ts` - 49 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -337,6 +337,7 @@ Public entry: `packages/sieve/src/index.ts` - 46 exported symbols.
 | `DEFAULT_ENV_ALLOWLIST` | const | Minimal environment variables a child process generally needs to locate its |
 | `DsaSizes` | interface | Byte sizes for an ML-DSA parameter set (FIPS 204, Table 2). |
 | `Family` | type | Algorithm families Sieve knows how to drive. |
+| `HARNESS_CATEGORY` | const | The category emitted when the SUT could not be started or spoken to at all. |
 | `KemSizes` | interface | Byte sizes for an ML-KEM parameter set (FIPS 203, Table 3). |
 | `PARAM_SETS` | const | All known parameter-set identifiers, in canonical order. |
 | `PROTOCOL_VERSION` | const | Protocol version. Bumped on any breaking wire change. |
@@ -357,6 +358,7 @@ Public entry: `packages/sieve/src/index.ts` - 46 exported symbols.
 | `TimeoutError` | class | Thrown when a request exceeds its timeout. |
 | `Vector` | type | Any normalized vector. |
 | `VectorSet` | interface | Result of scanning a vectors directory. |
+| `Verdict` | type | PASS / FAIL are verdicts on the implementation; ERROR means it never ran. |
 | `asDsaSizes` | function | Narrowing helper: DSA size record or `undefined`. |
 | `asKemSizes` | function | Narrowing helper: KEM size record or `undefined`. |
 | `asSignatureSizes` | function | Narrowing helper: any signature-family size record (ML-DSA or SLH-DSA) or |
@@ -365,13 +367,14 @@ Public entry: `packages/sieve/src/index.ts` - 46 exported symbols.
 | `buildSutEnv` | function | Build the environment handed to the spawned SUT. |
 | `categoriesFor` | function | Categories applicable to a family (plus family-agnostic ones). |
 | `decodeResponse` | function | Parse one NDJSON line from the SUT into a validated {@link Response}. |
+| `describeSutError` | function | Describe a SUT failure in terms the operator can act on. |
 | `encodeRequest` | function | Serialize a request to a single NDJSON line (including the trailing "\n"). |
 | `formatHuman` | function | Human-readable terminal rendering (no color codes; CI-friendly). |
 | `formatJson` | function | Pretty JSON rendering. |
 | `fromB64` | function | Decode a base64 string to bytes. |
 | `isParamSet` | function | Type guard: is `s` a recognized parameter-set identifier? |
 | `loadVectors` | function |  |
-| `overallVerdict` | function | Compute the overall verdict: FAIL if any non-advisory category failed. |
+| `overallVerdict` | function | Compute the overall verdict: ERROR if the SUT could not be run, else FAIL if |
 | `runSieve` | function | Spawn the SUT, run the applicable categories, and return an aggregated |
 | `sizesFor` | function | Look up the size record for a parameter set. |
 | `toB64` | function | Encode raw bytes to a base64 string. |

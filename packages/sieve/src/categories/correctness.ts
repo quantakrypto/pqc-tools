@@ -9,6 +9,7 @@
  * (ML-DSA correctness — sign then verify === true — lives in dsa.ts.)
  */
 
+import { describeSutError } from "../runner.js";
 import { type Category, type CategoryResult, type Check, fail, pass, rollUp } from "./types.js";
 import {
   bytesEqual,
@@ -68,7 +69,7 @@ export const correctness: Category = async (ctx): Promise<CategoryResult> => {
         const detail =
           err instanceof UnexpectedResponse
             ? `SUT returned an unexpected response: ${err.message}`
-            : `harness error: ${(err as Error).message}`;
+            : `harness error: ${describeSutError(err)}`;
         return { kind: "error", detail };
       }
     },

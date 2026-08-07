@@ -20,6 +20,7 @@
  * Exact-value KAT (sigVer vectors) is handled separately by the kat category.
  */
 
+import { describeSutError } from "../runner.js";
 import {
   type Category,
   type CategoryContext,
@@ -96,7 +97,7 @@ async function runSignature(
         : fail("sk-length", `signing key ${sk.length} bytes, expected ${d.secretKey}`, BUG_SIZE),
     );
   } catch (err) {
-    return wrap(name, checks, [fail("keygen", `harness error: ${(err as Error).message}`)]);
+    return wrap(name, checks, [fail("keygen", `harness error: ${describeSutError(err)}`)]);
   }
 
   // --- Round-trips. Each message's sign is independent, so we PIPELINE the
@@ -109,7 +110,7 @@ async function runSignature(
       ctx.pipelineDepth ?? 16,
     );
   } catch (err) {
-    return wrap(name, checks, [fail("sign", `harness error: ${(err as Error).message}`)]);
+    return wrap(name, checks, [fail("sign", `harness error: ${describeSutError(err)}`)]);
   }
 
   let goodVerify = 0;
@@ -169,7 +170,7 @@ async function runSignature(
         checks.push(fail(`tamper-sig[${i}]`, "a bit-flipped signature still verified"));
       }
     } catch (err) {
-      checks.push(fail(`verify[${i}]`, `harness error: ${(err as Error).message}`));
+      checks.push(fail(`verify[${i}]`, `harness error: ${describeSutError(err)}`));
     }
   }
 
@@ -286,7 +287,7 @@ async function probeSigningMode(
       checks.push(fail("signing-mode-verify", "a repeated-message signature failed to verify"));
     }
   } catch (err) {
-    checks.push(skip("signing-mode", `advisory probe could not run: ${(err as Error).message}`));
+    checks.push(skip("signing-mode", `advisory probe could not run: ${describeSutError(err)}`));
   }
 }
 
@@ -325,7 +326,7 @@ async function expectVerifyReject(
     checks.push(
       fail(
         name,
-        `SUT crashed/hung on wrong-length verify input: ${(err as Error).message}`,
+        `SUT crashed/hung on wrong-length verify input: ${describeSutError(err)}`,
         BUG_SIZE,
       ),
     );
