@@ -1462,13 +1462,13 @@ function isBinaryPath(rel) {
   const lower = rel.toLowerCase();
   if (lower.endsWith(".min.js"))
     return true;
-  const ext = path.posix.extname(lower);
-  return BINARY_EXTENSIONS.has(ext);
+  const ext2 = path.posix.extname(lower);
+  return BINARY_EXTENSIONS.has(ext2);
 }
 function isKeystorePath(rel) {
   const lower = rel.toLowerCase();
-  for (const ext of KEYSTORE_EXTENSIONS)
-    if (lower.endsWith(ext))
+  for (const ext2 of KEYSTORE_EXTENSIONS)
+    if (lower.endsWith(ext2))
       return true;
   return false;
 }
@@ -10088,7 +10088,7 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
       const idx = next++;
       w.postMessage({ index: idx, files: chunks[idx].files });
     };
-    const spawn = () => {
+    const spawn2 = () => {
       const w = new WorkerCtor(entry, {
         workerData: { baseDir, toggles },
         ...execArgv ? { execArgv } : {}
@@ -10134,7 +10134,7 @@ function runPool(WorkerCtor, entry, execArgv, baseDir, toggles, chunks, concurre
     };
     const n = Math.max(1, Math.min(concurrency, chunks.length));
     for (let i = 0; i < n; i++) {
-      const w = spawn();
+      const w = spawn2();
       workers.push(w);
       dispatch(w);
     }
@@ -12010,14 +12010,14 @@ function buildPolicyMapping(findings, policy) {
     "transition-pending": 0
   };
   const mapped = findings.map((f) => {
-    const { verdict, reason } = verdictForAlgorithm(f.algorithm, policy);
-    summary[verdict]++;
+    const { verdict: verdict2, reason } = verdictForAlgorithm(f.algorithm, policy);
+    summary[verdict2]++;
     return {
       ruleId: f.ruleId,
       algorithm: f.algorithm ?? "unknown",
       file: f.location.file,
       line: f.location.line,
-      verdict,
+      verdict: verdict2,
       reason
     };
   });
@@ -12811,14 +12811,14 @@ async function triageFindings(findings, opts) {
       schema: TRIAGE_SCHEMA,
       maxTokens: 512
     });
-    const verdict = {
+    const verdict2 = {
       fingerprint: fp,
       exposureScore: raw.exposureScore,
       priority: raw.priority,
       rationale: raw.rationale
     };
-    out.set(fp, verdict);
-    cache?.set(key, verdict);
+    out.set(fp, verdict2);
+    cache?.set(key, verdict2);
   }
   if (opts.cacheFile && cache)
     await saveResponseCache(opts.cacheFile, cache);
@@ -13632,6 +13632,2819 @@ function renderReport(result, format, opts = {}) {
   }
 }
 
+// src/checks.ts
+var CHECK_IDS = ["scan", "conformance", "probe"];
+function isCheckId(value) {
+  return CHECK_IDS.includes(value);
+}
+function parseChecks(raw) {
+  const tokens = raw.split(/[\s,]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (tokens.length === 0) return ["scan"];
+  const out = [];
+  for (const token of tokens) {
+    if (!isCheckId(token)) {
+      throw new TypeError(
+        `unknown check "${token}" \u2014 checks must be a subset of ${CHECK_IDS.join(", ")}`
+      );
+    }
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
+}
+function normalizeProbeTarget(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return trimmed.split(/[/?#]/)[0]?.split("@").pop()?.split(":")[0] ?? trimmed;
+  }
+}
+function assertCheckConfig(checks, cfg) {
+  const missing = [];
+  if (checks.includes("probe") && !cfg.probeTarget.trim()) {
+    missing.push('probe-target (a host you own, e.g. "api.example.com")');
+  }
+  if (checks.includes("conformance") && !cfg.conformanceImpl.trim()) {
+    missing.push('conformance-impl (how to run your implementation, e.g. "node ./impl.js")');
+  }
+  if (missing.length > 0) {
+    throw new TypeError(`missing required input(s) for the selected checks: ${missing.join("; ")}`);
+  }
+}
+
+// ../qprobe/dist/index.js
+init_dist();
+
+// ../qprobe/dist/attest.js
+var AttestationError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "AttestationError";
+  }
+};
+function authorizeTargets(targets, attest) {
+  if (targets.length === 0)
+    throw new AttestationError("no targets to authorize");
+  if (attest.ownedHosts && attest.ownedHosts.length > 0) {
+    const owned = new Set(attest.ownedHosts.map((h) => h.toLowerCase()));
+    const missing = targets.filter((t) => !owned.has(t.host.toLowerCase()));
+    if (missing.length > 0) {
+      throw new AttestationError(`not authorized: ${missing.map((t) => t.host).join(", ")} not in the ownership manifest. Add the host(s) to the manifest, or pass --i-own-this only for endpoints you control.`);
+    }
+    return;
+  }
+  if (attest.iOwnThis)
+    return;
+  throw new AttestationError("refusing to probe: no ownership attestation. Pass --i-own-this (endpoints you control) or --owned-hosts <manifest>. Active probing of endpoints you do not own may be unlawful; see THREAT-MODEL.md.");
+}
+
+// ../qprobe/dist/tls.js
+import { connect as tlsConnect } from "node:tls";
+import { connect as netConnect } from "node:net";
+
+// ../qprobe/dist/clienthello.js
+import { randomBytes as randomBytes2, generateKeyPairSync } from "node:crypto";
+
+// ../qprobe/dist/mlkem768.js
+import { randomBytes } from "node:crypto";
+var ML_KEM_Q = 3329;
+var N = 256;
+var K = 3;
+var ML_KEM_768_EK_BYTES = 384 * K + 32;
+function byteEncode12(coeffs) {
+  if (coeffs.length !== N)
+    throw new RangeError(`byteEncode12 expects ${N} coefficients`);
+  const out = Buffer.alloc(N * 12 / 8);
+  for (let i = 0, o = 0; i < N; i += 2, o += 3) {
+    const a = coeffs[i] & 4095;
+    const b = coeffs[i + 1] & 4095;
+    out[o] = a & 255;
+    out[o + 1] = a >> 8 | (b & 15) << 4;
+    out[o + 2] = b >> 4;
+  }
+  return out;
+}
+function randomInRangePoly() {
+  const MAX = Math.floor(65536 / ML_KEM_Q) * ML_KEM_Q;
+  const poly = new Array(N);
+  let pool = randomBytes(N * 4);
+  let off = 0;
+  for (let i = 0; i < N; i++) {
+    let v;
+    do {
+      if (off + 2 > pool.length) {
+        pool = randomBytes(N * 4);
+        off = 0;
+      }
+      v = pool.readUInt16BE(off);
+      off += 2;
+    } while (v >= MAX);
+    poly[i] = v % ML_KEM_Q;
+  }
+  return poly;
+}
+function wellFormedMlKem768Ek() {
+  const parts = [];
+  for (let i = 0; i < K; i++)
+    parts.push(byteEncode12(randomInRangePoly()));
+  parts.push(randomBytes(32));
+  return Buffer.concat(parts);
+}
+
+// ../qprobe/dist/clienthello.js
+function x25519RawPublic() {
+  const { publicKey } = generateKeyPairSync("x25519");
+  const jwk = publicKey.export({ format: "jwk" });
+  return Buffer.from(jwk.x ?? "", "base64url");
+}
+var GROUP_X25519 = 29;
+var GROUP_X25519MLKEM768 = 4588;
+var GROUP_SECP256R1 = 23;
+var TLS13_VERSION = 772;
+var HS_CLIENT_HELLO = 1;
+var HS_SERVER_HELLO = 2;
+var REC_HANDSHAKE = 22;
+var EXT_SERVER_NAME = 0;
+var EXT_SUPPORTED_GROUPS = 10;
+var EXT_SIGNATURE_ALGORITHMS = 13;
+var EXT_SUPPORTED_VERSIONS = 43;
+var EXT_KEY_SHARE = 51;
+var HRR_RANDOM = Buffer.from("cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c", "hex");
+function u16(n) {
+  const b = Buffer.alloc(2);
+  b.writeUInt16BE(n, 0);
+  return b;
+}
+function withLen(bytes, body) {
+  const len = Buffer.alloc(bytes);
+  if (bytes === 1)
+    len.writeUInt8(body.length, 0);
+  else if (bytes === 2)
+    len.writeUInt16BE(body.length, 0);
+  else
+    len.writeUIntBE(body.length, 0, 3);
+  return Buffer.concat([len, body]);
+}
+function ext(type, body) {
+  return Buffer.concat([u16(type), withLen(2, body)]);
+}
+function buildClientHello(opts) {
+  const supportedGroups = opts.supportedGroups ?? [
+    GROUP_X25519MLKEM768,
+    GROUP_X25519,
+    GROUP_SECP256R1
+  ];
+  const keyShareGroup = opts.keyShareGroup ?? GROUP_X25519;
+  const extensions = [];
+  if (opts.serverName && opts.serverName.length > 0 && !/^\d+\.\d+\.\d+\.\d+$/.test(opts.serverName)) {
+    const name = Buffer.from(opts.serverName, "ascii");
+    const entry = Buffer.concat([Buffer.from([0]), withLen(2, name)]);
+    extensions.push(ext(EXT_SERVER_NAME, withLen(2, entry)));
+  }
+  extensions.push(ext(EXT_SUPPORTED_VERSIONS, withLen(1, u16(TLS13_VERSION))));
+  extensions.push(ext(EXT_SUPPORTED_GROUPS, withLen(2, Buffer.concat(supportedGroups.map(u16)))));
+  const sigAlgs = [1027, 2052, 2055, 1025, 2053, 2054];
+  extensions.push(ext(EXT_SIGNATURE_ALGORITHMS, withLen(2, Buffer.concat(sigAlgs.map(u16)))));
+  void keyShareGroup;
+  const x25519Pub = x25519RawPublic();
+  const hybridShareVal = Buffer.concat([wellFormedMlKem768Ek(), x25519Pub]);
+  const shareEntries = Buffer.concat([
+    u16(GROUP_X25519MLKEM768),
+    withLen(2, hybridShareVal),
+    u16(GROUP_X25519),
+    withLen(2, x25519Pub)
+  ]);
+  extensions.push(ext(EXT_KEY_SHARE, withLen(2, shareEntries)));
+  const cipherSuites = Buffer.concat([u16(4865), u16(4866), u16(4867)]);
+  const helloBody = Buffer.concat([
+    u16(771),
+    // legacy_version TLS 1.2
+    randomBytes2(32),
+    // random
+    withLen(1, randomBytes2(32)),
+    // legacy_session_id (non-empty → "middlebox compat")
+    withLen(2, cipherSuites),
+    // cipher_suites
+    withLen(1, Buffer.from([0])),
+    // compression_methods: null
+    withLen(2, Buffer.concat(extensions))
+    // extensions
+  ]);
+  const handshake = Buffer.concat([Buffer.from([HS_CLIENT_HELLO]), withLen(3, helloBody)]);
+  return Buffer.concat([Buffer.from([REC_HANDSHAKE]), u16(769), withLen(2, handshake)]);
+}
+function parseRecords(buf) {
+  const out = [];
+  let off = 0;
+  while (off + 5 <= buf.length) {
+    const type = buf[off];
+    const len = buf.readUInt16BE(off + 3);
+    if (off + 5 + len > buf.length)
+      break;
+    out.push({ type, fragment: buf.subarray(off + 5, off + 5 + len) });
+    off += 5 + len;
+  }
+  return out;
+}
+function parseServerHelloBody(body) {
+  let off = 0;
+  const need = (n) => {
+    if (off + n > body.length)
+      throw new RangeError("truncated ServerHello");
+  };
+  need(2);
+  off += 2;
+  need(32);
+  const random = body.subarray(off, off + 32);
+  off += 32;
+  const isHRR = random.equals(HRR_RANDOM);
+  need(1);
+  const sidLen = body[off];
+  off += 1;
+  need(sidLen);
+  off += sidLen;
+  need(2);
+  const cipherSuite = body.readUInt16BE(off);
+  off += 2;
+  need(1);
+  off += 1;
+  const info2 = { isHelloRetryRequest: isHRR, cipherSuite };
+  if (off + 2 > body.length)
+    return info2;
+  const extTotal = body.readUInt16BE(off);
+  off += 2;
+  const extEnd = Math.min(off + extTotal, body.length);
+  while (off + 4 <= extEnd) {
+    const extType = body.readUInt16BE(off);
+    const extLen = body.readUInt16BE(off + 2);
+    const start = off + 4;
+    if (start + extLen > body.length)
+      break;
+    const extBody = body.subarray(start, start + extLen);
+    if (extType === EXT_KEY_SHARE && extBody.length >= 2) {
+      info2.selectedGroup = extBody.readUInt16BE(0);
+    } else if (extType === EXT_SUPPORTED_VERSIONS && extBody.length >= 2) {
+      info2.negotiatedVersion = extBody.readUInt16BE(0);
+    }
+    off = start + extLen;
+  }
+  return info2;
+}
+function readServerHello(raw) {
+  for (const rec of parseRecords(raw)) {
+    if (rec.type !== REC_HANDSHAKE)
+      continue;
+    const f = rec.fragment;
+    if (f.length < 4)
+      continue;
+    if (f[0] !== HS_SERVER_HELLO)
+      continue;
+    const len = f.readUIntBE(1, 3);
+    if (4 + len > f.length)
+      continue;
+    return parseServerHelloBody(f.subarray(4, 4 + len));
+  }
+  return void 0;
+}
+
+// ../qprobe/dist/x509.js
+function readTlv(buf, off) {
+  if (off + 2 > buf.length)
+    throw new RangeError("truncated DER");
+  const tag = buf[off];
+  let len = buf[off + 1];
+  let contentStart = off + 2;
+  if (len & 128) {
+    const n = len & 127;
+    if (n === 0 || n > 4 || contentStart + n > buf.length)
+      throw new RangeError("bad DER length");
+    len = 0;
+    for (let i = 0; i < n; i++)
+      len = len << 8 | buf[contentStart + i];
+    contentStart += n;
+  }
+  const contentEnd = contentStart + len;
+  if (contentEnd > buf.length)
+    throw new RangeError("DER length overruns buffer");
+  return { tag, contentStart, contentEnd, next: contentEnd };
+}
+function decodeOid(bytes) {
+  if (bytes.length === 0)
+    return "";
+  const first = bytes[0];
+  const arcs = [Math.floor(first / 40), first % 40];
+  let value = 0;
+  for (let i = 1; i < bytes.length; i++) {
+    value = value << 7 | bytes[i] & 127;
+    if ((bytes[i] & 128) === 0) {
+      arcs.push(value);
+      value = 0;
+    }
+  }
+  return arcs.join(".");
+}
+function oidToSignatureFamily(oid) {
+  if (oid.startsWith("1.2.840.113549.1.1"))
+    return "RSA";
+  if (oid.startsWith("1.2.840.10045.4"))
+    return "ECDSA";
+  if (oid === "1.3.101.112" || oid === "1.3.101.113")
+    return "EdDSA";
+  if (oid.startsWith("1.2.840.10040.4.3"))
+    return "DSA";
+  return void 0;
+}
+function certSignatureAlgorithm(der) {
+  try {
+    const cert = readTlv(der, 0);
+    if (cert.tag !== 48)
+      return void 0;
+    const tbs = readTlv(der, cert.contentStart);
+    const sigAlg = readTlv(der, tbs.next);
+    if (sigAlg.tag !== 48)
+      return void 0;
+    const oidTlv = readTlv(der, sigAlg.contentStart);
+    if (oidTlv.tag !== 6)
+      return void 0;
+    const oid = decodeOid(der.subarray(oidTlv.contentStart, oidTlv.contentEnd));
+    return { oid, family: oidToSignatureFamily(oid) };
+  } catch {
+    return void 0;
+  }
+}
+
+// ../qprobe/dist/tls.js
+function extractNegotiated(socket) {
+  const cipher = socket.getCipher();
+  const kex = socket.getEphemeralKeyInfo();
+  const cert = socket.getPeerCertificate(false);
+  const cn = cert?.subject?.CN;
+  const sig = cert?.raw ? certSignatureAlgorithm(cert.raw) : void 0;
+  return {
+    protocol: socket.getProtocol() ?? void 0,
+    cipher: cipher?.standardName ?? cipher?.name,
+    kexGroup: kex && "name" in kex ? kex.name : void 0,
+    kexType: kex && "type" in kex ? kex.type : void 0,
+    certKeyType: cert?.asn1Curve ? `EC(${cert.asn1Curve})` : cert?.pubkey ? "RSA" : void 0,
+    certKeyBits: typeof cert?.bits === "number" ? cert.bits : void 0,
+    certSubject: Array.isArray(cn) ? cn[0] : cn,
+    certSigFamily: sig?.family,
+    certSigOid: sig?.oid
+  };
+}
+function probeTlsNegotiated(host, port, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 8e3;
+  return new Promise((resolve3) => {
+    let done = false;
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      socket.destroy();
+      resolve3(r);
+    };
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+    const servername = opts.servername ?? (isIp ? void 0 : host);
+    const socket = tlsConnect({
+      host,
+      port,
+      servername,
+      rejectUnauthorized: false,
+      // we inspect posture; we do not assert trust
+      minVersion: "TLSv1.2"
+    });
+    socket.setTimeout(timeoutMs);
+    socket.on("timeout", () => finish({ error: "timeout" }));
+    socket.on("error", (e) => finish({ error: e.message }));
+    socket.on("secureConnect", () => {
+      finish(extractNegotiated(socket));
+    });
+  });
+}
+function probeHybridSupport(host, port, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 8e3;
+  return new Promise((resolve3) => {
+    let buf = Buffer.alloc(0);
+    let done = false;
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      socket.destroy();
+      resolve3(r);
+    };
+    const socket = netConnect({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => {
+      socket.write(buildClientHello({ serverName: opts.servername ?? host }));
+    });
+    socket.on("timeout", () => finish({ hybridSelected: false, error: "timeout" }));
+    socket.on("error", (e) => finish({ hybridSelected: false, error: e.message }));
+    socket.on("close", () => finish({ hybridSelected: false, error: "connection closed" }));
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      let sh;
+      try {
+        sh = readServerHello(buf);
+      } catch {
+        finish({ hybridSelected: false, error: "malformed ServerHello" });
+        return;
+      }
+      if (!sh) {
+        if (buf.length > 64 * 1024)
+          finish({ hybridSelected: false, error: "no ServerHello" });
+        return;
+      }
+      finish({
+        hybridSelected: sh.selectedGroup === GROUP_X25519MLKEM768,
+        selectedGroup: sh.selectedGroup,
+        isHelloRetryRequest: sh.isHelloRetryRequest,
+        negotiatedVersion: sh.negotiatedVersion
+      });
+    });
+  });
+}
+
+// ../qprobe/dist/ssh.js
+import { connect } from "node:net";
+var SSH_MSG_KEXINIT = 20;
+var PQ_SSH_KEX = [
+  "sntrup761x25519-sha512@openssh.com",
+  "sntrup761x25519-sha512",
+  "mlkem768x25519-sha256",
+  "mlkem768nistp256-sha256",
+  "mlkem1024nistp384-sha384"
+];
+function readNameList(payload, off) {
+  if (off + 4 > payload.length)
+    throw new RangeError("truncated name-list length");
+  const len = payload.readUInt32BE(off);
+  const start = off + 4;
+  if (start + len > payload.length)
+    throw new RangeError("truncated name-list");
+  const s = payload.subarray(start, start + len).toString("ascii");
+  return { list: s === "" ? [] : s.split(","), next: start + len };
+}
+function parseKexinit(payload) {
+  if (payload.length < 1 + 16 || payload[0] !== SSH_MSG_KEXINIT) {
+    throw new RangeError("not an SSH_MSG_KEXINIT payload");
+  }
+  let off = 1 + 16;
+  const kex = readNameList(payload, off);
+  off = kex.next;
+  const hostKey = readNameList(payload, off);
+  return { kexAlgorithms: kex.list, hostKeyAlgorithms: hostKey.list };
+}
+function extractPacketPayload(afterBanner) {
+  if (afterBanner.length < 5)
+    return void 0;
+  const packetLength = afterBanner.readUInt32BE(0);
+  if (packetLength < 2 || packetLength > 1e6)
+    throw new RangeError("implausible SSH packet length");
+  if (afterBanner.length < 4 + packetLength)
+    return void 0;
+  const paddingLength = afterBanner[4];
+  const payloadLen = packetLength - paddingLength - 1;
+  if (payloadLen < 1)
+    throw new RangeError("bad SSH padding");
+  return afterBanner.subarray(5, 5 + payloadLen);
+}
+function bannerEnd(buf) {
+  const idx = buf.indexOf("SSH-");
+  if (idx < 0)
+    return void 0;
+  const lf = buf.indexOf(10, idx);
+  if (lf < 0)
+    return void 0;
+  return lf + 1;
+}
+function probeSsh(host, port, timeoutMs = 8e3) {
+  return new Promise((resolve3) => {
+    let buf = Buffer.alloc(0);
+    let done = false;
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      socket.destroy();
+      resolve3(r);
+    };
+    const socket = connect({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => socket.write("SSH-2.0-qprobe_0.1\r\n"));
+    socket.on("timeout", () => finish({ pqKexOffered: false, error: "timeout" }));
+    socket.on("error", (e) => finish({ pqKexOffered: false, error: e.message }));
+    socket.on("close", () => finish({ pqKexOffered: false, error: "connection closed" }));
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (buf.length > 512 * 1024) {
+        finish({ pqKexOffered: false, error: "response too large" });
+        return;
+      }
+      const end = bannerEnd(buf);
+      if (end === void 0)
+        return;
+      const banner = buf.subarray(0, end).toString("ascii").trim();
+      try {
+        const payload = extractPacketPayload(buf.subarray(end));
+        if (!payload)
+          return;
+        const kex = parseKexinit(payload);
+        const pqKexOffered = kex.kexAlgorithms.some((a) => PQ_SSH_KEX.includes(a));
+        finish({ banner, kex, pqKexOffered });
+      } catch (e) {
+        finish({ banner, pqKexOffered: false, error: e.message });
+      }
+    });
+  });
+}
+
+// ../qprobe/dist/smtp.js
+import { connect as netConnect2 } from "node:net";
+import { connect as tlsConnect2 } from "node:tls";
+function smtpReplyComplete(buf) {
+  if (!/\n$/.test(buf))
+    return false;
+  const lines = buf.replace(/\r?\n$/, "").split(/\r?\n/);
+  const last = lines[lines.length - 1] ?? "";
+  return /^\d{3} /.test(last);
+}
+function smtpAdvertisesStartTls(ehlo) {
+  return /^\d{3}[- ]STARTTLS\b/im.test(ehlo);
+}
+function probeSmtpStartTls(host, port, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 8e3;
+  return new Promise((resolve3) => {
+    let done = false;
+    let buf = Buffer.alloc(0);
+    let stage = "banner";
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      try {
+        socket.destroy();
+      } catch {
+      }
+      resolve3(r);
+    };
+    const socket = netConnect2({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("timeout", () => finish({ error: "timeout" }));
+    socket.on("error", (e) => finish({ error: e.message }));
+    socket.on("close", () => finish({ error: "connection closed" }));
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (buf.length > 128 * 1024)
+        return finish({ error: "SMTP response too large" });
+      const text = buf.toString("ascii");
+      if (!smtpReplyComplete(text))
+        return;
+      if (stage === "banner") {
+        buf = Buffer.alloc(0);
+        stage = "ehlo";
+        socket.write("EHLO qprobe.local\r\n");
+      } else if (stage === "ehlo") {
+        if (!smtpAdvertisesStartTls(text))
+          return finish({ error: "STARTTLS not advertised" });
+        buf = Buffer.alloc(0);
+        stage = "starttls";
+        socket.write("STARTTLS\r\n");
+      } else {
+        if (!/^220 /m.test(text))
+          return finish({ error: "STARTTLS refused" });
+        socket.removeAllListeners();
+        const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+        const tls = tlsConnect2({
+          socket,
+          servername: opts.servername ?? (isIp ? void 0 : host),
+          rejectUnauthorized: false,
+          minVersion: "TLSv1.2"
+        });
+        tls.setTimeout(timeoutMs);
+        tls.on("timeout", () => finish({ error: "timeout" }));
+        tls.on("error", (e) => finish({ error: e.message }));
+        tls.on("secureConnect", () => {
+          const negotiated = extractNegotiated(tls);
+          if (done)
+            return;
+          done = true;
+          try {
+            tls.destroy();
+          } catch {
+          }
+          resolve3(negotiated);
+        });
+      }
+    });
+  });
+}
+
+// ../qprobe/dist/starttls.js
+import { connect as netConnect3 } from "node:net";
+import { connect as tlsConnect3 } from "node:tls";
+var IMAP_DIALOG = {
+  command: "a1 STARTTLS\r\n",
+  success: /^a1 OK/im
+};
+var POP3_DIALOG = {
+  command: "STLS\r\n",
+  success: /^\+OK/im
+};
+function probeLineStartTls(host, port, dialog, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 8e3;
+  return new Promise((resolve3) => {
+    let done = false;
+    let buf = Buffer.alloc(0);
+    let stage = "greeting";
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      try {
+        socket.destroy();
+      } catch {
+      }
+      resolve3(r);
+    };
+    const socket = netConnect3({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("timeout", () => finish({ error: "timeout" }));
+    socket.on("error", (e) => finish({ error: e.message }));
+    socket.on("close", () => finish({ error: "connection closed" }));
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (buf.length > 64 * 1024)
+        return finish({ error: "response too large" });
+      const text = buf.toString("ascii");
+      if (!/\n/.test(text))
+        return;
+      if (stage === "greeting") {
+        buf = Buffer.alloc(0);
+        stage = "response";
+        socket.write(dialog.command);
+        return;
+      }
+      if (!dialog.success.test(text))
+        return finish({ error: "STARTTLS not offered" });
+      socket.removeAllListeners();
+      const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+      const tls = tlsConnect3({
+        socket,
+        servername: opts.servername ?? (isIp ? void 0 : host),
+        rejectUnauthorized: false,
+        minVersion: "TLSv1.2"
+      });
+      tls.setTimeout(timeoutMs);
+      tls.on("timeout", () => finish({ error: "timeout" }));
+      tls.on("error", (e) => finish({ error: e.message }));
+      tls.on("secureConnect", () => {
+        const negotiated = extractNegotiated(tls);
+        if (done)
+          return;
+        done = true;
+        try {
+          tls.destroy();
+        } catch {
+        }
+        resolve3(negotiated);
+      });
+    });
+  });
+}
+
+// ../qprobe/dist/postgres.js
+import { connect as netConnect4 } from "node:net";
+import { connect as tlsConnect4 } from "node:tls";
+function sslRequestFrame() {
+  const b = Buffer.alloc(8);
+  b.writeInt32BE(8, 0);
+  b.writeInt32BE(80877103, 4);
+  return b;
+}
+function probePostgresSsl(host, port, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 8e3;
+  return new Promise((resolve3) => {
+    let done = false;
+    const finish = (r) => {
+      if (done)
+        return;
+      done = true;
+      try {
+        socket.destroy();
+      } catch {
+      }
+      resolve3(r);
+    };
+    const socket = netConnect4({ host, port });
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => socket.write(sslRequestFrame()));
+    socket.on("timeout", () => finish({ error: "timeout" }));
+    socket.on("error", (e) => finish({ error: e.message }));
+    socket.on("close", () => finish({ error: "connection closed" }));
+    socket.on("data", (chunk) => {
+      if (chunk.length < 1)
+        return;
+      const reply = String.fromCharCode(chunk[0]);
+      if (reply === "N")
+        return finish({ error: "server does not offer TLS (SSLRequest \u2192 N)" });
+      if (reply !== "S")
+        return finish({ error: `unexpected SSLRequest reply "${reply}"` });
+      socket.removeAllListeners();
+      const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+      const tls = tlsConnect4({
+        socket,
+        servername: opts.servername ?? (isIp ? void 0 : host),
+        rejectUnauthorized: false,
+        minVersion: "TLSv1.2"
+      });
+      tls.setTimeout(timeoutMs);
+      tls.on("timeout", () => finish({ error: "timeout" }));
+      tls.on("error", (e) => finish({ error: e.message }));
+      tls.on("secureConnect", () => {
+        const negotiated = extractNegotiated(tls);
+        if (done)
+          return;
+        done = true;
+        try {
+          tls.destroy();
+        } catch {
+        }
+        resolve3(negotiated);
+      });
+    });
+  });
+}
+
+// ../qprobe/dist/classify.js
+init_dist();
+function endpoint(t) {
+  return { file: `${t.host}:${t.port}`, line: 1 };
+}
+function classicalKexFamily(group) {
+  if (!group)
+    return void 0;
+  const g = group.toLowerCase();
+  if (g.includes("mlkem") || g.includes("kyber"))
+    return void 0;
+  if (g === "x25519")
+    return "X25519";
+  if (g === "x448")
+    return "X448";
+  if (g.startsWith("p-") || g.includes("prime256") || g.includes("secp"))
+    return "ECDH";
+  if (g === "dh" || g.includes("ffdhe") || g.includes("modp"))
+    return "DH";
+  return void 0;
+}
+function classifyTls(target, neg, hybrid) {
+  const out = [];
+  const loc = endpoint(target);
+  if (neg.protocol === "TLSv1" || neg.protocol === "TLSv1.1") {
+    out.push({
+      ruleId: "qprobe-tls-legacy-version",
+      title: "Legacy TLS version negotiated",
+      category: "tls",
+      severity: "high",
+      confidence: "high",
+      hndl: false,
+      cwe: CWE_RISKY_PRIMITIVE,
+      message: `Endpoint negotiated ${neg.protocol}; obsolete TLS with weak, harvestable key exchange.`,
+      remediation: "Require TLS 1.3.",
+      location: loc
+    });
+  }
+  const fam = classicalKexFamily(neg.kexGroup);
+  if (!hybrid.hybridSelected && fam) {
+    const hybridNote = hybrid.error ? "the PQC-hybrid probe was inconclusive" : "the server did not select a PQC-hybrid group (X25519MLKEM768)";
+    out.push({
+      ruleId: "qprobe-tls-classical-kex",
+      title: "Classical TLS key exchange (no PQC hybrid)",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: hybrid.error ? "medium" : "high",
+      algorithm: fam,
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: `TLS key exchange is classical ${neg.kexGroup}; the session key is harvest-now-decrypt-later exposed and ${hybridNote}.`,
+      remediation: "Enable a PQC-hybrid key-exchange group (X25519MLKEM768) on the TLS terminator.",
+      location: loc
+    });
+  }
+  if (neg.certKeyType) {
+    const isRsa = neg.certKeyType === "RSA";
+    out.push({
+      ruleId: "qprobe-tls-classical-cert",
+      title: "Classical certificate key",
+      category: "certificate",
+      severity: "low",
+      confidence: "high",
+      algorithm: isRsa ? "RSA" : "ECDSA",
+      hndl: false,
+      cwe: isRsa ? CWE_BROKEN_CRYPTO : CWE_WEAK_STRENGTH,
+      message: `Leaf certificate uses a classical ${neg.certKeyType}${neg.certKeyBits ? `-${neg.certKeyBits}` : ""} key${neg.certSigFamily ? `, signed by the CA with ${neg.certSigFamily}` : ""}; its signature is forgeable once a CRQC exists.`,
+      remediation: "Plan migration to ML-DSA-65 (FIPS 204) certificate keys as your CA adds support.",
+      location: loc
+    });
+  }
+  return out;
+}
+function classifySsh(target, ssh) {
+  const out = [];
+  if (ssh.error || !ssh.kex)
+    return out;
+  if (!ssh.pqKexOffered) {
+    out.push({
+      ruleId: "qprobe-ssh-classical-kex",
+      title: "SSH offers only classical key exchange",
+      category: "key-exchange",
+      severity: "medium",
+      confidence: "high",
+      algorithm: "ECDH",
+      hndl: true,
+      cwe: CWE_BROKEN_CRYPTO,
+      message: `SSH endpoint offers no post-quantum key exchange (${ssh.kex.kexAlgorithms.slice(0, 4).join(", ")}\u2026); session keys are harvest-now-decrypt-later exposed.`,
+      remediation: "Enable a PQC hybrid SSH KEX (sntrup761x25519-sha512@openssh.com or mlkem768x25519-sha256).",
+      location: endpoint(target)
+    });
+  }
+  return out;
+}
+
+// ../qprobe/dist/report.js
+init_dist();
+
+// ../qprobe/dist/index.js
+function resolveMode(target, mode) {
+  if (mode !== "auto")
+    return mode;
+  if (target.port === 22)
+    return "ssh";
+  if (target.port === 25 || target.port === 587)
+    return "smtp";
+  if (target.port === 143)
+    return "imap";
+  if (target.port === 110)
+    return "pop3";
+  if (target.port === 5432)
+    return "postgres";
+  return "tls";
+}
+async function probeEndpoint(target, mode, opts = {}) {
+  const positives = [];
+  if (mode === "ssh") {
+    const ssh = await probeSsh(target.host, target.port, opts.timeoutMs);
+    if (ssh.pqKexOffered)
+      positives.push("PQC SSH key exchange offered");
+    return { target, mode, ssh, positives, findings: classifySsh(target, ssh) };
+  }
+  if (mode === "smtp" || mode === "imap" || mode === "pop3" || mode === "postgres") {
+    let tls2;
+    if (mode === "smtp")
+      tls2 = await probeSmtpStartTls(target.host, target.port, opts);
+    else if (mode === "imap")
+      tls2 = await probeLineStartTls(target.host, target.port, IMAP_DIALOG, opts);
+    else if (mode === "pop3")
+      tls2 = await probeLineStartTls(target.host, target.port, POP3_DIALOG, opts);
+    else
+      tls2 = await probePostgresSsl(target.host, target.port, opts);
+    const hybrid2 = { hybridSelected: false, error: `not probed (${mode})` };
+    return { target, mode, tls: tls2, hybrid: hybrid2, positives, findings: classifyTls(target, tls2, hybrid2) };
+  }
+  const [tls, hybrid] = await Promise.all([
+    probeTlsNegotiated(target.host, target.port, opts),
+    probeHybridSupport(target.host, target.port, opts)
+  ]);
+  if (hybrid.hybridSelected)
+    positives.push("PQC-hybrid TLS (X25519MLKEM768) selected");
+  return { target, mode, tls, hybrid, positives, findings: classifyTls(target, tls, hybrid) };
+}
+var delay = (ms) => new Promise((r) => setTimeout(r, ms));
+async function runProbe(opts) {
+  authorizeTargets(opts.targets, opts.attest);
+  const reports = [];
+  const interval = opts.minIntervalMs ?? 250;
+  for (let i = 0; i < opts.targets.length; i++) {
+    if (i > 0 && interval > 0)
+      await delay(interval);
+    const target = opts.targets[i];
+    const mode = resolveMode(target, opts.mode);
+    reports.push(await probeEndpoint(target, mode, { servername: opts.servername, timeoutMs: opts.timeoutMs }));
+  }
+  const findings = reports.flatMap((r) => r.findings);
+  return { reports, findings, inventory: buildInventory(findings) };
+}
+
+// ../sieve/dist/runner.js
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+
+// ../sieve/dist/protocol.js
+var PROTOCOL_VERSION = 1;
+function encodeRequest(req) {
+  return JSON.stringify(req) + "\n";
+}
+var ProtocolError = class extends Error {
+  /** The offending raw line, truncated for safety. */
+  raw;
+  constructor(message, raw) {
+    super(message);
+    this.name = "ProtocolError";
+    this.raw = raw.length > 512 ? raw.slice(0, 512) + "\u2026" : raw;
+  }
+};
+function isObject2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function isStr(v) {
+  return typeof v === "string";
+}
+function decodeResponse(line) {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    throw new ProtocolError("empty line", line);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (err) {
+    throw new ProtocolError(`not valid JSON: ${err.message}`, line);
+  }
+  if (!isObject2(parsed)) {
+    throw new ProtocolError("response is not a JSON object", line);
+  }
+  const id = parsed["id"];
+  if (typeof id !== "number" || !Number.isInteger(id)) {
+    throw new ProtocolError("missing/invalid integer 'id'", line);
+  }
+  const ok = parsed["ok"];
+  if (typeof ok !== "boolean") {
+    throw new ProtocolError("missing/invalid boolean 'ok'", line);
+  }
+  if (ok === false) {
+    const code = parsed["code"];
+    const message = parsed["message"];
+    if (!isStr(code) || !isStr(message)) {
+      throw new ProtocolError("error response must have string 'code' and 'message'", line);
+    }
+    return { id, ok: false, code, message };
+  }
+  if (isStr(parsed["pk"]) && isStr(parsed["sk"])) {
+    return { id, ok: true, pk: parsed["pk"], sk: parsed["sk"] };
+  }
+  if (isStr(parsed["ct"]) && isStr(parsed["ss"])) {
+    return { id, ok: true, ct: parsed["ct"], ss: parsed["ss"] };
+  }
+  if (isStr(parsed["ss"])) {
+    return { id, ok: true, ss: parsed["ss"] };
+  }
+  if (isStr(parsed["sig"])) {
+    return { id, ok: true, sig: parsed["sig"] };
+  }
+  if (typeof parsed["valid"] === "boolean") {
+    return { id, ok: true, valid: parsed["valid"] };
+  }
+  throw new ProtocolError("ok response has no recognizable payload (expected pk+sk, ct+ss, ss, sig, or valid)", line);
+}
+function toB64(bytes) {
+  return Buffer.from(bytes).toString("base64");
+}
+function fromB64(b64) {
+  const buf = Buffer.from(b64, "base64");
+  const trimEq = (x) => {
+    let n = x.length;
+    while (n > 0 && x[n - 1] === "=")
+      n--;
+    return x.slice(0, n);
+  };
+  if (trimEq(buf.toString("base64")) !== trimEq(b64.replace(/\s/g, ""))) {
+    throw new ProtocolError("invalid base64", b64);
+  }
+  return new Uint8Array(buf);
+}
+
+// ../sieve/dist/runner.js
+var DEFAULT_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  // Windows process-spawn essentials (harmless / empty on POSIX).
+  "SystemRoot",
+  "SystemDrive",
+  "windir",
+  "PATHEXT",
+  "COMSPEC"
+];
+function buildSutEnv(opts, parentEnv = process.env) {
+  const out = {};
+  if (opts.inheritEnv === true) {
+    for (const [k, v] of Object.entries(parentEnv)) {
+      if (typeof v === "string")
+        out[k] = v;
+    }
+  } else {
+    const names = /* @__PURE__ */ new Set([...DEFAULT_ENV_ALLOWLIST, ...opts.envAllowlist ?? []]);
+    for (const name of names) {
+      const v = parentEnv[name];
+      if (typeof v === "string")
+        out[name] = v;
+    }
+  }
+  if (opts.env) {
+    for (const [k, v] of Object.entries(opts.env))
+      out[k] = v;
+  }
+  return out;
+}
+var TimeoutError = class extends Error {
+  request;
+  timeoutMs;
+  constructor(request, timeoutMs) {
+    super(`SUT did not respond to id=${request.id} (${request.op}) within ${timeoutMs}ms`);
+    this.request = request;
+    this.timeoutMs = timeoutMs;
+    this.name = "TimeoutError";
+  }
+};
+var SutCrashError = class extends Error {
+  stderr;
+  constructor(message, stderr) {
+    super(message);
+    this.stderr = stderr;
+    this.name = "SutCrashError";
+  }
+};
+var STDERR_LINE_CAP = 200;
+var STDERR_QUOTE_CAP = 400;
+var ERROR_LINE = /error|exception|traceback|panic:|not found|no such file|cannot open|permission denied/i;
+function diagnosticLines(stderr) {
+  const lines = stderr.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0)
+    return [];
+  const hits = lines.filter((l) => ERROR_LINE.test(l));
+  if (hits.length === 0)
+    return lines.slice(0, 2);
+  const first = hits[0];
+  const last = hits[hits.length - 1];
+  return first === last ? [first] : [first, last];
+}
+function describeSutError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!(err instanceof SutCrashError))
+    return message;
+  const lines = diagnosticLines(err.stderr);
+  if (lines.length === 0)
+    return `${message} (no stderr)`;
+  const quote = lines.map((l) => l.length > STDERR_LINE_CAP ? `${l.slice(0, STDERR_LINE_CAP)}\u2026` : l).join(" | ").slice(0, STDERR_QUOTE_CAP);
+  return `${message}: ${quote}`;
+}
+var DEFAULT_TIMEOUT_MS3 = 1e4;
+var STDERR_CAP = 1 << 16;
+var MAX_STDOUT_LINE = 1 << 16;
+var Runner = class {
+  child;
+  rl;
+  pending = /* @__PURE__ */ new Map();
+  timeoutMs;
+  nextId = 1;
+  stderrBuf = "";
+  closed = false;
+  fatal;
+  answered = 0;
+  onStderr;
+  constructor(opts) {
+    this.onStderr = opts.onStderr;
+    if (opts.command.length === 0) {
+      throw new Error("Runner: command must have at least one element");
+    }
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS3;
+    const [bin, ...args] = opts.command;
+    this.child = spawn(bin, args, {
+      cwd: opts.cwd,
+      // Scrubbed, minimal env by default — see buildSutEnv / security.md Q-17.
+      env: buildSutEnv(opts),
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    this.child.on("error", (err) => {
+      this.failAll(new SutCrashError(`failed to spawn SUT: ${err.message}`, this.stderrBuf));
+    });
+    this.child.on("exit", (code, signal) => {
+      if (this.closed)
+        return;
+      const why = signal !== null ? `SUT exited via signal ${signal}` : `SUT exited with code ${code}`;
+      this.failAll(new SutCrashError(why, this.stderrBuf));
+    });
+    this.child.stderr.setEncoding("utf8");
+    this.child.stderr.on("data", (chunk) => {
+      this.stderrBuf += chunk;
+      if (this.stderrBuf.length > STDERR_CAP) {
+        this.stderrBuf = this.stderrBuf.slice(-STDERR_CAP);
+      }
+      if (this.onStderr) {
+        for (const line of chunk.split("\n")) {
+          if (line.length > 0)
+            this.onStderr(line);
+        }
+      }
+    });
+    this.child.stdout.setEncoding("utf8");
+    this.rl = createInterface({ input: this.child.stdout, crlfDelay: Infinity });
+    this.rl.on("line", (line) => this.onLine(line));
+  }
+  /** Stderr captured from the SUT so far (most recent 64 KiB). */
+  get stderr() {
+    return this.stderrBuf;
+  }
+  onLine(line) {
+    if (line.trim().length === 0)
+      return;
+    if (line.length > MAX_STDOUT_LINE) {
+      this.sidelineStdout(`SUT stdout line exceeded ${MAX_STDOUT_LINE} bytes; ignored`);
+      return;
+    }
+    let resp;
+    try {
+      resp = decodeResponse(line);
+    } catch (err) {
+      const pe = err;
+      this.sidelineStdout(`ignored non-protocol stdout line: ${pe.message}`);
+      return;
+    }
+    const entry = this.pending.get(resp.id);
+    if (entry === void 0) {
+      return;
+    }
+    clearTimeout(entry.timer);
+    this.pending.delete(resp.id);
+    this.answered += 1;
+    entry.resolve(resp);
+  }
+  /**
+   * How many protocol responses the SUT has returned, of any kind.
+   *
+   * Zero at the end of a run means the implementation never spoke to us at all,
+   * which is a statement about the harness rather than about the implementation.
+   * An `{ok:false}` reply still counts: refusing an operation is an answer, and
+   * a SUT that answers is one the battery can legitimately judge.
+   */
+  get answeredCount() {
+    return this.answered;
+  }
+  /**
+   * The first fatal transport error, if the SUT process died or failed to spawn.
+   * Undefined when the SUT is alive (including when requests merely time out),
+   * so callers must not read this as "the run went fine".
+   */
+  get fatalError() {
+    return this.fatal;
+  }
+  /**
+   * Record a stdout line we could not use (non-protocol banner, oversize line,
+   * etc.). It is surfaced through the stderr buffer and the `onStderr` sink for
+   * diagnostics, but never fails any request — see the `onLine` rationale.
+   */
+  sidelineStdout(detail) {
+    const note = `[sieve] ${detail}`;
+    this.stderrBuf += note + "\n";
+    if (this.stderrBuf.length > STDERR_CAP) {
+      this.stderrBuf = this.stderrBuf.slice(-STDERR_CAP);
+    }
+    if (this.onStderr)
+      this.onStderr(note);
+  }
+  failAll(err) {
+    if (this.fatal === void 0)
+      this.fatal = err;
+    for (const [, p] of this.pending) {
+      clearTimeout(p.timer);
+      p.reject(err);
+    }
+    this.pending.clear();
+  }
+  /**
+   * Send one request and await its response. The `id` field is assigned by the
+   * runner; any `id` on the passed object is overwritten.
+   */
+  send(req) {
+    if (this.closed) {
+      return Promise.reject(new Error("Runner is closed"));
+    }
+    if (this.fatal !== void 0) {
+      return Promise.reject(this.fatal);
+    }
+    const id = this.nextId++;
+    const full = { ...req, id };
+    return new Promise((resolve3, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new TimeoutError(full, this.timeoutMs));
+      }, this.timeoutMs);
+      if (typeof timer.unref === "function")
+        timer.unref();
+      this.pending.set(id, { resolve: resolve3, reject, timer });
+      this.child.stdin.write(encodeRequest(full), (err) => {
+        if (err) {
+          clearTimeout(timer);
+          this.pending.delete(id);
+          reject(new SutCrashError(`write to SUT failed: ${err.message}`, this.stderrBuf));
+        }
+      });
+    });
+  }
+  /**
+   * Issue many INDEPENDENT requests with bounded concurrency (pipelining).
+   *
+   * The protocol is id-correlated (each response carries the request's `id`),
+   * so multiple requests may be in flight against the SUT at once. This writes
+   * up to `maxInFlight` requests before awaiting any response, refilling as each
+   * completes, and returns results in the SAME ORDER as `reqs` (independent of
+   * the order the SUT answers).
+   *
+   * CORRECTNESS CONSTRAINT: every request in `reqs` MUST be independent of the
+   * others — no request may depend on another's response, and the SUT must not
+   * carry cross-request state that ordering would expose. Dependent or
+   * order-sensitive sequences (e.g. keygen→encaps→decaps for a single key, or
+   * the timing category's isolated measurements) MUST use serial `send()`
+   * instead. See docs/audits/performance.md §7.1.
+   *
+   * Setting `maxInFlight <= 1` degrades to strictly serial behavior.
+   */
+  async sendMany(reqs, maxInFlight = 16) {
+    const limit = Math.max(1, Math.floor(maxInFlight));
+    const results = new Array(reqs.length);
+    let next = 0;
+    let firstError;
+    const worker = async () => {
+      while (firstError === void 0) {
+        const i = next++;
+        if (i >= reqs.length)
+          return;
+        try {
+          results[i] = await this.send(reqs[i]);
+        } catch (err) {
+          if (firstError === void 0)
+            firstError = err;
+          return;
+        }
+      }
+    };
+    const workers = [];
+    for (let w = 0; w < Math.min(limit, reqs.length); w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    if (firstError !== void 0)
+      throw firstError;
+    return results;
+  }
+  /**
+   * Gracefully shut the SUT down: end stdin, wait briefly for a clean exit,
+   * then SIGTERM, then SIGKILL. Idempotent.
+   */
+  async close(graceMs = 500) {
+    if (this.closed)
+      return;
+    this.closed = true;
+    this.rl.close();
+    try {
+      this.child.stdin.end();
+    } catch {
+    }
+    const exited = new Promise((resolve3) => {
+      if (this.child.exitCode !== null || this.child.signalCode !== null) {
+        resolve3();
+        return;
+      }
+      this.child.once("exit", () => resolve3());
+    });
+    const timed = await Promise.race([exited.then(() => true), delay2(graceMs).then(() => false)]);
+    if (!timed && this.child.exitCode === null) {
+      this.child.kill("SIGTERM");
+      const killed = await Promise.race([
+        exited.then(() => true),
+        delay2(graceMs).then(() => false)
+      ]);
+      if (!killed && this.child.exitCode === null) {
+        this.child.kill("SIGKILL");
+      }
+    }
+  }
+};
+function delay2(ms) {
+  return new Promise((resolve3) => {
+    const t = setTimeout(resolve3, ms);
+    if (typeof t.unref === "function")
+      t.unref();
+  });
+}
+
+// ../sieve/dist/categories/types.js
+function rollUp(checks) {
+  if (checks.length === 0)
+    return "skip";
+  if (checks.some((c) => c.status === "fail"))
+    return "fail";
+  if (checks.every((c) => c.status === "skip"))
+    return "skip";
+  return "pass";
+}
+function pass(name, detail, bugClass) {
+  return { name, status: "pass", detail, bugClass };
+}
+function fail(name, detail, bugClass) {
+  return { name, status: "fail", detail, bugClass };
+}
+function skip(name, detail, bugClass) {
+  return { name, status: "skip", detail, bugClass };
+}
+
+// ../sieve/dist/categories/helpers.js
+var UnexpectedResponse = class extends Error {
+  response;
+  constructor(message, response) {
+    super(message);
+    this.response = response;
+    this.name = "UnexpectedResponse";
+  }
+};
+async function kemKeygen(runner, param, seed) {
+  const resp = await runner.send({
+    family: "ml-kem",
+    param,
+    op: "keygen",
+    ...seed ? { seed } : {}
+  });
+  if (resp.ok !== true || !("pk" in resp) || !("sk" in resp)) {
+    throw new UnexpectedResponse("expected keygen pk/sk result", resp);
+  }
+  return { pk: fromB64(resp.pk), sk: fromB64(resp.sk) };
+}
+async function kemEncaps(runner, param, pkB64, coins) {
+  const resp = await runner.send({
+    family: "ml-kem",
+    param,
+    op: "encaps",
+    pk: pkB64,
+    ...coins ? { coins } : {}
+  });
+  if (resp.ok !== true || !("ct" in resp) || !("ss" in resp)) {
+    throw new UnexpectedResponse("expected encaps ct/ss result", resp);
+  }
+  return { ct: fromB64(resp.ct), ss: fromB64(resp.ss) };
+}
+async function kemDecaps(runner, param, skB64, ctB64) {
+  const resp = await runner.send({ family: "ml-kem", param, op: "decaps", sk: skB64, ct: ctB64 });
+  if (resp.ok !== true || !("ss" in resp)) {
+    throw new UnexpectedResponse("expected decaps ss result", resp);
+  }
+  return fromB64(resp.ss);
+}
+function kemDecapsRaw(runner, param, skB64, ctB64) {
+  return runner.send({ family: "ml-kem", param, op: "decaps", sk: skB64, ct: ctB64 });
+}
+function kemEncapsRaw(runner, param, pkB64) {
+  return runner.send({ family: "ml-kem", param, op: "encaps", pk: pkB64 });
+}
+function bytesEqual(a, b) {
+  if (a.length !== b.length)
+    return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i])
+      return false;
+  }
+  return true;
+}
+function zerosB64(n) {
+  return Buffer.alloc(n).toString("base64");
+}
+function flipBitB64(b64, byteIndex = 0, bit = 0) {
+  const buf = Buffer.from(b64, "base64");
+  if (buf.length === 0)
+    return b64;
+  const idx = byteIndex % buf.length;
+  buf[idx] = buf[idx] ^ 1 << (bit & 7);
+  return buf.toString("base64");
+}
+function requireKem(s) {
+  if (s.family !== "ml-kem") {
+    throw new Error(`expected an ML-KEM parameter set, got ${s.family}`);
+  }
+  return s;
+}
+async function mapBounded(count, limit, task) {
+  const n = Math.max(0, count);
+  const cap = Math.max(1, Math.floor(limit));
+  const out = new Array(n);
+  let next = 0;
+  let firstError;
+  const worker = async () => {
+    while (firstError === void 0) {
+      const i = next++;
+      if (i >= n)
+        return;
+      try {
+        out[i] = await task(i);
+      } catch (err) {
+        if (firstError === void 0)
+          firstError = err;
+        return;
+      }
+    }
+  };
+  const workers = [];
+  for (let w = 0; w < Math.min(cap, n); w++)
+    workers.push(worker());
+  await Promise.all(workers);
+  if (firstError !== void 0)
+    throw firstError;
+  return out;
+}
+
+// ../sieve/dist/categories/correctness.js
+var correctness = async (ctx) => {
+  const checks = [];
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "correctness",
+      status: "skip",
+      checks: [],
+      summary: "correctness round-trip is defined for ML-KEM; see DSA category for ML-DSA"
+    };
+  }
+  const km = requireKem(ctx.sizes);
+  const param = km.id;
+  let mismatches = 0;
+  let errored = 0;
+  const outcomes = await mapBounded(ctx.iterations, ctx.pipelineDepth ?? 16, async () => {
+    try {
+      const { pk, sk } = await kemKeygen(ctx.runner, param);
+      const { ct, ss: ssEncaps } = await kemEncaps(ctx.runner, param, toB64(pk));
+      const ssDecaps = await kemDecaps(ctx.runner, param, toB64(sk), toB64(ct));
+      if (!bytesEqual(ssEncaps, ssDecaps)) {
+        return {
+          kind: "mismatch",
+          detail: `shared secrets differ: encaps ss != decaps ss (encaps=${toB64(ssEncaps).slice(0, 12)}\u2026, decaps=${toB64(ssDecaps).slice(0, 12)}\u2026)`
+        };
+      }
+      return { kind: "ok" };
+    } catch (err) {
+      const detail = err instanceof UnexpectedResponse ? `SUT returned an unexpected response: ${err.message}` : `harness error: ${describeSutError(err)}`;
+      return { kind: "error", detail };
+    }
+  });
+  for (let i = 0; i < outcomes.length; i++) {
+    const o = outcomes[i];
+    if (o.kind === "mismatch") {
+      mismatches++;
+      if (mismatches <= 3)
+        checks.push(fail(`roundtrip[${i}]`, o.detail));
+    } else if (o.kind === "error") {
+      errored++;
+      if (errored <= 3)
+        checks.push(fail(`roundtrip[${i}]`, o.detail));
+    }
+  }
+  if (mismatches === 0 && errored === 0) {
+    checks.push(pass("roundtrip", `${ctx.iterations}/${ctx.iterations} keygen\u2192encaps\u2192decaps round-trips produced matching shared secrets`));
+  }
+  const status = rollUp(checks);
+  return {
+    category: "correctness",
+    status,
+    checks,
+    summary: status === "pass" ? `${ctx.iterations} round-trips OK` : `${mismatches} mismatch(es), ${errored} error(s) over ${ctx.iterations} iterations`
+  };
+};
+
+// ../sieve/dist/categories/determinism.js
+var REPEATS = 3;
+var determinism = async (ctx) => {
+  const checks = [];
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "determinism",
+      status: "skip",
+      checks: [],
+      summary: "decaps-determinism is defined for ML-KEM"
+    };
+  }
+  const param = requireKem(ctx.sizes).id;
+  let nondeterministic = 0;
+  let errored = 0;
+  const outcomes = await mapBounded(ctx.iterations, ctx.pipelineDepth ?? 16, async () => {
+    try {
+      const { pk, sk } = await kemKeygen(ctx.runner, param);
+      const { ct } = await kemEncaps(ctx.runner, param, toB64(pk));
+      const skB64 = toB64(sk);
+      const ctB64 = toB64(ct);
+      const first = await kemDecaps(ctx.runner, param, skB64, ctB64);
+      for (let r = 1; r < REPEATS; r++) {
+        const again = await kemDecaps(ctx.runner, param, skB64, ctB64);
+        if (!bytesEqual(first, again))
+          return { kind: "unstable" };
+      }
+      return { kind: "ok" };
+    } catch (err) {
+      const detail = err instanceof UnexpectedResponse ? `SUT returned an unexpected response: ${err.message}` : `harness error: ${describeSutError(err)}`;
+      return { kind: "error", detail };
+    }
+  });
+  for (let i = 0; i < outcomes.length; i++) {
+    const o = outcomes[i];
+    if (o.kind === "unstable") {
+      nondeterministic++;
+      if (nondeterministic <= 3) {
+        checks.push(fail(`decaps-stable[${i}]`, `decaps(sk, ct) returned different shared secrets across ${REPEATS} identical calls`));
+      }
+    } else if (o.kind === "error") {
+      errored++;
+      if (errored <= 3)
+        checks.push(fail(`decaps-stable[${i}]`, o.detail));
+    }
+  }
+  if (nondeterministic === 0 && errored === 0) {
+    checks.push(pass("decaps-stable", `decaps was deterministic across ${REPEATS} repeats for all ${ctx.iterations} ciphertexts`));
+  }
+  const status = rollUp(checks);
+  return {
+    category: "determinism",
+    status,
+    checks,
+    summary: status === "pass" ? `decaps deterministic over ${ctx.iterations} ciphertexts` : `${nondeterministic} non-deterministic, ${errored} error(s)`
+  };
+};
+
+// ../sieve/dist/categories/implicit-rejection.js
+var BUG = "AF-02";
+var REPEATS2 = 3;
+var implicitRejection = async (ctx) => {
+  const checks = [];
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "implicit-rejection",
+      status: "skip",
+      bugClass: BUG,
+      checks: [skip("applicability", "implicit rejection is an ML-KEM property", BUG)],
+      summary: "skipped (not ML-KEM)"
+    };
+  }
+  const km = requireKem(ctx.sizes);
+  const param = km.id;
+  const ssLen = km.sharedSecret;
+  const trials = Math.max(1, Math.min(ctx.iterations, 16));
+  let noError = 0;
+  let goodLen = 0;
+  let deterministic = 0;
+  let differs = 0;
+  let attempted = 0;
+  for (let i = 0; i < trials; i++) {
+    try {
+      const { pk, sk } = await kemKeygen(ctx.runner, param);
+      const skB64 = toB64(sk);
+      const { ct } = await kemEncaps(ctx.runner, param, toB64(pk));
+      const honestCtB64 = toB64(ct);
+      const honestSs = await kemDecaps(ctx.runner, param, skB64, honestCtB64);
+      const badCtB64 = flipBitB64(honestCtB64, i % ct.length, i % 8);
+      attempted++;
+      const resp = await kemDecapsRaw(ctx.runner, param, skB64, badCtB64);
+      if (resp.ok !== true || !("ss" in resp)) {
+        checks.push(fail(`no-error[${i}]`, `decaps of a corrupted ciphertext returned an error/non-ss response (${resp.ok === false ? `${resp.code}: ${resp.message}` : "no ss field"}); ML-KEM must implicitly reject, not signal failure`, BUG));
+        continue;
+      }
+      noError++;
+      const rejectSs = fromB64(resp.ss);
+      if (rejectSs.length === ssLen) {
+        goodLen++;
+      } else {
+        checks.push(fail(`length[${i}]`, `implicit-rejection shared secret was ${rejectSs.length} bytes, expected ${ssLen}`, BUG));
+      }
+      let stable = true;
+      for (let r = 1; r < REPEATS2; r++) {
+        const again = await kemDecaps(ctx.runner, param, skB64, badCtB64);
+        if (!bytesEqual(rejectSs, again)) {
+          stable = false;
+          break;
+        }
+      }
+      if (stable) {
+        deterministic++;
+      } else {
+        checks.push(fail(`deterministic[${i}]`, `implicit-rejection secret was not stable across ${REPEATS2} identical corrupted decaps`, BUG));
+      }
+      if (!bytesEqual(rejectSs, honestSs)) {
+        differs++;
+      } else {
+        checks.push(fail(`differs-from-honest[${i}]`, `implicit-rejection secret equals the honest shared secret \u2014 corruption was not detected`, BUG));
+      }
+    } catch (err) {
+      const detail = err instanceof UnexpectedResponse ? `SUT returned an unexpected response: ${err.message}` : `harness error (possible crash on bad ct): ${describeSutError(err)}`;
+      checks.push(fail(`trial[${i}]`, detail, BUG));
+    }
+  }
+  if (attempted > 0 && checks.length === 0) {
+    checks.push(pass("implicit-rejection", `${noError}/${attempted} corrupted ciphertexts implicitly rejected: no error, correct length, deterministic, distinct from honest ss`, BUG));
+  }
+  const status = rollUp(checks);
+  return {
+    category: "implicit-rejection",
+    status,
+    bugClass: BUG,
+    checks,
+    summary: status === "pass" ? `${attempted} corrupted ciphertexts handled by implicit rejection` : `implicit-rejection violations detected (no-error:${noError} len:${goodLen} det:${deterministic} differs:${differs} of ${attempted})`
+  };
+};
+
+// ../sieve/dist/categories/sizes.js
+var BUG2 = "AF-05";
+var sizes = async (ctx) => {
+  const checks = [];
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "sizes",
+      status: "skip",
+      bugClass: BUG2,
+      checks: [],
+      summary: "size checks for ML-DSA live in the dsa category"
+    };
+  }
+  const km = requireKem(ctx.sizes);
+  const param = km.id;
+  let pkB64;
+  try {
+    const { pk, sk } = await kemKeygen(ctx.runner, param);
+    pkB64 = toB64(pk);
+    checks.push(pk.length === km.publicKey ? pass("pk-length", `public key is ${pk.length} bytes (expected ${km.publicKey})`, BUG2) : fail("pk-length", `public key is ${pk.length} bytes, expected ${km.publicKey}`, BUG2));
+    checks.push(sk.length === km.secretKey ? pass("sk-length", `secret key is ${sk.length} bytes (expected ${km.secretKey})`, BUG2) : fail("sk-length", `secret key is ${sk.length} bytes, expected ${km.secretKey}`, BUG2));
+    const enc = await ctx.runner.send({ family: "ml-kem", param, op: "encaps", pk: pkB64 });
+    if (enc.ok === true && "ct" in enc && "ss" in enc) {
+      const ct = Buffer.from(enc.ct, "base64");
+      const ss = Buffer.from(enc.ss, "base64");
+      checks.push(ct.length === km.ciphertext ? pass("ct-length", `ciphertext is ${ct.length} bytes (expected ${km.ciphertext})`, BUG2) : fail("ct-length", `ciphertext is ${ct.length} bytes, expected ${km.ciphertext}`, BUG2));
+      checks.push(ss.length === km.sharedSecret ? pass("ss-length", `shared secret is ${ss.length} bytes (expected ${km.sharedSecret})`, BUG2) : fail("ss-length", `shared secret is ${ss.length} bytes, expected ${km.sharedSecret}`, BUG2));
+    } else {
+      checks.push(fail("encaps-shape", "encaps did not return ct/ss for a valid public key", BUG2));
+    }
+  } catch (err) {
+    const detail = err instanceof UnexpectedResponse ? `SUT returned an unexpected response: ${err.message}` : `harness error: ${describeSutError(err)}`;
+    checks.push(fail("positive-sizes", detail, BUG2));
+    pkB64 = "";
+  }
+  await expectReject(checks, "encaps-pk-too-short", () => kemEncapsRaw(ctx.runner, param, zerosB64(km.publicKey - 1)));
+  await expectReject(checks, "encaps-pk-too-long", () => kemEncapsRaw(ctx.runner, param, zerosB64(km.publicKey + 1)));
+  const skZeros = zerosB64(km.secretKey);
+  await expectReject(checks, "decaps-ct-too-short", () => kemDecapsRaw(ctx.runner, param, skZeros, zerosB64(km.ciphertext - 1)));
+  await expectReject(checks, "decaps-ct-too-long", () => kemDecapsRaw(ctx.runner, param, skZeros, zerosB64(km.ciphertext + 1)));
+  await expectReject(checks, "decaps-sk-too-short", () => kemDecapsRaw(ctx.runner, param, zerosB64(km.secretKey - 1), zerosB64(km.ciphertext)));
+  if (pkB64.length > 0) {
+    await expectReject(checks, "encaps-ek-coeff-out-of-range", () => kemEncapsRaw(ctx.runner, param, outOfRangeEk(pkB64)));
+  } else {
+    checks.push(fail("encaps-ek-coeff-out-of-range", "could not obtain a valid ek from keygen to build the modulus-range probe", BUG2));
+  }
+  const status = rollUp(checks);
+  return {
+    category: "sizes",
+    status,
+    bugClass: BUG2,
+    checks,
+    summary: status === "pass" ? "all artifact lengths correct; wrong-length inputs rejected" : `${checks.filter((c) => c.status === "fail").length} size/format issue(s)`
+  };
+};
+function outOfRangeEk(ekB64) {
+  const buf = Buffer.from(ekB64, "base64");
+  if (buf.length >= 2) {
+    buf[0] = 255;
+    buf[1] = buf[1] | 15;
+  }
+  return buf.toString("base64");
+}
+async function expectReject(checks, name, op) {
+  try {
+    const resp = await op();
+    if (resp.ok === false) {
+      checks.push(pass(name, `rejected with defined error: ${resp.code} (${resp.message})`, BUG2));
+    } else {
+      checks.push(fail(name, "SUT accepted a wrong-length input and returned a success result", BUG2));
+    }
+  } catch (err) {
+    checks.push(fail(name, `SUT crashed/hung on a wrong-length input instead of returning a defined error: ${describeSutError(err)}`, BUG2));
+  }
+}
+
+// ../sieve/dist/categories/robustness.js
+var OVERSIZE = 1 << 20;
+var robustness = async (ctx) => {
+  const checks = [];
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "robustness",
+      status: "skip",
+      checks: [],
+      summary: "robustness probes currently target ML-KEM"
+    };
+  }
+  const km = requireKem(ctx.sizes);
+  const param = km.id;
+  const oversizeB64 = Buffer.alloc(OVERSIZE).toString("base64");
+  const probes = [
+    {
+      name: "encaps-empty-pk",
+      run: () => ctx.runner.send({ family: "ml-kem", param, op: "encaps", pk: "" })
+    },
+    {
+      name: "encaps-garbage-pk",
+      run: () => ctx.runner.send({ family: "ml-kem", param, op: "encaps", pk: "!!!not base64!!!" })
+    },
+    {
+      name: "encaps-oversize-pk",
+      run: () => ctx.runner.send({ family: "ml-kem", param, op: "encaps", pk: oversizeB64 })
+    },
+    {
+      name: "decaps-empty-ct",
+      run: () => ctx.runner.send({
+        family: "ml-kem",
+        param,
+        op: "decaps",
+        sk: Buffer.alloc(km.secretKey).toString("base64"),
+        ct: ""
+      })
+    },
+    {
+      name: "decaps-empty-sk",
+      run: () => ctx.runner.send({
+        family: "ml-kem",
+        param,
+        op: "decaps",
+        sk: "",
+        ct: Buffer.alloc(km.ciphertext).toString("base64")
+      })
+    },
+    {
+      name: "decaps-oversize-ct",
+      run: () => ctx.runner.send({
+        family: "ml-kem",
+        param,
+        op: "decaps",
+        sk: Buffer.alloc(km.secretKey).toString("base64"),
+        ct: oversizeB64
+      })
+    }
+  ];
+  for (const probe of probes) {
+    try {
+      const resp = await probe.run();
+      if (resp.ok === false) {
+        checks.push(pass(probe.name, `defined error: ${resp.code} (${resp.message})`));
+      } else {
+        checks.push(fail(probe.name, "SUT returned a success result for malformed input instead of an error"));
+      }
+    } catch (err) {
+      checks.push(fail(probe.name, `SUT crashed/hung on malformed input: ${describeSutError(err)}`));
+    }
+  }
+  const status = rollUp(checks);
+  const failed = checks.filter((c) => c.status === "fail").length;
+  return {
+    category: "robustness",
+    status,
+    checks,
+    summary: status === "pass" ? `${probes.length} malformed-input probes all rejected cleanly` : `${failed}/${probes.length} malformed-input probes mishandled`
+  };
+};
+
+// ../sieve/dist/sizes.js
+var TABLE = {
+  "ml-kem-512": {
+    family: "ml-kem",
+    id: "ml-kem-512",
+    publicKey: 800,
+    secretKey: 1632,
+    ciphertext: 768,
+    sharedSecret: 32
+  },
+  "ml-kem-768": {
+    family: "ml-kem",
+    id: "ml-kem-768",
+    publicKey: 1184,
+    secretKey: 2400,
+    ciphertext: 1088,
+    sharedSecret: 32
+  },
+  "ml-kem-1024": {
+    family: "ml-kem",
+    id: "ml-kem-1024",
+    publicKey: 1568,
+    secretKey: 3168,
+    ciphertext: 1568,
+    sharedSecret: 32
+  },
+  "ml-dsa-44": {
+    family: "ml-dsa",
+    id: "ml-dsa-44",
+    publicKey: 1312,
+    secretKey: 2560,
+    signature: 2420
+  },
+  "ml-dsa-65": {
+    family: "ml-dsa",
+    id: "ml-dsa-65",
+    publicKey: 1952,
+    secretKey: 4032,
+    signature: 3309
+  },
+  "ml-dsa-87": {
+    family: "ml-dsa",
+    id: "ml-dsa-87",
+    publicKey: 2592,
+    secretKey: 4896,
+    signature: 4627
+  },
+  // SLH-DSA (FIPS 205, Table 2). SHA2 and SHAKE share sizes per level/variant.
+  "slh-dsa-sha2-128s": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-128s",
+    publicKey: 32,
+    secretKey: 64,
+    signature: 7856
+  },
+  "slh-dsa-shake-128s": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-128s",
+    publicKey: 32,
+    secretKey: 64,
+    signature: 7856
+  },
+  "slh-dsa-sha2-128f": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-128f",
+    publicKey: 32,
+    secretKey: 64,
+    signature: 17088
+  },
+  "slh-dsa-shake-128f": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-128f",
+    publicKey: 32,
+    secretKey: 64,
+    signature: 17088
+  },
+  "slh-dsa-sha2-192s": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-192s",
+    publicKey: 48,
+    secretKey: 96,
+    signature: 16224
+  },
+  "slh-dsa-shake-192s": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-192s",
+    publicKey: 48,
+    secretKey: 96,
+    signature: 16224
+  },
+  "slh-dsa-sha2-192f": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-192f",
+    publicKey: 48,
+    secretKey: 96,
+    signature: 35664
+  },
+  "slh-dsa-shake-192f": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-192f",
+    publicKey: 48,
+    secretKey: 96,
+    signature: 35664
+  },
+  "slh-dsa-sha2-256s": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-256s",
+    publicKey: 64,
+    secretKey: 128,
+    signature: 29792
+  },
+  "slh-dsa-shake-256s": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-256s",
+    publicKey: 64,
+    secretKey: 128,
+    signature: 29792
+  },
+  "slh-dsa-sha2-256f": {
+    family: "slh-dsa",
+    id: "slh-dsa-sha2-256f",
+    publicKey: 64,
+    secretKey: 128,
+    signature: 49856
+  },
+  "slh-dsa-shake-256f": {
+    family: "slh-dsa",
+    id: "slh-dsa-shake-256f",
+    publicKey: 64,
+    secretKey: 128,
+    signature: 49856
+  }
+};
+var PARAM_SETS = Object.keys(TABLE);
+function isParamSet(s) {
+  return Object.prototype.hasOwnProperty.call(TABLE, s);
+}
+function sizesFor(id) {
+  const entry = TABLE[id];
+  if (entry === void 0) {
+    throw new RangeError(`unknown parameter set: ${id}`);
+  }
+  return entry;
+}
+function asSignatureSizes(s) {
+  return s.family === "ml-dsa" || s.family === "slh-dsa" ? s : void 0;
+}
+
+// ../sieve/dist/categories/signature.js
+var BUG_SIZE = "AF-05";
+function makeSignatureCategory(name, family) {
+  return async (ctx) => {
+    const d = asSignatureSizes(ctx.sizes);
+    if (!d || d.family !== family) {
+      return {
+        category: name,
+        status: "skip",
+        checks: [],
+        summary: `${name} category applies only to ${family} parameter sets`
+      };
+    }
+    return runSignature(name, family, d, ctx);
+  };
+}
+async function runSignature(name, family, d, ctx) {
+  const param = d.id;
+  const checks = [];
+  const msgs = makeMessages(ctx.iterations);
+  let pkB64;
+  let skB64;
+  try {
+    const kg = await ctx.runner.send({ family, param, op: "keygen" });
+    if (kg.ok !== true || !("pk" in kg) || !("sk" in kg)) {
+      return wrap(name, checks, [fail("keygen", `${family} keygen did not return pk/sk`)]);
+    }
+    pkB64 = kg.pk;
+    skB64 = kg.sk;
+    const pk = fromB64(pkB64);
+    const sk = fromB64(skB64);
+    checks.push(pk.length === d.publicKey ? pass("pk-length", `verification key ${pk.length} bytes (expected ${d.publicKey})`, BUG_SIZE) : fail("pk-length", `verification key ${pk.length} bytes, expected ${d.publicKey}`, BUG_SIZE));
+    checks.push(sk.length === d.secretKey ? pass("sk-length", `signing key ${sk.length} bytes (expected ${d.secretKey})`, BUG_SIZE) : fail("sk-length", `signing key ${sk.length} bytes, expected ${d.secretKey}`, BUG_SIZE));
+  } catch (err) {
+    return wrap(name, checks, [fail("keygen", `harness error: ${describeSutError(err)}`)]);
+  }
+  let signed;
+  try {
+    signed = await ctx.runner.sendMany(msgs.map((msg) => ({ family, param, op: "sign", sk: skB64, msg })), ctx.pipelineDepth ?? 16);
+  } catch (err) {
+    return wrap(name, checks, [fail("sign", `harness error: ${describeSutError(err)}`)]);
+  }
+  let goodVerify = 0;
+  let tamperMsgCaught = 0;
+  let tamperSigCaught = 0;
+  let sigLenOk = 0;
+  let attempts = 0;
+  for (let i = 0; i < msgs.length; i++) {
+    const msgB64 = msgs[i];
+    const s = signed[i];
+    attempts++;
+    if (s.ok !== true || !("sig" in s)) {
+      checks.push(fail(`sign[${i}]`, "sign did not return a signature"));
+      continue;
+    }
+    const sigB64 = s.sig;
+    const sig = fromB64(sigB64);
+    if (sig.length === d.signature) {
+      sigLenOk++;
+    } else if (i < 3) {
+      checks.push(fail(`sig-length[${i}]`, `signature ${sig.length} bytes, expected ${d.signature}`, BUG_SIZE));
+    }
+    try {
+      const tamperedMsg = flipBitB64(msgB64.length > 0 ? msgB64 : toB64(new Uint8Array([0])), 0, 1);
+      const tamperedSig = flipBitB64(sigB64, sig.length >> 1, 3);
+      const [good, badMsg, badSig] = await ctx.runner.sendMany([
+        { family, param, op: "verify", pk: pkB64, msg: msgB64, sig: sigB64 },
+        { family, param, op: "verify", pk: pkB64, msg: tamperedMsg, sig: sigB64 },
+        { family, param, op: "verify", pk: pkB64, msg: msgB64, sig: tamperedSig }
+      ], ctx.pipelineDepth ?? 16);
+      if (verdict(good)) {
+        goodVerify++;
+      } else if (i < 3) {
+        checks.push(fail(`verify[${i}]`, "a freshly produced signature failed to verify"));
+      }
+      if (!verdict(badMsg)) {
+        tamperMsgCaught++;
+      } else if (i < 3) {
+        checks.push(fail(`tamper-msg[${i}]`, "signature verified against a different message"));
+      }
+      if (!verdict(badSig)) {
+        tamperSigCaught++;
+      } else if (i < 3) {
+        checks.push(fail(`tamper-sig[${i}]`, "a bit-flipped signature still verified"));
+      }
+    } catch (err) {
+      checks.push(fail(`verify[${i}]`, `harness error: ${describeSutError(err)}`));
+    }
+  }
+  if (attempts > 0) {
+    if (goodVerify === attempts) {
+      checks.push(pass("sign-verify", `${goodVerify}/${attempts} signatures verified`));
+    }
+    if (tamperMsgCaught === attempts) {
+      checks.push(pass("tamper-msg", `${tamperMsgCaught}/${attempts} altered-message forgeries rejected`));
+    }
+    if (tamperSigCaught === attempts) {
+      checks.push(pass("tamper-sig", `${tamperSigCaught}/${attempts} altered-signature forgeries rejected`));
+    }
+    if (sigLenOk === attempts) {
+      checks.push(pass("sig-length", `all ${sigLenOk} signatures had the expected ${d.signature} bytes`, BUG_SIZE));
+    }
+  }
+  await probeSigningMode(checks, ctx, family, param, skB64, pkB64);
+  await expectVerifyReject(checks, "verify-pk-too-short", () => ctx.runner.send({
+    family,
+    param,
+    op: "verify",
+    pk: zerosB64(d.publicKey - 1),
+    msg: toB64(new Uint8Array([1, 2, 3])),
+    sig: zerosB64(d.signature)
+  }));
+  await expectVerifyReject(checks, "verify-sig-too-long", () => ctx.runner.send({
+    family,
+    param,
+    op: "verify",
+    pk: pkB64,
+    msg: toB64(new Uint8Array([1, 2, 3])),
+    sig: zerosB64(d.signature + 1)
+  }));
+  return wrap(name, checks, []);
+}
+function verdict(resp) {
+  if (resp.ok !== true || !("valid" in resp)) {
+    throw new Error("verify did not return a 'valid' verdict");
+  }
+  return resp.valid;
+}
+async function probeSigningMode(checks, ctx, family, param, skB64, pkB64) {
+  const msgB64 = toB64(new Uint8Array([115, 105, 103, 109, 111, 100, 101]));
+  try {
+    const [a, b] = await ctx.runner.sendMany(
+      [
+        { family, param, op: "sign", sk: skB64, msg: msgB64 },
+        { family, param, op: "sign", sk: skB64, msg: msgB64 }
+      ],
+      // Keep these two strictly ordered/serial-equivalent is unnecessary; they
+      // are independent. A depth of 2 is fine.
+      2
+    );
+    if (a.ok !== true || !("sig" in a) || b.ok !== true || !("sig" in b)) {
+      checks.push(skip("signing-mode", "could not obtain two signatures to compare (advisory)"));
+      return;
+    }
+    const deterministic = a.sig === b.sig;
+    checks.push(skip("signing-mode", deterministic ? "advisory: sign(sk, msg) is DETERMINISTIC (identical signatures for a repeated message)" : "advisory: sign(sk, msg) is HEDGED/randomized (signatures differ across calls)"));
+    const [va, vb] = await ctx.runner.sendMany([
+      { family, param, op: "verify", pk: pkB64, msg: msgB64, sig: a.sig },
+      { family, param, op: "verify", pk: pkB64, msg: msgB64, sig: b.sig }
+    ], 2);
+    if (verdict(va) && verdict(vb)) {
+      checks.push(pass("signing-mode-verify", "both repeated-message signatures verify"));
+    } else {
+      checks.push(fail("signing-mode-verify", "a repeated-message signature failed to verify"));
+    }
+  } catch (err) {
+    checks.push(skip("signing-mode", `advisory probe could not run: ${describeSutError(err)}`));
+  }
+}
+function wrap(name, checks, extra) {
+  const all = [...checks, ...extra];
+  const status = rollUp(all);
+  return {
+    category: name,
+    status,
+    checks: all,
+    summary: status === "pass" ? `${name} sign/verify self-consistency holds` : `${all.filter((c) => c.status === "fail").length} ${name} issue(s)`
+  };
+}
+async function expectVerifyReject(checks, name, op) {
+  try {
+    const resp = await op();
+    if (resp.ok === false) {
+      checks.push(pass(name, `rejected with defined error: ${resp.code}`, BUG_SIZE));
+    } else if ("valid" in resp && resp.valid === false) {
+      checks.push(pass(name, "wrong-length input verified as false (acceptable)", BUG_SIZE));
+    } else {
+      checks.push(fail(name, "SUT accepted a wrong-length verify input and verified true", BUG_SIZE));
+    }
+  } catch (err) {
+    checks.push(fail(name, `SUT crashed/hung on wrong-length verify input: ${describeSutError(err)}`, BUG_SIZE));
+  }
+}
+function makeMessages(n) {
+  const out = [];
+  const count = Math.max(1, Math.min(n, 16));
+  for (let i = 0; i < count; i++) {
+    const len = i * 7 % 33;
+    const bytes = new Uint8Array(len);
+    for (let j = 0; j < len; j++)
+      bytes[j] = i * 31 + j * 17 & 255;
+    out.push(toB64(bytes));
+  }
+  return out;
+}
+
+// ../sieve/dist/categories/dsa.js
+var dsa = makeSignatureCategory("dsa", "ml-dsa");
+
+// ../sieve/dist/categories/slh-dsa.js
+var slhDsa = makeSignatureCategory("slh-dsa", "slh-dsa");
+
+// ../sieve/dist/vectors.js
+import { createHash as createHash7 } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join as join5 } from "node:path";
+function hexToBytes(hex) {
+  const clean = hex.trim();
+  if (clean.length === 0)
+    return new Uint8Array(0);
+  if (clean.length % 2 !== 0 || /[^0-9a-fA-F]/.test(clean)) {
+    throw new Error(`invalid hex string (len ${clean.length})`);
+  }
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+function normParam(family, raw) {
+  if (typeof raw !== "string")
+    return void 0;
+  const s = raw.toLowerCase().replace(/_/g, "-");
+  if (isParamSet(s) && s.startsWith(family))
+    return s;
+  return void 0;
+}
+function asArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+function asObj(v) {
+  return typeof v === "object" && v !== null ? v : {};
+}
+function str2(v) {
+  return typeof v === "string" ? v : void 0;
+}
+function parseAcvpDocument(doc, notes, file) {
+  const root = asObj(doc);
+  const algorithm = str2(root["algorithm"])?.toUpperCase() ?? "";
+  const mode = str2(root["mode"])?.toLowerCase() ?? "";
+  const out = [];
+  const family = algorithm.includes("KEM") ? "ml-kem" : algorithm.includes("SLH") ? "slh-dsa" : algorithm.includes("DSA") ? "ml-dsa" : void 0;
+  if (family === void 0) {
+    notes.push(`${file}: unrecognized algorithm "${algorithm}", skipped`);
+    return out;
+  }
+  for (const groupRaw of asArray(root["testGroups"])) {
+    const group = asObj(groupRaw);
+    const param = normParam(family, group["parameterSet"]);
+    if (param === void 0) {
+      notes.push(`${file}: skipped group with parameterSet=${String(group["parameterSet"])}`);
+      continue;
+    }
+    const fn = str2(group["function"])?.toLowerCase();
+    for (const testRaw of asArray(group["tests"])) {
+      const t = asObj(testRaw);
+      try {
+        if (family === "ml-kem") {
+          if (mode.includes("keygen")) {
+            const d = str2(t["d"]);
+            const z = str2(t["z"]);
+            const seedHex = str2(t["seed"]) ?? (d && z ? d + z : void 0);
+            out.push({
+              kind: "kem-keygen",
+              param,
+              ...seedHex ? { seed: hexToBytes(seedHex) } : {},
+              pk: hexToBytes(reqHex(t, "ek", "pk")),
+              sk: hexToBytes(reqHex(t, "dk", "sk"))
+            });
+          } else if (mode.includes("encapdecap") || mode.includes("encap")) {
+            if (fn === "decapsulation" || "dk" in t && "c" in t) {
+              out.push({
+                kind: "kem-decap",
+                param,
+                sk: hexToBytes(reqHex(t, "dk", "sk")),
+                ct: hexToBytes(reqHex(t, "c", "ct")),
+                ss: hexToBytes(reqHex(t, "k", "ss"))
+              });
+            } else {
+              const m = str2(t["m"]);
+              out.push({
+                kind: "kem-encap",
+                param,
+                pk: hexToBytes(reqHex(t, "ek", "pk")),
+                ...m ? { coins: hexToBytes(m) } : {},
+                ct: hexToBytes(reqHex(t, "c", "ct")),
+                ss: hexToBytes(reqHex(t, "k", "ss"))
+              });
+            }
+          } else {
+            notes.push(`${file}: unrecognized ML-KEM mode "${mode}"`);
+          }
+        } else {
+          if (mode.includes("sigver") || "signature" in t && "pk" in t) {
+            const expected = t["testPassed"];
+            if (typeof expected !== "boolean") {
+              notes.push(`${file}: skipped a sigVer case with no boolean "testPassed" verdict`);
+              continue;
+            }
+            out.push({
+              kind: "dsa-verify",
+              param,
+              pk: hexToBytes(reqHex(t, "pk", "ek")),
+              msg: hexToBytes(reqHex(t, "message", "msg")),
+              sig: hexToBytes(reqHex(t, "signature", "sig")),
+              expected
+            });
+          } else {
+            notes.push(`${file}: ML-DSA mode "${mode}" not used for KAT (sign is nonce-dependent)`);
+          }
+        }
+      } catch (err) {
+        notes.push(`${file}: skipped a test case: ${err.message}`);
+      }
+    }
+  }
+  return out;
+}
+function reqHex(t, ...keys) {
+  for (const k of keys) {
+    const v = str2(t[k]);
+    if (v !== void 0)
+      return v;
+  }
+  throw new Error(`missing field (any of: ${keys.join(", ")})`);
+}
+var VECTORS_MANIFEST = "vectors-manifest.json";
+function loadVectors(dir) {
+  const st = statSync(dir);
+  if (!st.isDirectory()) {
+    throw new Error(`--vectors path is not a directory: ${dir}`);
+  }
+  let declaredSource;
+  try {
+    const m = JSON.parse(readFileSync(join5(dir, VECTORS_MANIFEST), "utf8"));
+    if (typeof m.sourceUrl === "string" && m.sourceUrl.trim())
+      declaredSource = m.sourceUrl.trim();
+  } catch {
+  }
+  const entries = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".json") && f.toLowerCase() !== VECTORS_MANIFEST);
+  if (entries.length === 0) {
+    throw new Error(`no .json vector files found in ${dir}`);
+  }
+  const vectors = [];
+  const files = [];
+  const notes = [];
+  const provenance = [];
+  for (const name of entries) {
+    const path10 = join5(dir, name);
+    const raw = readFileSync(path10);
+    const sha256 = createHash7("sha256").update(raw).digest("hex");
+    let doc;
+    try {
+      doc = JSON.parse(raw.toString("utf8"));
+    } catch (err) {
+      notes.push(`${name}: not valid JSON (${err.message})`);
+      continue;
+    }
+    files.push(name);
+    const before = vectors.length;
+    const docs = Array.isArray(doc) ? doc : [doc];
+    for (const d of docs) {
+      vectors.push(...parseAcvpDocument(d, notes, name));
+    }
+    const root = asObj(docs[0]);
+    const params = /* @__PURE__ */ new Set();
+    for (const g of asArray(root["testGroups"])) {
+      const p = str2(asObj(g)["parameterSet"]);
+      if (p)
+        params.add(p);
+    }
+    provenance.push({
+      path: name,
+      sha256,
+      sizeBytes: raw.length,
+      algorithm: str2(root["algorithm"]) ?? null,
+      mode: str2(root["mode"]) ?? null,
+      parameterSets: [...params],
+      sourceUrl: declaredSource ?? "unknown (operator-supplied)",
+      casesUsed: vectors.length - before
+    });
+  }
+  return { vectors, files, notes, provenance, provenanceDeclared: declaredSource !== void 0 };
+}
+
+// ../sieve/dist/categories/kat.js
+var kat = async (ctx) => {
+  if (!ctx.vectorsDir) {
+    return {
+      category: "kat",
+      status: "skip",
+      checks: [
+        skip("vectors", "no --vectors <dir> supplied; Sieve ships no test vectors and will not fabricate them. See vectors/README.md to obtain official NIST ACVP files.")
+      ],
+      summary: "skipped \u2014 no official vectors provided"
+    };
+  }
+  const checks = [];
+  let loaded;
+  try {
+    loaded = loadVectors(ctx.vectorsDir);
+  } catch (err) {
+    return {
+      category: "kat",
+      status: "fail",
+      checks: [
+        fail("load", `could not load vectors from ${ctx.vectorsDir}: ${describeSutError(err)}`)
+      ],
+      summary: "vector load failed"
+    };
+  }
+  for (const note of loaded.notes.slice(0, 10)) {
+    checks.push(skip("note", note));
+  }
+  const param = ctx.sizes.id;
+  const relevant = loaded.vectors.filter((v) => v.param === param);
+  if (relevant.length === 0) {
+    checks.push(skip("applicable", `loaded ${loaded.vectors.length} vector(s) from ${loaded.files.length} file(s), but none for ${param}`));
+    const status2 = rollUp(checks);
+    return { category: "kat", status: status2, checks, summary: `no ${param} vectors among supplied files` };
+  }
+  let okCount = 0;
+  let skipCount = 0;
+  let idx = 0;
+  for (const v of relevant) {
+    idx++;
+    try {
+      const result = await checkVector(ctx, v);
+      if (result.skipped) {
+        skipCount++;
+        checks.push(skip(`${v.kind}[${idx}]`, result.detail));
+      } else if (result.ok) {
+        okCount++;
+      } else {
+        checks.push(fail(`${v.kind}[${idx}]`, result.detail, void 0));
+      }
+    } catch (err) {
+      checks.push(fail(`${v.kind}[${idx}]`, `harness error: ${describeSutError(err)}`));
+    }
+  }
+  const verified = relevant.length - skipCount;
+  if (okCount > 0) {
+    checks.push(pass("kat", `${okCount}/${verified} ${param} vectors matched expected values`));
+  } else if (skipCount > 0) {
+    checks.push(skip("kat", `all ${skipCount} ${param} vector(s) were unverifiable (no seed/coins)`));
+  }
+  const status = rollUp(checks);
+  return {
+    category: "kat",
+    status,
+    checks,
+    summary: status === "pass" ? `${okCount} ${param} KAT vectors passed` : `${checks.filter((c) => c.status === "fail").length} KAT mismatch(es)`
+  };
+};
+async function checkVector(ctx, v) {
+  const { runner } = ctx;
+  const param = v.param;
+  switch (v.kind) {
+    case "kem-keygen": {
+      if (!v.seed)
+        return { ok: false, skipped: true, detail: "no seed; skipped" };
+      const resp = await runner.send({
+        family: "ml-kem",
+        param,
+        op: "keygen",
+        seed: toB64(v.seed)
+      });
+      if (resp.ok !== true || !("pk" in resp) || !("sk" in resp)) {
+        return {
+          ok: false,
+          detail: "seeded keygen did not return pk/sk (SUT may not support seeds)"
+        };
+      }
+      const pkOk = bytesEqual(fromB64(resp.pk), v.pk);
+      const skOk = bytesEqual(fromB64(resp.sk), v.sk);
+      return pkOk && skOk ? { ok: true, detail: "pk/sk match" } : { ok: false, detail: `seeded keygen mismatch (pkOk=${pkOk}, skOk=${skOk})` };
+    }
+    case "kem-encap": {
+      if (!v.coins)
+        return { ok: false, skipped: true, detail: "no coins; skipped" };
+      const resp = await runner.send({
+        family: "ml-kem",
+        param,
+        op: "encaps",
+        pk: toB64(v.pk),
+        coins: toB64(v.coins)
+      });
+      if (resp.ok !== true || !("ct" in resp) || !("ss" in resp)) {
+        return {
+          ok: false,
+          detail: "deterministic encaps did not return ct/ss (SUT may not support coins)"
+        };
+      }
+      const ctOk = bytesEqual(fromB64(resp.ct), v.ct);
+      const ssOk = bytesEqual(fromB64(resp.ss), v.ss);
+      return ctOk && ssOk ? { ok: true, detail: "ct/ss match" } : { ok: false, detail: `encaps mismatch (ctOk=${ctOk}, ssOk=${ssOk})` };
+    }
+    case "kem-decap": {
+      const resp = await runner.send({
+        family: "ml-kem",
+        param,
+        op: "decaps",
+        sk: toB64(v.sk),
+        ct: toB64(v.ct)
+      });
+      if (resp.ok !== true || !("ss" in resp)) {
+        return { ok: false, detail: "decaps did not return ss" };
+      }
+      return bytesEqual(fromB64(resp.ss), v.ss) ? { ok: true, detail: "ss matches" } : { ok: false, detail: "decaps shared secret does not match expected" };
+    }
+    case "dsa-verify": {
+      const resp = await runner.send({
+        family: "ml-dsa",
+        param,
+        op: "verify",
+        pk: toB64(v.pk),
+        msg: toB64(v.msg),
+        sig: toB64(v.sig)
+      });
+      if (resp.ok !== true || !("valid" in resp)) {
+        return { ok: false, detail: "verify did not return a 'valid' verdict" };
+      }
+      return resp.valid === v.expected ? { ok: true, detail: `verdict ${resp.valid} matches expected` } : { ok: false, detail: `verify returned ${resp.valid}, expected ${v.expected}` };
+    }
+  }
+}
+
+// ../sieve/dist/categories/timing.js
+var timing = async (ctx) => {
+  if (ctx.sizes.family !== "ml-kem") {
+    return {
+      category: "timing",
+      status: "skip",
+      checks: [skip("applicability", "timing probe targets ML-KEM decaps")],
+      summary: "skipped (not ML-KEM)"
+    };
+  }
+  const km = requireKem(ctx.sizes);
+  const param = km.id;
+  const checks = [];
+  let skB64;
+  let honestCtB64;
+  let badCtB64;
+  try {
+    const { pk, sk } = await kemKeygen(ctx.runner, param);
+    skB64 = toB64(sk);
+    const { ct } = await kemEncaps(ctx.runner, param, toB64(pk));
+    honestCtB64 = toB64(ct);
+    badCtB64 = flipBitB64(honestCtB64, 0, 0);
+  } catch (err) {
+    return {
+      category: "timing",
+      status: "skip",
+      checks: [skip("setup", `could not set up timing probe: ${describeSutError(err)}`)],
+      summary: "skipped \u2014 setup failed"
+    };
+  }
+  const trials = Math.max(50, Math.min(ctx.iterations * 20, 2e3));
+  for (let i = 0; i < 10; i++) {
+    await kemDecapsRaw(ctx.runner, param, skB64, honestCtB64);
+    await kemDecapsRaw(ctx.runner, param, skB64, badCtB64);
+  }
+  const validTimes = await measure(ctx, skB64, honestCtB64, trials, param);
+  const invalidTimes = await measure(ctx, skB64, badCtB64, trials, param);
+  const vMed = median(validTimes);
+  const iMed = median(invalidTimes);
+  const denom = Math.min(vMed, iMed) || 1;
+  const relDiff = Math.abs(vMed - iMed) / denom;
+  const ADVISORY_THRESHOLD = 0.25;
+  const signal = relDiff > ADVISORY_THRESHOLD;
+  const detail = `valid decaps median ${vMed.toFixed(3)}ms, invalid median ${iMed.toFixed(3)}ms (rel. diff ${(relDiff * 100).toFixed(1)}%, ${trials} trials each). ` + (signal ? "ADVISORY: noticeable timing gap between valid/invalid decaps \u2014 investigate with in-process constant-time tooling; cross-process timing is noisy and not conclusive." : "no strong cross-process timing signal (this is NOT proof of constant-time behavior).");
+  checks.push(pass("decaps-timing", detail));
+  return {
+    category: "timing",
+    status: "pass",
+    checks,
+    summary: signal ? `ADVISORY timing signal: ${(relDiff * 100).toFixed(1)}% median gap (not a verdict)` : `no strong timing signal (${(relDiff * 100).toFixed(1)}% median gap, advisory)`
+  };
+};
+async function measure(ctx, skB64, ctB64, trials, param) {
+  const out = [];
+  for (let i = 0; i < trials; i++) {
+    const t0 = performance.now();
+    await kemDecapsRaw(ctx.runner, param, skB64, ctB64);
+    out.push(performance.now() - t0);
+  }
+  return out;
+}
+function median(xs) {
+  if (xs.length === 0)
+    return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+// ../sieve/dist/categories/index.js
+var CATEGORIES = [
+  { name: "correctness", family: "ml-kem", defaultOn: true, run: correctness },
+  { name: "determinism", family: "ml-kem", defaultOn: true, run: determinism },
+  { name: "implicit-rejection", family: "ml-kem", defaultOn: true, run: implicitRejection },
+  { name: "sizes", family: "ml-kem", defaultOn: true, run: sizes },
+  { name: "robustness", family: "ml-kem", defaultOn: true, run: robustness },
+  { name: "dsa", family: "ml-dsa", defaultOn: true, run: dsa },
+  { name: "slh-dsa", family: "slh-dsa", defaultOn: true, run: slhDsa },
+  { name: "kat", family: "any", defaultOn: true, run: kat },
+  { name: "timing", family: "ml-kem", defaultOn: false, run: timing }
+];
+function categoriesFor(family, includeTiming) {
+  return CATEGORIES.filter((c) => (c.family === family || c.family === "any") && (c.defaultOn || c.name === "timing" && includeTiming));
+}
+
+// ../sieve/dist/report.js
+var ADVISORY_CATEGORIES = /* @__PURE__ */ new Set(["timing"]);
+var HARNESS_CATEGORY = "harness";
+function tally(categories) {
+  const counts = { pass: 0, fail: 0, skip: 0 };
+  for (const c of categories) {
+    for (const chk of c.checks)
+      counts[chk.status]++;
+  }
+  return counts;
+}
+function overallVerdict(categories) {
+  if (categories.some((c) => c.category === HARNESS_CATEGORY && c.status === "fail"))
+    return "ERROR";
+  for (const c of categories) {
+    if (ADVISORY_CATEGORIES.has(c.category))
+      continue;
+    if (c.status === "fail")
+      return "FAIL";
+  }
+  return "PASS";
+}
+function buildReport(args) {
+  return {
+    tool: "sieve",
+    protocolVersion: PROTOCOL_VERSION,
+    param: args.param,
+    impl: args.impl,
+    iterations: args.iterations,
+    ...args.vectorsDir ? { vectorsDir: args.vectorsDir } : {},
+    startedAt: args.startedAt.toISOString(),
+    durationMs: args.durationMs,
+    overall: overallVerdict(args.categories),
+    categories: args.categories,
+    counts: tally(args.categories),
+    ...args.provenance ? { provenance: args.provenance } : {},
+    ...args.provenanceDeclared !== void 0 ? { provenanceDeclared: args.provenanceDeclared } : {}
+  };
+}
+
+// ../sieve/dist/index.js
+function unusableSut(runner, results) {
+  if (runner.answeredCount > 0)
+    return null;
+  if (!results.some((r) => r.status === "fail"))
+    return null;
+  const fatal = runner.fatalError;
+  return {
+    category: HARNESS_CATEGORY,
+    status: "fail",
+    checks: [
+      {
+        name: "sut-startup",
+        status: "fail",
+        // A dead process carries a crash error with the child's stderr. A SUT
+        // that spawned but never replied has neither, so say exactly that
+        // rather than dressing up silence as a diagnosis.
+        detail: fatal ? describeSutError(fatal) : "SUT started but never returned a protocol response (every request timed out)"
+      }
+    ],
+    summary: "the implementation under test could not be run, so no conformance checks were performed"
+  };
+}
+async function runSieve(opts) {
+  if (!isParamSet(opts.param)) {
+    throw new RangeError(`unknown parameter set: ${opts.param}`);
+  }
+  const sizes2 = sizesFor(opts.param);
+  const iterations = opts.iterations ?? 32;
+  const startedAt = /* @__PURE__ */ new Date();
+  const t0 = performance.now();
+  const runner = new Runner({
+    command: opts.command,
+    ...opts.timeoutMs !== void 0 ? { timeoutMs: opts.timeoutMs } : {},
+    ...opts.cwd ? { cwd: opts.cwd } : {},
+    ...opts.env ? { env: opts.env } : {},
+    ...opts.inheritEnv !== void 0 ? { inheritEnv: opts.inheritEnv } : {},
+    ...opts.envAllowlist ? { envAllowlist: opts.envAllowlist } : {}
+  });
+  const pipelineDepth = opts.pipelineDepth ?? 16;
+  const results = [];
+  try {
+    let cats = categoriesFor(sizes2.family, opts.timing ?? false);
+    if (opts.only && opts.only.length > 0) {
+      const want = new Set(opts.only);
+      cats = cats.filter((c) => want.has(c.name));
+    }
+    for (const cat of cats) {
+      try {
+        const res = await cat.run({
+          runner,
+          sizes: sizes2,
+          iterations,
+          pipelineDepth,
+          ...opts.vectorsDir ? { vectorsDir: opts.vectorsDir } : {}
+        });
+        results.push(res);
+      } catch (err) {
+        results.push({
+          category: cat.name,
+          status: "fail",
+          checks: [
+            {
+              name: "category-error",
+              status: "fail",
+              detail: `category threw: ${err.message}`
+            }
+          ],
+          summary: "category aborted with an error"
+        });
+      }
+    }
+  } finally {
+    await runner.close();
+  }
+  const unusable = unusableSut(runner, results);
+  if (unusable) {
+    results.length = 0;
+    results.push(unusable);
+  }
+  let provenance;
+  let provenanceDeclared;
+  if (opts.vectorsDir) {
+    try {
+      const vs = loadVectors(opts.vectorsDir);
+      provenance = vs.provenance;
+      provenanceDeclared = vs.provenanceDeclared;
+    } catch {
+    }
+  }
+  return buildReport({
+    param: opts.param,
+    impl: [...opts.command],
+    iterations,
+    ...opts.vectorsDir ? { vectorsDir: opts.vectorsDir } : {},
+    startedAt,
+    durationMs: Math.round(performance.now() - t0),
+    categories: results,
+    ...provenance ? { provenance, provenanceDeclared } : {}
+  });
+}
+
+// src/platform.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+var MAX_FINDINGS = 200;
+function readDispatchContext(env = process.env) {
+  const path10 = env["GITHUB_EVENT_PATH"];
+  if (!path10) return null;
+  try {
+    const event = JSON.parse(readFileSync2(path10, "utf8"));
+    const p = event.client_payload;
+    if (!p) return null;
+    const auditRunId = typeof p.auditRunId === "string" ? p.auditRunId : "";
+    const token = typeof p.token === "string" ? p.token : "";
+    const resultUrl = typeof p.resultUrl === "string" ? p.resultUrl : "";
+    if (!auditRunId || !token || !resultUrl) return null;
+    return {
+      auditRunId,
+      token,
+      resultUrl,
+      eventType: typeof event.action === "string" ? event.action : null
+    };
+  } catch {
+    return null;
+  }
+}
+function toPayloadFindings(findings) {
+  return findings.slice(0, MAX_FINDINGS).map((f) => ({
+    ...f.ruleId ? { rule: f.ruleId } : {},
+    ...f.severity ? { severity: f.severity } : {},
+    ...f.location?.file ? { file: f.location.file } : {},
+    ...typeof f.location?.line === "number" ? { line: f.location.line } : {},
+    ...f.title ? { message: f.title } : {}
+  }));
+}
+function scoredResult(check, tool, score, findings) {
+  const n = findings.length;
+  return {
+    status: "complete",
+    score,
+    summary: `${tool}: ${n} finding(s), readiness ${score ?? "?"}/100`,
+    findings: toPayloadFindings(findings)
+  };
+}
+function conformanceResult(report, workflowPath) {
+  const param = report.param ?? "?";
+  const failing = (report.categories ?? []).flatMap(
+    (c) => (c.checks ?? []).filter((k) => k.status === "fail").map((k) => ({
+      rule: `${c.category ?? "?"}/${k.name ?? "?"}`,
+      severity: "high",
+      message: k.detail ?? ""
+    }))
+  );
+  const neverRan = report.overall === "ERROR" || (report.counts?.pass ?? 0) === 0;
+  if (neverRan && failing.length > 0) {
+    const impl = (report.impl ?? []).join(" ");
+    return {
+      status: "failed",
+      score: null,
+      summary: `Sieve ${param}: could not run the implementation, no conformance verdict`,
+      findings: [
+        {
+          rule: "harness/implementation-not-runnable",
+          severity: "high",
+          message: `Sieve could not run the implementation under test, so this run says nothing about conformance. First error: ${failing[0]?.message ?? "unknown"}. Point conformance-impl (currently: ${impl || "unset"}) at a real executable in this repository, in ${workflowPath}.`
+        }
+      ]
+    };
+  }
+  return {
+    status: "complete",
+    score: null,
+    summary: `Sieve ${param}: ${report.overall ?? "?"}, ${failing.length} failing check(s)`,
+    findings: failing.slice(0, MAX_FINDINGS)
+  };
+}
+function crashedResult(tool, message) {
+  return {
+    status: "failed",
+    score: null,
+    summary: `${tool} did not produce a result: ${message}`,
+    findings: []
+  };
+}
+async function postResult(ctx, result, fetchImpl = fetch) {
+  const payload = { auditRunId: ctx.auditRunId, token: ctx.token, ...result };
+  try {
+    const res = await fetchImpl(ctx.resultUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "quantakrypto-action" },
+      body: JSON.stringify(payload)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// src/extra-checks.ts
+async function runProbeCheck(target) {
+  const host = normalizeProbeTarget(target);
+  try {
+    const { findings, inventory } = await runProbe({
+      // A single host, always. qProbe refuses ranges and lists outright, and the
+      // action must not be the thing that turns a scanner into a sweeper.
+      targets: [{ host, port: 443 }],
+      mode: "auto",
+      attest: { iOwnThis: true }
+    });
+    return scoredResult("probe", "qProbe", inventory.readinessScore, findings);
+  } catch (err) {
+    return crashedResult("qProbe", err.message);
+  }
+}
+async function runConformanceCheck(impl, param, workflowPath) {
+  try {
+    const report = await runSieve({
+      // Split on whitespace: Sieve takes argv, and the input is a command line.
+      command: impl.trim().split(/\s+/),
+      param: param.trim()
+    });
+    return conformanceResult(report, workflowPath);
+  } catch (err) {
+    return crashedResult("Sieve", err.message);
+  }
+}
+
 // src/io.ts
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
@@ -13757,7 +16570,15 @@ function readInputs(env = process.env) {
       );
     }
   }
+  const checks = parseChecks(getInput("checks", env));
+  const probeTarget = getInput("probe-target", env);
+  const conformanceImpl = getInput("conformance-impl", env);
+  assertCheckConfig(checks, { probeTarget, conformanceImpl });
   return {
+    checks,
+    probeTarget,
+    conformanceImpl,
+    conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
     severityThreshold,
     failOnFindings: getBooleanInput("fail-on-findings", true, env),
@@ -14054,8 +16875,32 @@ async function loadBaselineSet(baselinePath, env) {
   }
   return baseline;
 }
+var WORKFLOW_PATH = ".github/workflows/quantakrypto.yml";
+var DISPATCH_EVENT = {
+  scan: "quantakrypto-scan",
+  conformance: "quantakrypto-conformance",
+  probe: "quantakrypto-probe"
+};
+function dispatchAskedFor(eventType, check) {
+  return eventType === DISPATCH_EVENT[check];
+}
 async function run(env = process.env) {
   const inputs = readInputs(env);
+  const dispatch = readDispatchContext(env);
+  const extras = inputs.checks.filter((c) => c !== "scan");
+  for (const check of extras) {
+    info(`quantakrypto: running ${check}`);
+    const result2 = check === "probe" ? await runProbeCheck(inputs.probeTarget) : await runConformanceCheck(inputs.conformanceImpl, inputs.conformanceParam, WORKFLOW_PATH);
+    info(`quantakrypto: ${check} \u2014 ${result2.summary}`);
+    appendStepSummary(`## quantakrypto \u2014 ${check}
+
+${result2.summary}
+`, env);
+    if (dispatch && dispatchAskedFor(dispatch.eventType, check)) {
+      await postResult(dispatch, result2);
+    }
+  }
+  if (!inputs.checks.includes("scan")) return;
   const scanRoot = resolveInWorkspace(inputs.path, env);
   info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
   if (inputs.mode === "comment-plan") {
@@ -14130,6 +16975,12 @@ async function run(env = process.env) {
       `quantakrypto: mandate gate (${mandateEval.mandates.join(", ")}): ${mandateEval.summary.violation} violation, ${mandateEval.summary.deprecated} deprecated, ${mandateEval.summary.due} due` + (mandateEval.nextDeadline ? `, next deadline ${mandateEval.nextDeadline}` : "") + "."
     );
   }
+  if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
+    await postResult(
+      dispatch,
+      scoredResult("scan", "qScan", result.inventory.readinessScore, newFindings)
+    );
+  }
   const gateOpts = { leadMonths: inputs.leadMonths, failNow: inputs.failNow };
   const mandateFailed = mandateEval !== void 0 && mandateGateFails(mandateEval, gateOpts);
   const severityFailed = shouldFail(blocking.length, inputs.failOnFindings);
@@ -14153,11 +17004,13 @@ if (invokedDirectly) {
   });
 }
 export {
+  WORKFLOW_PATH,
   annotateFindings,
   buildMandateSection,
   buildPlanComment,
   buildSummary,
   describeMandateFailure,
+  dispatchAskedFor,
   fingerprintFinding as fingerprint,
   mandateGateRows,
   meetsThreshold,

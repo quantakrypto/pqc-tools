@@ -41,6 +41,9 @@ import type {
   Severity,
 } from "@quantakrypto/core";
 import { renderReport, runQscan } from "@quantakrypto/qscan";
+import { assertCheckConfig, parseChecks, type CheckId } from "./checks.js";
+import { runConformanceCheck, runProbeCheck } from "./extra-checks.js";
+import { postResult, readDispatchContext, scoredResult } from "./platform.js";
 
 import {
   appendStepSummary,
@@ -60,6 +63,14 @@ const DEFAULT_OUTPUT = "quantakrypto.sarif.json";
 
 /** Normalised, validated inputs for a run. */
 interface ActionInputs {
+  /** Which checks to run. Defaults to ["scan"], which is exactly what v1 did. */
+  checks: CheckId[];
+  /** Host for the probe check. Required only when "probe" is selected. */
+  probeTarget: string;
+  /** Command that runs the implementation under test, for "conformance". */
+  conformanceImpl: string;
+  /** Parameter set for "conformance", e.g. ml-kem-768. */
+  conformanceParam: string;
   path: string;
   severityThreshold: Severity;
   failOnFindings: boolean;
@@ -120,7 +131,16 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
       );
     }
   }
+  const checks = parseChecks(getInput("checks", env));
+  const probeTarget = getInput("probe-target", env);
+  const conformanceImpl = getInput("conformance-impl", env);
+  assertCheckConfig(checks, { probeTarget, conformanceImpl });
+
   return {
+    checks,
+    probeTarget,
+    conformanceImpl,
+    conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
     severityThreshold,
     failOnFindings: getBooleanInput("fail-on-findings", true, env),
@@ -594,9 +614,67 @@ async function loadBaselineSet(baselinePath: string, env: NodeJS.ProcessEnv): Pr
   return baseline;
 }
 
+/**
+ * Where the single workflow lives, quoted in the conformance failure message so
+ * the owner is told which file to edit rather than which tool complained.
+ */
+export const WORKFLOW_PATH = ".github/workflows/quantakrypto.yml";
+
+/**
+ * The repository_dispatch event type the platform sends per check. A run started
+ * by the dashboard names exactly one check, even though the workflow may be
+ * configured to run several.
+ */
+const DISPATCH_EVENT: Record<CheckId, string> = {
+  scan: "quantakrypto-scan",
+  conformance: "quantakrypto-conformance",
+  probe: "quantakrypto-probe",
+};
+
+/**
+ * Did this dispatch ask for this check?
+ *
+ * One audit run id belongs to one check. A workflow set to `checks: scan,probe`
+ * still receives a single dispatch naming one of them, so only that check may
+ * post against the id — otherwise the second result would overwrite the first
+ * and the dashboard would show a probe verdict under a scan run.
+ *
+ * A run with no recognisable event type (a manual dispatch that somehow carried
+ * a client_payload) reports nothing, which is the safe direction.
+ */
+export function dispatchAskedFor(eventType: string | null, check: CheckId): boolean {
+  return eventType === DISPATCH_EVENT[check];
+}
+
 /** The full action run, parameterised on `env` for testability. */
 export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const inputs = readInputs(env);
+
+  // The dispatch context is present only when the platform triggered this run.
+  // Ordinary CI (push, pull_request, manual) reports nowhere and just gates.
+  const dispatch = readDispatchContext(env);
+
+  // The non-scan checks run first and independently: each reports its own result,
+  // and a failure in one is a reportable outcome rather than something that takes
+  // the others down with it.
+  const extras = inputs.checks.filter((c) => c !== "scan");
+  for (const check of extras) {
+    info(`quantakrypto: running ${check}`);
+    const result =
+      check === "probe"
+        ? await runProbeCheck(inputs.probeTarget)
+        : await runConformanceCheck(inputs.conformanceImpl, inputs.conformanceParam, WORKFLOW_PATH);
+    info(`quantakrypto: ${check} — ${result.summary}`);
+    appendStepSummary(`## quantakrypto — ${check}\n\n${result.summary}\n`, env);
+    // Only the check the platform asked for may claim this run's audit id: a
+    // workflow running all three has one dispatch id, and reporting three
+    // different verdicts against it would overwrite the run it was asked about.
+    if (dispatch && dispatchAskedFor(dispatch.eventType, check)) {
+      await postResult(dispatch, result);
+    }
+  }
+
+  if (!inputs.checks.includes("scan")) return;
 
   const scanRoot = resolveInWorkspace(inputs.path, env);
   info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
@@ -726,6 +804,15 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
         `${mandateEval.summary.due} due` +
         (mandateEval.nextDeadline ? `, next deadline ${mandateEval.nextDeadline}` : "") +
         ".",
+    );
+  }
+
+  // Report the scan result BEFORE the gate below, because the gate calls
+  // process.exit and a failing scan is exactly the result worth recording.
+  if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
+    await postResult(
+      dispatch,
+      scoredResult("scan", "qScan", result.inventory.readinessScore, newFindings),
     );
   }
 
