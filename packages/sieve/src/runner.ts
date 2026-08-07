@@ -147,8 +147,18 @@ const STDERR_QUOTE_CAP = 400;
  * Lines that actually name a failure, across the runtimes a SUT is written in:
  * `Error: Cannot find module`, `ModuleNotFoundError`, `Traceback`, `panic:`,
  * `error while loading shared libraries`, `command not found`.
+ *
+ * A flat alternation of literals, deliberately. An earlier version opened with
+ * `\w*(?:Error|Exception)` to catch prefixed names like `ModuleNotFoundError`,
+ * which backtracks quadratically on a long run of word characters — and this is
+ * applied to the stderr of an UNTRUSTED child process (see Q-17), so a SUT could
+ * emit one 64 KiB word and hang the harness that is meant to be judging it.
+ * Matching `error` as a plain substring catches the same names with no
+ * backtracking at all. It over-matches slightly (a line saying "no errors" would
+ * qualify), which only ever costs us a less apt quote, never a wrong verdict.
  */
-const ERROR_LINE = /(?:\w*(?:Error|Exception)\b|Traceback|panic:|not found|no such file|cannot open|permission denied)/i;
+const ERROR_LINE =
+  /error|exception|traceback|panic:|not found|no such file|cannot open|permission denied/i;
 
 /**
  * Pick the most diagnostic part of a stderr dump.

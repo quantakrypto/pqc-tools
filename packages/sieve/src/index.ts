@@ -45,7 +45,13 @@ export {
   asSignatureSizes,
 } from "./sizes.js";
 export { CATEGORIES, categoriesFor } from "./categories/index.js";
-export { buildReport, formatHuman, formatJson, overallVerdict, HARNESS_CATEGORY } from "./report.js";
+export {
+  buildReport,
+  formatHuman,
+  formatJson,
+  overallVerdict,
+  HARNESS_CATEGORY,
+} from "./report.js";
 export {
   encodeRequest,
   decodeResponse,
@@ -143,7 +149,8 @@ function unusableSut(runner: Runner, results: readonly CategoryResult[]): Catego
           : "SUT started but never returned a protocol response (every request timed out)",
       },
     ],
-    summary: "the implementation under test could not be run, so no conformance checks were performed",
+    summary:
+      "the implementation under test could not be run, so no conformance checks were performed",
   };
 }
 

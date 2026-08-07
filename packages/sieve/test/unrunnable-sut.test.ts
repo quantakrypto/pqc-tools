@@ -67,7 +67,11 @@ test("a SUT that starts and answers is judged normally, however wrong its answer
 
   const report = await runSieve({ command: ["node", impl], param: "ml-kem-768", iterations: 2 });
 
-  assert.notEqual(report.overall, "ERROR", "a live SUT is a conformance question, not a harness fault");
+  assert.notEqual(
+    report.overall,
+    "ERROR",
+    "a live SUT is a conformance question, not a harness fault",
+  );
   assert.equal(report.overall, "FAIL");
   assert.ok(
     report.categories.every((c) => c.category !== HARNESS_CATEGORY),
@@ -80,7 +84,10 @@ test("a SUT that starts but never answers is reported as unrunnable, and said so
   // no diagnosis to quote — the report must say that plainly rather than dress
   // up silence as one. Tiny timeout/iterations to keep this test quick.
   const impl = join(dir, "hangs.js");
-  writeFileSync(impl, `require("node:readline").createInterface({ input: process.stdin }).on("line", () => {});`);
+  writeFileSync(
+    impl,
+    `require("node:readline").createInterface({ input: process.stdin }).on("line", () => {});`,
+  );
 
   const report = await runSieve({
     command: ["node", impl],
@@ -161,9 +168,31 @@ test("describeSutError quotes the diagnostic line from either end of a dump", ()
   assert.match(describeSutError(python), /RuntimeError: boom in my kem/);
 });
 
+/**
+ * The SUT is untrusted code and its stderr is attacker-controlled, so the line
+ * picker must stay linear. An earlier pattern opened with `\w*(?:Error|Exception)`,
+ * which backtracks quadratically: a single 64 KiB word (the stderr cap) was enough
+ * to hang the harness. CodeQL caught it; this keeps it caught.
+ */
+test("describeSutError stays fast on a pathological stderr dump", () => {
+  const hostile = new SutCrashError("SUT exited with code 1", "A".repeat(64 * 1024));
+  const started = process.hrtime.bigint();
+  describeSutError(hostile);
+  const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+  // Linear scanning finishes in single-digit ms; the quadratic version took
+  // orders of magnitude longer. A generous bound still fails loudly on a regression.
+  assert.ok(elapsedMs < 250, `took ${elapsedMs.toFixed(1)}ms, expected linear scanning`);
+});
+
 test("describeSutError degrades honestly with no stderr and passes other errors through", () => {
-  assert.match(describeSutError(new SutCrashError("failed to spawn SUT: ENOENT", "")), /\(no stderr\)/);
+  assert.match(
+    describeSutError(new SutCrashError("failed to spawn SUT: ENOENT", "")),
+    /\(no stderr\)/,
+  );
   // A timeout carries no stderr channel; its own message is already the answer.
-  const timeout = new TimeoutError({ id: 1, family: "ml-kem", param: "ml-kem-768", op: "keygen" }, 10);
+  const timeout = new TimeoutError(
+    { id: 1, family: "ml-kem", param: "ml-kem-768", op: "keygen" },
+    10,
+  );
   assert.equal(describeSutError(timeout), timeout.message);
 });

@@ -77,7 +77,8 @@ function tally(categories: readonly CategoryResult[]): CategoryCounts {
  * the report is a statement about it.
  */
 export function overallVerdict(categories: readonly CategoryResult[]): Verdict {
-  if (categories.some((c) => c.category === HARNESS_CATEGORY && c.status === "fail")) return "ERROR";
+  if (categories.some((c) => c.category === HARNESS_CATEGORY && c.status === "fail"))
+    return "ERROR";
   for (const c of categories) {
     if (ADVISORY_CATEGORIES.has(c.category)) continue;
     if (c.status === "fail") return "FAIL";
