@@ -6,6 +6,37 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Added - action: one workflow runs any combination of scan, conformance and probe
+
+The action takes a `checks` input (any subset of `scan`, `conformance`, `probe`)
+and owns reporting results back to quantakrypto.com. It replaces three separate
+workflow files that each shelled out to `npx` and turned the JSON into a result
+payload with inline `jq`.
+
+That placement was the defect: the payload logic lived in repositories we do not
+control, so fixing it fixed nothing already committed. A conformance run whose
+implementation could not start was recorded as ~35 high-severity crypto defects,
+and correcting the `jq` only changed what NEW repositories would generate.
+
+SemVer: **minor** (additive). `checks` defaults to `scan`, which is exactly what
+the action did before, so an existing workflow keeps working unchanged.
+
+- New inputs: `checks`, `probe-target`, `i-own-this`, `conformance-impl`,
+  `conformance-param`.
+- qProbe and Sieve are imported rather than spawned, which removes the shell
+  layer entirely: no quoting, no `> file.json`, no re-parsing a report already
+  held as a typed object.
+- Probe targets go through qProbe's own `parseTarget`, so the refusals it
+  enforces (CIDR, ranges, wildcards, lists, URLs, embedded credentials) apply on
+  this path too. `i-own-this` is a required input, never manufactured by the
+  action: the CLI makes an operator state it, and so does this.
+- Results are posted only to `https://quantakrypto.com` over https, redirects
+  refused, with a 10s timeout, and only for a `repository_dispatch`. The
+  callback token is masked from the job log.
+- A conformance run that could not execute is posted as `failed`, not as a
+  verdict, so it stays out of badges and the posture series.
+
+
 ### Fixed - qProbe: a URL target is refused as a URL, not as a CIDR block
 
 `qprobe --i-own-this https://example.com` failed with

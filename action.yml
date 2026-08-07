@@ -13,6 +13,41 @@ branding:
   color: "green"
 
 inputs:
+  checks:
+    description: >-
+      Which checks to run: any comma-separated subset of "scan" (qScan static
+      analysis), "conformance" (Sieve, FIPS 203/204/205) and "probe" (qProbe,
+      live TLS/SSH). Defaults to "scan", which is exactly what v1 did, so an
+      existing workflow keeps working unchanged.
+    required: false
+    default: "scan"
+  probe-target:
+    description: >-
+      Hostname of a TLS/SSH endpoint you own, e.g. api.example.com. A full URL is
+      accepted and reduced to its host. Required when "probe" is in checks.
+    required: false
+    default: ""
+  i-own-this:
+    description: >-
+      Attest that you are authorised to probe "probe-target". Required when
+      "probe" is in checks. This is an explicit statement by whoever edits this
+      workflow, exactly as the qProbe CLI requires; the action will not make it
+      on your behalf. Active probing of endpoints you do not own may be unlawful.
+    required: false
+    default: "false"
+  conformance-impl:
+    description: >-
+      Command that runs your ML-KEM/ML-DSA/SLH-DSA implementation, e.g.
+      "node ./impl.js". Sieve drives it over stdin/stdout JSON, so it must exist
+      in this repository. Required when "conformance" is in checks.
+    required: false
+    default: ""
+  conformance-param:
+    description: >-
+      Parameter set for the conformance battery, e.g. ml-kem-768, ml-dsa-65,
+      slh-dsa-sha2-128s.
+    required: false
+    default: "ml-kem-768"
   mode:
     description: >-
       "scan" (default) writes a report and gates the build; "comment-plan" posts
@@ -45,9 +80,11 @@ inputs:
     default: "quantakrypto.sarif.json"
   baseline:
     description: >-
-      Optional path to a baseline file (a previously written quantakrypto report).
-      Findings already present in the baseline are suppressed, so only NEW
-      quantum-vulnerable crypto fails the build.
+      Optional path to a baseline file written by `qscan --write-baseline`
+      (a {version, fingerprints} file, NOT a scan report). Findings listed in it
+      are suppressed, so only NEW quantum-vulnerable crypto fails the build.
+      Pointing this at a SARIF/JSON report loads zero fingerprints and suppresses
+      nothing.
     required: false
   comment-pr:
     description: >-

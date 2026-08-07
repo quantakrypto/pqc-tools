@@ -41,6 +41,15 @@ import type {
   Severity,
 } from "@quantakrypto/core";
 import { renderReport, runQscan } from "@quantakrypto/qscan";
+import { assertCheckConfig, parseChecks, type CheckId } from "./checks.js";
+import { runConformanceCheck, runProbeCheck } from "./extra-checks.js";
+import {
+  crashedResult,
+  postResult,
+  readDispatchContext,
+  scoredResult,
+  type DispatchContext,
+} from "./platform.js";
 
 import {
   appendStepSummary,
@@ -51,6 +60,7 @@ import {
   notice,
   setFailed,
   setOutput,
+  setSecret,
   warning,
 } from "./io.js";
 import { mdCell } from "./escape.js";
@@ -60,6 +70,16 @@ const DEFAULT_OUTPUT = "quantakrypto.sarif.json";
 
 /** Normalised, validated inputs for a run. */
 interface ActionInputs {
+  /** Which checks to run. Defaults to ["scan"], which is exactly what v1 did. */
+  checks: CheckId[];
+  /** Host for the probe check. Required only when "probe" is selected. */
+  probeTarget: string;
+  /** The operator's explicit ownership attestation for the probe target. */
+  probeIOwnThis: boolean;
+  /** Command that runs the implementation under test, for "conformance". */
+  conformanceImpl: string;
+  /** Parameter set for "conformance", e.g. ml-kem-768. */
+  conformanceParam: string;
   path: string;
   severityThreshold: Severity;
   failOnFindings: boolean;
@@ -120,7 +140,21 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
       );
     }
   }
+  const checks = parseChecks(getInput("checks", env));
+  const probeTarget = getInput("probe-target", env);
+  const conformanceImpl = getInput("conformance-impl", env);
+  assertCheckConfig(checks, {
+    probeTarget,
+    conformanceImpl,
+    probeIOwnThis: getBooleanInput("i-own-this", false, env),
+  });
+
   return {
+    checks,
+    probeTarget,
+    probeIOwnThis: getBooleanInput("i-own-this", false, env),
+    conformanceImpl,
+    conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
     severityThreshold,
     failOnFindings: getBooleanInput("fail-on-findings", true, env),
@@ -594,9 +628,124 @@ async function loadBaselineSet(baselinePath: string, env: NodeJS.ProcessEnv): Pr
   return baseline;
 }
 
+/**
+ * Where the single workflow lives, quoted in the conformance failure message so
+ * the owner is told which file to edit rather than which tool complained.
+ */
+export const WORKFLOW_PATH = ".github/workflows/quantakrypto.yml";
+
+/**
+ * The repository_dispatch event type the platform sends per check. A run started
+ * by the dashboard names exactly one check, even though the workflow may be
+ * configured to run several.
+ */
+const DISPATCH_EVENT: Record<CheckId, string> = {
+  scan: "quantakrypto-scan",
+  conformance: "quantakrypto-conformance",
+  probe: "quantakrypto-probe",
+};
+
+/**
+ * Did this dispatch ask for this check?
+ *
+ * One audit run id belongs to one check. A workflow set to `checks: scan,probe`
+ * still receives a single dispatch naming one of them, so only that check may
+ * post against the id — otherwise the second result would overwrite the first
+ * and the dashboard would show a probe verdict under a scan run.
+ *
+ * A run with no recognisable event type (a manual dispatch that somehow carried
+ * a client_payload) reports nothing, which is the safe direction.
+ */
+export function dispatchAskedFor(eventType: string | null, check: CheckId): boolean {
+  return eventType === DISPATCH_EVENT[check];
+}
+
+/** The check a dispatch event names, or null when it names none of ours. */
+export function checkForDispatchEvent(eventType: string | null): CheckId | null {
+  if (!eventType) return null;
+  for (const id of Object.keys(DISPATCH_EVENT) as CheckId[]) {
+    if (DISPATCH_EVENT[id] === eventType) return id;
+  }
+  return null;
+}
+
+/**
+ * Post a result and say so when it does not land.
+ *
+ * A dropped report is invisible from the dashboard — the run simply sits there
+ * until it goes stale an hour later — so the job log is the only place the
+ * operator can find out. Still never fatal: the check ran, and its verdict is on
+ * the job summary either way.
+ */
+async function report(
+  dispatch: DispatchContext,
+  result: Parameters<typeof postResult>[1],
+): Promise<void> {
+  if (!(await postResult(dispatch, result))) {
+    warning(
+      `quantakrypto: could not report the result to ${dispatch.resultUrl}. ` +
+        "The check ran; the dashboard will show this run as stale until it is re-run.",
+    );
+  }
+}
+
 /** The full action run, parameterised on `env` for testability. */
 export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const inputs = readInputs(env);
+
+  // The dispatch context is present only when the platform triggered this run.
+  // Ordinary CI (push, pull_request, manual) reports nowhere and just gates.
+  const dispatch = readDispatchContext(env);
+  // Redact the callback token from every later log line in this job. We never
+  // print it, but the event payload it came from sits in plaintext on disk for
+  // the whole job and any other step can echo it.
+  if (dispatch) setSecret(dispatch.token);
+
+  // The non-scan checks run first and independently: each reports its own result,
+  // and a failure in one is a reportable outcome rather than something that takes
+  // the others down with it.
+  //
+  // KNOWN HAZARD, not yet fixed: `conformance` executes an implementation named
+  // by the workflow, with write access to the workspace, and it runs BEFORE the
+  // scan reads that workspace. An implementation that deleted or rewrote the
+  // crypto it was meant to be tested against would produce a clean scan, which is
+  // then posted as a genuine verdict. Running the scan first would close it, but
+  // the build gate below calls process.exit, so the extras cannot simply be moved
+  // after it — the reorder needs the gate deferred to the end of the run.
+  const extras = inputs.checks.filter((c) => c !== "scan");
+  for (const check of extras) {
+    info(`quantakrypto: running ${check}`);
+    const result =
+      check === "probe"
+        ? await runProbeCheck(inputs.probeTarget, inputs.probeIOwnThis)
+        : await runConformanceCheck(inputs.conformanceImpl, inputs.conformanceParam, WORKFLOW_PATH);
+    info(`quantakrypto: ${check} — ${result.summary}`);
+    appendStepSummary(`## quantakrypto — ${check}\n\n${result.summary}\n`, env);
+    // Only the check the platform asked for may claim this run's audit id: a
+    // workflow running all three has one dispatch id, and reporting three
+    // different verdicts against it would overwrite the run it was asked about.
+    if (dispatch && dispatchAskedFor(dispatch.eventType, check)) {
+      await report(dispatch, result);
+    }
+  }
+
+  // C2: the platform asked for a check this workflow is not configured to run.
+  // Reporting it as failed turns an hour of "running" followed by a silent stale
+  // into a message naming the input to edit.
+  const asked = checkForDispatchEvent(dispatch?.eventType ?? null);
+  if (dispatch && asked && !inputs.checks.includes(asked)) {
+    await report(
+      dispatch,
+      crashedResult(
+        "This workflow",
+        `is not configured to run the ${asked} check. Add "${asked}" to the checks: input in ` +
+          `${WORKFLOW_PATH} (currently: ${inputs.checks.join(",")}).`,
+      ),
+    );
+    return;
+  }
+
+  if (!inputs.checks.includes("scan")) return;
 
   const scanRoot = resolveInWorkspace(inputs.path, env);
   info(`quantakrypto: scanning ${scanRoot} (threshold: ${inputs.severityThreshold})`);
@@ -729,6 +878,21 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
     );
   }
 
+  // Report the scan result BEFORE the gate below, because the gate calls
+  // process.exit and a failing scan is exactly the result worth recording.
+  //
+  // PRE-baseline findings, deliberately. The baseline is a CI convenience — it
+  // says "do not fail my build on debt I have already logged" — and the platform
+  // is a different consumer: it records posture. Posting post-baseline findings
+  // alongside the pre-baseline score would let a repository baseline everything
+  // and mint a readiness badge from `findings: []` while its own score said 40.
+  // It would also be internally contradictory, reporting "0 finding(s),
+  // readiness 40/100". The mandate gate already refuses to let a baseline waive
+  // a deadline for the same reason.
+  if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
+    await report(dispatch, scoredResult("qScan", result.inventory.readinessScore, result.findings));
+  }
+
   // The two gates OR: a passed compliance deadline fails the build even when
   // every finding is baselined or below the severity threshold (and vice versa).
   // The mandate gate is deliberately independent of fail-on-findings — setting
@@ -758,8 +922,16 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (invokedDirectly) {
-  run().catch((err: unknown) => {
-    setFailed(`quantakrypto: ${(err as Error).message}`);
+  run().catch(async (err: unknown) => {
+    const message = (err as Error).message;
+    // A configuration error throws inside readInputs, BEFORE the dispatch
+    // context is read, so without this the platform hears nothing at all: the
+    // run sits at "running" for an hour and then goes stale, with the reason
+    // visible only to whoever opens the Actions log. readDispatchContext needs
+    // nothing from the inputs, so it still works here.
+    const dispatch = readDispatchContext();
+    if (dispatch) await postResult(dispatch, crashedResult("The quantakrypto action", message));
+    setFailed(`quantakrypto: ${message}`);
     process.exit(1);
   });
 }

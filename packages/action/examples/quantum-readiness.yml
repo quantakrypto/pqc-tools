@@ -35,7 +35,7 @@ jobs:
           format: "sarif"
           output: "quantakrypto.sarif.json"
           # Only fail on NEW findings relative to a committed baseline:
-          # baseline: ".quantakrypto/baseline.sarif.json"
+          # baseline: ".quantakrypto/baseline.json"
           comment-pr: "true"
           github-token: ${{ github.token }}
 

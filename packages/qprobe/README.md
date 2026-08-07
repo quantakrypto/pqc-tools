@@ -90,7 +90,7 @@ same `buildInventory` math so they read on the same scale:
 
 ```bash
 qscan .  --cbom  -o code-infra.cbom.json          # code + infra crypto assets
-qprobe --owned-hosts hosts.txt api.example.com --cbom -o endpoints.cbom.json
+qprobe --owned-hosts hosts.txt api.example.com --cbom > endpoints.cbom.json
 ```
 
 Combine them into one CBOM with `mergeCboms` from `@quantakrypto/core` (components

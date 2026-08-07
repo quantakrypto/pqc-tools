@@ -210,8 +210,8 @@ const result = await scan({ root: ".", detectors: registry.all() });
 
 ### `vulnerableDependencies: VulnerableDependency[]`
 
-Curated database (**77 entries**) of packages whose purpose is classical
-asymmetric crypto, spanning **seven ecosystems** — npm, PyPI, Cargo, Go modules,
+Curated database (**90 entries**) of packages whose purpose is classical
+asymmetric crypto, spanning **eight ecosystems** — npm, PyPI, Cargo, Go modules,
 Maven, RubyGems, and NuGet (`VulnerableDependency.ecosystem`). The npm subset includes
 `node-forge`, `elliptic`, `jsrsasign`, `node-rsa`, `ursa`, `sshpk`,
 `jsonwebtoken`, `jose`, `jws`, `eccrypto`, `secp256k1`, `tweetnacl`, `ed25519`,

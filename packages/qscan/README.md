@@ -30,8 +30,8 @@ Inline crypto detection currently covers **JavaScript/TypeScript**, **Python**,
 signature verification) source — **14 languages**. PEM key material, SSH keys (including
 SSH-CA certificates), TLS/certificate config, reverse-proxy/gRPC TLS, WebAuthn/FIDO2,
 code-signing, weak signature hashes (SHA-1/MD5), DKIM, SPIFFE/SPIRE, and dependency
-manifests for **seven ecosystems** — npm (plus `yarn.lock` / `pnpm-lock.yaml`),
-PyPI, Cargo, Go modules, Maven, RubyGems, and NuGet — are detected in **any**
+manifests for **eight ecosystems** — npm (plus `yarn.lock` / `pnpm-lock.yaml`),
+PyPI, Cargo, Go modules, Maven, RubyGems, NuGet, and Composer — are detected in **any**
 file regardless of language.
 
 qScan is **honest about coverage**: if a scan walks files but finds none in a
@@ -79,7 +79,7 @@ qscan [path] [options]
 | `--changed` | Incremental: scan only files git reports as changed. | off |
 | `--since <git-ref>` | With `--changed`, diff against `<git-ref>` (implies `--changed`). | working tree |
 | `--parallel` | Scan using a worker-thread pool when the workload is large enough. | off |
-| `--concurrency <n>` | Worker count for `--parallel` (implies `--parallel`). `0`/`1` forces serial. | CPU count |
+| `--concurrency <n>` | Worker count for `--parallel` (implies `--parallel`). `0` forces serial. | CPU count |
 | `--audit` | Opt-in supply-chain checks (see below): dependency advisories via each ecosystem's own audit tool, plus a declared-source-repository (provenance) check. Findings merge into the report and the exit code; a missing tool or network hiccup degrades to a stderr diagnostic. | off |
 | `--mandate <id>` | Gate findings against a compliance mandate's dated clauses (`cnsa-2.0`, `nist-ir-8547`; repeatable). Reports each prohibited finding with its clause + deadline; fails the build only once a disallow deadline has passed. Verdicts also ride in `--format json` (`mandateMapping`), `sarif` (`run.properties.mandate`), and `evidence` (hashed). | off |
 | `--lead-months <n>` | Fail early when a `--mandate` disallow deadline is within `n` months. | — |
@@ -127,7 +127,7 @@ with `--config <path>`, or disable discovery with `--no-config-file`. See
 
 ```
 qScan — quantum-vulnerable cryptography report
-root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.5.0
+root: ./examples/vulnerable-app  •  files scanned: 2  •  qscan v0.9.0
 
 3 findings  (2 high, 1 medium)
 2 exposed to harvest-now-decrypt-later (HNDL).

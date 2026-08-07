@@ -38,7 +38,7 @@ jobs:
           fail-on-findings: "true"
           format: "sarif"
           output: "quantakrypto.sarif.json"
-          # baseline: ".quantakrypto/baseline.sarif.json"   # optional
+          # baseline: ".quantakrypto/baseline.json"   # optional
           comment-pr: "true"
           github-token: ${{ github.token }}
 
@@ -57,6 +57,11 @@ A ready-to-copy workflow lives at
 
 | Input | Default | Description |
 |---|---|---|
+| `checks` | `scan` | Which checks to run: any comma-separated subset of `scan` (qScan), `conformance` (Sieve) and `probe` (qProbe). Defaults to `scan`, which is what this action did before, so an existing workflow is unaffected. |
+| `probe-target` | | Hostname of a TLS/SSH endpoint you own, e.g. `api.example.com` (or `host:22`). Required when `probe` is selected. |
+| `i-own-this` | `false` | Attest that you are authorised to probe `probe-target`. Required when `probe` is selected; the action will not make this statement on your behalf. |
+| `conformance-impl` | | Command that runs your ML-KEM/ML-DSA/SLH-DSA implementation, e.g. `node ./impl.js`. Required when `conformance` is selected. |
+| `conformance-param` | `ml-kem-768` | Parameter set for the conformance battery. |
 | `mode` | `scan` | `scan` writes a report and gates the build; `comment-plan` posts a deterministic PQC migration plan as a PR comment and **never** fails the build. |
 | `path` | `.` | Directory (or file) to scan, relative to the repo root. |
 | `severity-threshold` | `high` | Minimum severity that fails the build: `critical`, `high`, `medium`, `low`, `info`. Findings below this never fail. |

@@ -194,6 +194,23 @@ export function appendStepSummary(markdown: string, env: NodeJS.ProcessEnv = pro
 }
 
 /**
+ * Ask the runner to redact `value` from every subsequent log line in the job.
+ *
+ * The platform's callback token arrives in the workflow event payload, which
+ * sits in plaintext at $GITHUB_EVENT_PATH for the whole job. This action never
+ * prints it, but nothing else in the job is bound by that: `echo
+ * "${{ toJSON(github.event.client_payload) }}"` is a common debugging line, and
+ * on a public repository run logs are world-readable. Masking is what makes
+ * those cases safe, and it is one line.
+ *
+ * No-op on an empty value, which would otherwise ask the runner to redact the
+ * empty string.
+ */
+export function setSecret(value: string): void {
+  if (value) console.log(`::add-mask::${escapeData(value)}`);
+}
+
+/**
  * Mark the action as failed: emit an `error` annotation and set the process
  * exit code to 1. (Does not call `process.exit`; the caller decides when.)
  */

@@ -5,5 +5,18 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../core" }, { "path": "../qscan" }]
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../qscan"
+    },
+    {
+      "path": "../qprobe"
+    },
+    {
+      "path": "../sieve"
+    }
+  ]
 }
