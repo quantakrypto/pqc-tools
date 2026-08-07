@@ -38,7 +38,7 @@ jobs:
           fail-on-findings: "true"
           format: "sarif"
           output: "quantakrypto.sarif.json"
-          # baseline: ".quantakrypto/baseline.sarif.json"   # optional
+          # baseline: ".quantakrypto/baseline.json"   # optional
           comment-pr: "true"
           github-token: ${{ github.token }}
 
