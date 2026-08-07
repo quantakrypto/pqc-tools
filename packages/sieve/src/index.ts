@@ -18,10 +18,9 @@ import { categoriesFor } from "./categories/index.js";
 import type { CategoryResult } from "./categories/types.js";
 import { loadVectors } from "./vectors.js";
 import type { VectorFileProvenance } from "./vectors.js";
-import { Runner, SutCrashError, TimeoutError, describeSutError } from "./runner.js";
-import type { RequestInput } from "./protocol.js";
+import { Runner, describeSutError } from "./runner.js";
 import { buildReport, HARNESS_CATEGORY, type SieveReport } from "./report.js";
-import { isParamSet, sizesFor, type ParamSet, type Sizes } from "./sizes.js";
+import { isParamSet, sizesFor, type ParamSet } from "./sizes.js";
 
 export type { SieveReport, CategoryCounts, Verdict } from "./report.js";
 export type { CategoryResult, Check, Status, BugClass } from "./categories/types.js";
@@ -104,43 +103,48 @@ export interface RunSieveOptions {
 }
 
 /**
- * One keygen before the battery, to tell "this implementation is wrong" apart
- * from "I could not run this implementation".
+ * Tell "this implementation is wrong" apart from "I could not run this
+ * implementation", after the fact.
  *
- * Without it, an `--impl` naming a file that does not exist makes every probe
- * fail with the same spawn error, and the report reads as dozens of independent
+ * An `--impl` naming a command that does not exist makes every probe fail with
+ * the same spawn error, so the report reads as dozens of independent
  * high-severity defects tagged with bug classes that were never exercised. That
  * is worse than useless: it is confidently wrong about code that never ran.
  *
- * Only a TRANSPORT failure counts as unusable, i.e. the process died or never
- * answered. A SUT that replies `{ok:false}` is alive and speaking the protocol,
- * which is a genuine conformance signal, so the battery runs as normal.
+ * The signal is the response count. If the SUT never returned a single protocol
+ * response, it never did anything the battery could judge, and every failure
+ * recorded against it is an artefact of that. Note this costs nothing: it reads
+ * a counter the runner keeps anyway, rather than spending a probe request to ask
+ * a question the run itself already answers.
  *
- * Returns the harness category to report, or null when the SUT is usable.
+ * An `{ok:false}` reply counts as an answer, so a SUT that starts and refuses
+ * every operation is judged normally: refusals are a genuine conformance signal.
+ * A SUT that dies part-way also keeps its results, because by then it had
+ * answered and the failures are real.
+ *
+ * Returns the harness category to report instead, or null when the SUT spoke.
  */
-async function probeStartup(
-  runner: Runner,
-  family: Sizes["family"],
-  param: ParamSet,
-): Promise<CategoryResult | null> {
-  try {
-    await runner.send({ family, param, op: "keygen" } as RequestInput);
-    return null;
-  } catch (err) {
-    if (!(err instanceof SutCrashError) && !(err instanceof TimeoutError)) return null;
-    return {
-      category: HARNESS_CATEGORY,
-      status: "fail",
-      checks: [
-        {
-          name: "sut-startup",
-          status: "fail",
-          detail: describeSutError(err),
-        },
-      ],
-      summary: "the implementation under test could not be run, so no conformance checks were performed",
-    };
-  }
+function unusableSut(runner: Runner, results: readonly CategoryResult[]): CategoryResult | null {
+  if (runner.answeredCount > 0) return null;
+  if (!results.some((r) => r.status === "fail")) return null;
+  const fatal = runner.fatalError;
+  return {
+    category: HARNESS_CATEGORY,
+    status: "fail",
+    checks: [
+      {
+        name: "sut-startup",
+        status: "fail",
+        // A dead process carries a crash error with the child's stderr. A SUT
+        // that spawned but never replied has neither, so say exactly that
+        // rather than dressing up silence as a diagnosis.
+        detail: fatal
+          ? describeSutError(fatal)
+          : "SUT started but never returned a protocol response (every request timed out)",
+      },
+    ],
+    summary: "the implementation under test could not be run, so no conformance checks were performed",
+  };
 }
 
 /**
@@ -173,14 +177,6 @@ export async function runSieve(opts: RunSieveOptions): Promise<SieveReport> {
       const want = new Set(opts.only);
       cats = cats.filter((c) => want.has(c.name));
     }
-    const unusable = await probeStartup(runner, sizes.family, opts.param);
-    if (unusable) {
-      // The SUT cannot be spoken to, so every category below would fail with
-      // this same error and the report would read as dozens of independent
-      // conformance defects. Say the true thing once instead.
-      results.push(unusable);
-      cats = [];
-    }
     for (const cat of cats) {
       try {
         const res = await cat.run({
@@ -210,6 +206,14 @@ export async function runSieve(opts: RunSieveOptions): Promise<SieveReport> {
     }
   } finally {
     await runner.close();
+  }
+
+  // If the SUT never answered anything, none of the above is a statement about
+  // it. Replace the whole set with the one true finding.
+  const unusable = unusableSut(runner, results);
+  if (unusable) {
+    results.length = 0;
+    results.push(unusable);
   }
 
   // Record vector-file provenance (raw-byte hashes + declared source) so a `kat`

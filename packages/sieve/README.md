@@ -157,9 +157,9 @@ The overall verdict is **FAIL** if any non-advisory category fails, else
 
 ### ERROR: when the implementation could not be run
 
-There is a third verdict, **ERROR**, and it outranks both. Before the battery
-runs, Sieve issues a single `keygen`. If the SUT cannot be spawned, dies, or
-never answers, the report contains one `harness` category and nothing else:
+There is a third verdict, **ERROR**, and it outranks both. If the SUT never
+returned a single protocol response — it could not be spawned, it died, or it
+never answered — the report contains one `harness` category and nothing else:
 
 ```
 [FAIL] harness — the implementation under test could not be run, so no conformance checks were performed
@@ -177,7 +177,12 @@ code that never executed.
 
 A SUT that starts and replies `{"ok": false}` is *not* an ERROR: it is alive and
 speaking the protocol, so its refusals are a genuine conformance signal and the
-full battery runs.
+full battery runs. Nor is one that dies part-way, since by then it had answered
+and the failures recorded against it are real.
+
+This costs nothing on a healthy run. It reads a response counter the runner
+keeps anyway, rather than spending a probe request to ask a question the run
+itself already answers.
 
 The CLI still exits **1** for ERROR, as it does for FAIL — only a PASS exits 0,
 so existing CI gates are unaffected. Read `.overall` from the JSON report to

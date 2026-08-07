@@ -228,6 +228,7 @@ export class Runner {
   private stderrBuf = "";
   private closed = false;
   private fatal: Error | undefined;
+  private answered = 0;
   private readonly onStderr?: (line: string) => void;
 
   constructor(opts: RunnerOptions) {
@@ -308,7 +309,29 @@ export class Runner {
     }
     clearTimeout(entry.timer);
     this.pending.delete(resp.id);
+    this.answered += 1;
     entry.resolve(resp);
+  }
+
+  /**
+   * How many protocol responses the SUT has returned, of any kind.
+   *
+   * Zero at the end of a run means the implementation never spoke to us at all,
+   * which is a statement about the harness rather than about the implementation.
+   * An `{ok:false}` reply still counts: refusing an operation is an answer, and
+   * a SUT that answers is one the battery can legitimately judge.
+   */
+  get answeredCount(): number {
+    return this.answered;
+  }
+
+  /**
+   * The first fatal transport error, if the SUT process died or failed to spawn.
+   * Undefined when the SUT is alive (including when requests merely time out),
+   * so callers must not read this as "the run went fine".
+   */
+  get fatalError(): Error | undefined {
+    return this.fatal;
   }
 
   /**

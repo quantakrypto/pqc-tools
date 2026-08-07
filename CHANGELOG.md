@@ -16,12 +16,14 @@ verdict about code that never executed, and it says nothing about how to fix it.
 SemVer: **minor** (additive). `SieveReport.overall` gains a third value and two
 new symbols are exported; no existing field changes shape and no exit code moves.
 
-- **New `ERROR` verdict.** Sieve now issues one `keygen` before the battery. If
-  the SUT cannot be spawned, dies, or never answers, the report carries a single
-  `harness` category and `overall: "ERROR"`. `ERROR` outranks `FAIL`: if the
-  implementation never ran, nothing else in the report is a statement about it.
-  A SUT that starts and replies `{"ok": false}` is *not* an ERROR — it is alive
-  and speaking the protocol, so the full battery runs.
+- **New `ERROR` verdict.** If the SUT never returned a single protocol response,
+  the report carries one `harness` category and `overall: "ERROR"`. `ERROR`
+  outranks `FAIL`: if the implementation never ran, nothing else in the report is
+  a statement about it. A SUT that starts and replies `{"ok": false}` is *not* an
+  ERROR — it is alive and speaking the protocol, so the full battery runs — and
+  neither is one that dies part-way, whose recorded failures are real. The signal
+  is a response counter the runner already maintains, so this costs no extra
+  requests on a healthy run.
 - **The reported cause is now actionable.** `SutCrashError` already captured the
   child's stderr, but every category discarded it and reported
   `(err as Error).message`. New exported `describeSutError` quotes the

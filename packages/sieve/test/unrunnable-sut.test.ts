@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -73,6 +73,46 @@ test("a SUT that starts and answers is judged normally, however wrong its answer
     report.categories.every((c) => c.category !== HARNESS_CATEGORY),
     "no harness category when the SUT is reachable",
   );
+});
+
+test("a SUT that starts but never answers is reported as unrunnable, and said so exactly", async () => {
+  // Spawns and reads, never writes. There is no crash and no stderr, so there is
+  // no diagnosis to quote — the report must say that plainly rather than dress
+  // up silence as one. Tiny timeout/iterations to keep this test quick.
+  const impl = join(dir, "hangs.js");
+  writeFileSync(impl, `require("node:readline").createInterface({ input: process.stdin }).on("line", () => {});`);
+
+  const report = await runSieve({
+    command: ["node", impl],
+    param: "ml-kem-768",
+    iterations: 1,
+    timeoutMs: 50,
+  });
+
+  assert.equal(report.overall, "ERROR");
+  assert.equal(report.categories.length, 1);
+  assert.match(report.categories[0]?.checks[0]?.detail ?? "", /never returned a protocol response/);
+});
+
+test("the unusable check costs no requests: a run that needs none sends none", async () => {
+  // The guard reads a counter the runner keeps anyway. Nothing may probe the SUT
+  // speculatively to find out whether it is alive: `kat` without --vectors skips
+  // without issuing a request, so a healthy SUT must see exactly zero.
+  const log = join(dir, "requests.log");
+  const impl = join(dir, "counting.js");
+  writeFileSync(
+    impl,
+    `const fs = require("node:fs");
+     fs.writeFileSync(${JSON.stringify(log)}, "");
+     require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+       fs.appendFileSync(${JSON.stringify(log)}, line + "\\n");
+     });`,
+  );
+
+  await runSieve({ command: ["node", impl], param: "ml-kem-768", iterations: 1, only: ["kat"] });
+
+  const sent = readFileSync(log, "utf8").split("\n").filter(Boolean);
+  assert.deepEqual(sent, [], "no speculative probe may be issued");
 });
 
 test("overallVerdict: ERROR outranks FAIL", () => {
