@@ -62,7 +62,7 @@ test("identical files produce no problems", () => {
 
 test("catches an input added to only one file, in both directions", () => {
   const full = parseActionMeta(SAMPLE);
-  const partial = parseActionMeta(SAMPLE.replace(/  probe-target:\n(?: {4}.*\n)+/, ""));
+  const partial = parseActionMeta(SAMPLE.replace(/ {2}probe-target:\n(?: {4}.*\n)+/, ""));
 
   const missingFromRoot = diffActionMeta(partial, full);
   assert.equal(missingFromRoot.length, 1);
