@@ -22,6 +22,30 @@ export class TargetError extends Error {
 /** IPv4 range in the last octet, e.g. `10.0.0.1-50`, or a full-range dash form. */
 const IP_RANGE = /^\d{1,3}(?:\.\d{1,3}){3}\s*-\s*\d{1,3}/;
 
+/** A URI scheme prefix: `https://`, `ssh://`, `ldaps://`. */
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/** A CIDR suffix proper: a slash followed by a prefix length and nothing else. */
+const CIDR_SUFFIX = /\/\d{1,3}$/;
+
+/**
+ * The host someone probably meant, for the error message only.
+ *
+ * Never used to accept the input: a target has to be named as one host, because
+ * `--i-own-this` is an ownership attestation and `https://mine.com@theirs.com/`
+ * resolves to `theirs.com`. Suggesting the answer while still refusing keeps the
+ * attestation explicit and the fix one copy-paste away.
+ */
+function suggestHost(raw: string): string | null {
+  try {
+    const url = new URL(SCHEME.test(raw) ? raw : `https://${raw}`);
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Parse and validate a single target. Throws {@link TargetError} for anything
  * that is not a single host / host:port — the refusal is a security control, not
@@ -34,10 +58,39 @@ export function parseTarget(input: string, defaultPort: number): Target {
   const raw = input.trim();
   if (raw === "") throw new TargetError("empty target");
 
+  // A URL is still refused — a target is one named host, not something with a
+  // scheme, credentials and a path — but it must be refused for the right reason.
+  // This check has to come before the slash check below: `https://example.com`
+  // contains slashes, so it used to be reported as a CIDR block, which described
+  // a mistake the operator had not made.
+  if (SCHEME.test(raw)) {
+    const host = suggestHost(raw);
+    throw new TargetError(
+      `refusing URL "${raw}" — qProbe takes a host, not a URL${host ? `. Try: ${host}` : "."}`,
+    );
+  }
+
+  // Credentials name one host to a reader and connect to another
+  // (`https://mine.com@theirs.com`), which an ownership attestation cannot allow.
+  if (raw.includes("@")) {
+    const host = suggestHost(raw);
+    throw new TargetError(
+      `refusing target with credentials "${raw}" — name the host directly${host ? `. Try: ${host}` : "."}`,
+    );
+  }
+
   // Range / sweep / list markers are refused BEFORE any parsing.
   if (raw.includes("/")) {
+    // Distinguish an actual CIDR block from a path someone pasted: only a
+    // trailing prefix length is a range. Both are refused; only one is a sweep.
+    if (CIDR_SUFFIX.test(raw)) {
+      throw new TargetError(
+        `refusing CIDR block "${raw}" — qProbe probes one host at a time, not ranges.`,
+      );
+    }
+    const host = suggestHost(raw);
     throw new TargetError(
-      `refusing CIDR block "${raw}" — qProbe probes one host at a time, not ranges.`,
+      `refusing target with a path "${raw}" — qProbe probes a host, not a URL path${host ? `. Try: ${host}` : "."}`,
     );
   }
   if (raw.includes("*")) {

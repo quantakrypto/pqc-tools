@@ -12,7 +12,8 @@ before using it.
 
 > **Authorization required.** qProbe sends nothing until you attest you are
 > authorized to test the target. Active probing of endpoints you do not own may be
-> unlawful. qProbe refuses CIDR blocks, IP ranges, wildcards, and target lists — it
+> unlawful. A target is one host or `host:port` (`api.example.com`), never a URL.
+> qProbe refuses CIDR blocks, IP ranges, wildcards, and target lists — it
 > probes **one host you operate** at a time, and it only ever performs a benign,
 > unauthenticated handshake. It reports the negotiated reality; it never modifies an
 > endpoint ("engine disposes").

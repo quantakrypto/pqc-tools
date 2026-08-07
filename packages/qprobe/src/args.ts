@@ -94,6 +94,7 @@ AUTHORIZATION (required — one of)
   --i-own-this            Attest you are authorized to probe the given endpoint(s).
   --owned-hosts <file>    Ownership manifest (one host per line, # comments).
 
+  A target is one host or host:port, e.g. api.example.com — not a URL.
   Active probing of endpoints you do not own may be unlawful. qprobe refuses CIDR
   blocks, IP ranges, wildcards and target lists. See THREAT-MODEL.md.
 
