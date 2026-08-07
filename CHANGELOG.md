@@ -6,6 +6,31 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+### Fixed - qProbe: a URL target is refused as a URL, not as a CIDR block
+
+`qprobe --i-own-this https://example.com` failed with
+`refusing CIDR block "https://example.com" — qProbe probes one host at a time,
+not ranges.` The slash check ran before anything else, so every URL was reported
+as a range sweep: an error describing a mistake the operator had not made, and
+one that gave no hint about the fix. SemVer: **patch** (message and
+classification only; nothing newly accepted, nothing newly refused).
+
+URLs are still refused — a target is one named host — but now for the right
+reason, and the message names the host to use:
+
+```
+refusing URL "https://example.com/health" — qProbe takes a host, not a URL. Try: example.com
+```
+
+- A slash is only reported as a **CIDR block** when it is actually a prefix
+  length (`10.0.0.0/24`). A pasted path (`example.com/blog`) says so instead.
+- A target carrying **credentials** (`mine.com@theirs.com`) is refused
+  explicitly, and the suggestion names the host it would really have connected
+  to. `--i-own-this` is an ownership attestation, so a target that reads as one
+  host and resolves to another cannot be accepted quietly.
+- The refusals that are security controls are unchanged: CIDR blocks, IP ranges,
+  wildcards and lists still throw before any network I/O.
+
 ### Fixed - Sieve: an implementation that cannot be run is no longer reported as a failing implementation
 
 Pointing `--impl` at a command that does not exist produced a **FAIL** report
