@@ -76,9 +76,11 @@ inputs:
     default: "quantakrypto.sarif.json"
   baseline:
     description: >-
-      Optional path to a baseline file (a previously written quantakrypto report).
-      Findings already present in the baseline are suppressed, so only NEW
-      quantum-vulnerable crypto fails the build.
+      Optional path to a baseline file written by `qscan --write-baseline`
+      (a {version, fingerprints} file, NOT a scan report). Findings listed in it
+      are suppressed, so only NEW quantum-vulnerable crypto fails the build.
+      Pointing this at a SARIF/JSON report loads zero fingerprints and suppresses
+      nothing.
     required: false
   comment-pr:
     description: >-
