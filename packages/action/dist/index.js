@@ -12136,14 +12136,14 @@ function buildReadinessReport(result, opts = {}) {
     attestation: { contentHash, timestamp: null, signature: null }
   };
 }
-async function signReadinessReport(report, opts) {
-  const payload = report.attestation.contentHash;
-  const signature = opts.signer ? await opts.signer.sign(payload) : report.attestation.signature;
-  const timestamp = opts.timestamper ? await opts.timestamper.sign(payload) : report.attestation.timestamp;
+async function signReadinessReport(report2, opts) {
+  const payload = report2.attestation.contentHash;
+  const signature = opts.signer ? await opts.signer.sign(payload) : report2.attestation.signature;
+  const timestamp = opts.timestamper ? await opts.timestamper.sign(payload) : report2.attestation.timestamp;
   return {
-    ...report,
+    ...report2,
     attestation: {
-      ...report.attestation,
+      ...report2.attestation,
       signature,
       timestamp,
       ...opts.signer ? { signedWith: opts.signer.label } : {},
@@ -13551,7 +13551,7 @@ async function runQscan(opts, hooks = {}) {
       mergeCbomsData.push(bom);
     }
   }
-  let report = renderReport(result, options.format, {
+  let report2 = renderReport(result, options.format, {
     color: hooks.color ?? false,
     redactSnippets: options.noSnippets,
     topN: options.topN,
@@ -13565,19 +13565,19 @@ async function runQscan(opts, hooks = {}) {
     ...mandateEval ? { mandate: mandateEval } : {}
   });
   if (options.format === "evidence" && (signer || timestamper)) {
-    const signed = await signReadinessReport(JSON.parse(report), {
+    const signed = await signReadinessReport(JSON.parse(report2), {
       signer,
       timestamper
     });
-    report = JSON.stringify(signed, null, 2);
+    report2 = JSON.stringify(signed, null, 2);
   }
   if (mandateEval && options.format === "human") {
-    report += "\n" + renderMandateBlock(mandateEval);
+    report2 += "\n" + renderMandateBlock(mandateEval);
   }
   return {
     result,
     suppressed,
-    report,
+    report: report2,
     ...auditDiagnostics ? { auditDiagnostics } : {},
     exitCode
   };
@@ -13618,13 +13618,13 @@ function renderReport(result, format, opts = {}) {
     case "vex":
       return renderVex(result);
     case "evidence": {
-      const report = buildReadinessReport(result, {
+      const report2 = buildReadinessReport(result, {
         repository: process4.env.GITHUB_REPOSITORY,
         commit: process4.env.GITHUB_SHA,
         ...policy ? { policy } : {},
         ...mandate ? { mandate } : {}
       });
-      return JSON.stringify(report, null, 2);
+      return JSON.stringify(report2, null, 2);
     }
     case "human":
     default:
@@ -13651,20 +13651,13 @@ function parseChecks(raw) {
   }
   return out;
 }
-function normalizeProbeTarget(raw) {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  try {
-    return new URL(withScheme).hostname.replace(/^\[|\]$/g, "");
-  } catch {
-    return trimmed.split(/[/?#]/)[0]?.split("@").pop()?.split(":")[0] ?? trimmed;
-  }
-}
 function assertCheckConfig(checks, cfg) {
   const missing = [];
   if (checks.includes("probe") && !cfg.probeTarget.trim()) {
     missing.push('probe-target (a host you own, e.g. "api.example.com")');
+  }
+  if (checks.includes("probe") && cfg.probeIOwnThis === false) {
+    missing.push('i-own-this: "true" (you must attest you are authorised to probe that host)');
   }
   if (checks.includes("conformance") && !cfg.conformanceImpl.trim()) {
     missing.push('conformance-impl (how to run your implementation, e.g. "node ./impl.js")');
@@ -14471,6 +14464,90 @@ function classifySsh(target, ssh) {
     });
   }
   return out;
+}
+
+// ../qprobe/dist/target.js
+var TargetError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TargetError";
+  }
+};
+var IP_RANGE = /^\d{1,3}(?:\.\d{1,3}){3}\s*-\s*\d{1,3}/;
+var SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+var CIDR_SUFFIX = /\/\d{1,3}$/;
+function suggestHost(raw) {
+  try {
+    const url = new URL(SCHEME.test(raw) ? raw : `https://${raw}`);
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+function parseTarget(input, defaultPort) {
+  const raw = input.trim();
+  if (raw === "")
+    throw new TargetError("empty target");
+  if (SCHEME.test(raw)) {
+    const host2 = suggestHost(raw);
+    throw new TargetError(`refusing URL "${raw}" \u2014 qProbe takes a host, not a URL${host2 ? `. Try: ${host2}` : "."}`);
+  }
+  if (raw.includes("@")) {
+    const host2 = suggestHost(raw);
+    throw new TargetError(`refusing target with credentials "${raw}" \u2014 name the host directly${host2 ? `. Try: ${host2}` : "."}`);
+  }
+  if (raw.includes("/")) {
+    if (CIDR_SUFFIX.test(raw)) {
+      throw new TargetError(`refusing CIDR block "${raw}" \u2014 qProbe probes one host at a time, not ranges.`);
+    }
+    const host2 = suggestHost(raw);
+    throw new TargetError(`refusing target with a path "${raw}" \u2014 qProbe probes a host, not a URL path${host2 ? `. Try: ${host2}` : "."}`);
+  }
+  if (raw.includes("*")) {
+    throw new TargetError(`refusing wildcard target "${raw}".`);
+  }
+  if (raw.includes(",")) {
+    throw new TargetError(`refusing target list "${raw}" \u2014 pass one target per invocation / manifest line.`);
+  }
+  if (/\s/.test(raw)) {
+    throw new TargetError(`invalid target "${raw}" (whitespace).`);
+  }
+  if (IP_RANGE.test(raw)) {
+    throw new TargetError(`refusing IP range "${raw}" \u2014 qProbe probes one host at a time.`);
+  }
+  let host;
+  let portStr;
+  if (raw.startsWith("[")) {
+    const end = raw.indexOf("]");
+    if (end < 0)
+      throw new TargetError(`invalid IPv6 target "${raw}" (missing ]).`);
+    host = raw.slice(1, end);
+    const rest = raw.slice(end + 1);
+    if (rest.startsWith(":"))
+      portStr = rest.slice(1);
+    else if (rest !== "")
+      throw new TargetError(`invalid target "${raw}".`);
+  } else {
+    const idx = raw.lastIndexOf(":");
+    if (idx >= 0 && raw.indexOf(":") === idx) {
+      host = raw.slice(0, idx);
+      portStr = raw.slice(idx + 1);
+    } else {
+      host = raw;
+    }
+  }
+  if (host === "")
+    throw new TargetError(`invalid target "${raw}" (empty host).`);
+  let port = defaultPort;
+  if (portStr !== void 0) {
+    if (!/^\d+$/.test(portStr))
+      throw new TargetError(`invalid port "${portStr}" in "${raw}".`);
+    port = Number(portStr);
+    if (port < 1 || port > 65535)
+      throw new TargetError(`port out of range in "${raw}".`);
+  }
+  return { host, port };
 }
 
 // ../qprobe/dist/report.js
@@ -16322,10 +16399,21 @@ async function runSieve(opts) {
 
 // src/platform.ts
 import { readFileSync as readFileSync2 } from "node:fs";
+var RESULT_ORIGIN = "https://quantakrypto.com";
+var POST_TIMEOUT_MS = 1e4;
+function isAllowedResultUrl(raw) {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && url.origin === RESULT_ORIGIN;
+  } catch {
+    return false;
+  }
+}
 var MAX_FINDINGS = 200;
 function readDispatchContext(env = process.env) {
   const path10 = env["GITHUB_EVENT_PATH"];
   if (!path10) return null;
+  if (env["GITHUB_EVENT_NAME"] && env["GITHUB_EVENT_NAME"] !== "repository_dispatch") return null;
   try {
     const event = JSON.parse(readFileSync2(path10, "utf8"));
     const p = event.client_payload;
@@ -16334,6 +16422,7 @@ function readDispatchContext(env = process.env) {
     const token = typeof p.token === "string" ? p.token : "";
     const resultUrl = typeof p.resultUrl === "string" ? p.resultUrl : "";
     if (!auditRunId || !token || !resultUrl) return null;
+    if (!isAllowedResultUrl(resultUrl)) return null;
     return {
       auditRunId,
       token,
@@ -16353,7 +16442,7 @@ function toPayloadFindings(findings) {
     ...f.title ? { message: f.title } : {}
   }));
 }
-function scoredResult(check, tool, score, findings) {
+function scoredResult(tool, score, findings) {
   const n = findings.length;
   return {
     status: "complete",
@@ -16362,18 +16451,18 @@ function scoredResult(check, tool, score, findings) {
     findings: toPayloadFindings(findings)
   };
 }
-function conformanceResult(report, workflowPath) {
-  const param = report.param ?? "?";
-  const failing = (report.categories ?? []).flatMap(
+function conformanceResult(report2, workflowPath) {
+  const param = report2.param ?? "?";
+  const failing = (report2.categories ?? []).flatMap(
     (c) => (c.checks ?? []).filter((k) => k.status === "fail").map((k) => ({
       rule: `${c.category ?? "?"}/${k.name ?? "?"}`,
       severity: "high",
       message: k.detail ?? ""
     }))
   );
-  const neverRan = report.overall === "ERROR" || (report.counts?.pass ?? 0) === 0;
+  const neverRan = report2.overall === "ERROR" || (report2.counts?.pass ?? 0) === 0;
   if (neverRan && failing.length > 0) {
-    const impl = (report.impl ?? []).join(" ");
+    const impl = (report2.impl ?? []).join(" ");
     return {
       status: "failed",
       score: null,
@@ -16390,7 +16479,7 @@ function conformanceResult(report, workflowPath) {
   return {
     status: "complete",
     score: null,
-    summary: `Sieve ${param}: ${report.overall ?? "?"}, ${failing.length} failing check(s)`,
+    summary: `Sieve ${param}: ${report2.overall ?? "?"}, ${failing.length} failing check(s)`,
     findings: failing.slice(0, MAX_FINDINGS)
   };
 }
@@ -16408,7 +16497,14 @@ async function postResult(ctx, result, fetchImpl = fetch) {
     const res = await fetchImpl(ctx.resultUrl, {
       method: "POST",
       headers: { "content-type": "application/json", "user-agent": "quantakrypto-action" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      // The token is in the BODY, so undici's cross-origin header stripping does
+      // not protect it: a 307/308 re-sends method and body to the new origin
+      // intact. Refusing redirects outright is the only thing that does.
+      redirect: "error",
+      // An unreachable endpoint must not burn the job's billed minutes up to
+      // GitHub's six-hour ceiling.
+      signal: AbortSignal.timeout(POST_TIMEOUT_MS)
     });
     return res.ok;
   } catch {
@@ -16417,29 +16513,35 @@ async function postResult(ctx, result, fetchImpl = fetch) {
 }
 
 // src/extra-checks.ts
-async function runProbeCheck(target) {
-  const host = normalizeProbeTarget(target);
+var DEFAULT_PROBE_PORT = 443;
+async function runProbeCheck(target, iOwnThis) {
   try {
+    if (!iOwnThis) {
+      throw new Error(
+        'probing requires an ownership attestation: set i-own-this: "true" in the workflow, and only for an endpoint you are authorised to test.'
+      );
+    }
+    const parsed = parseTarget(target, DEFAULT_PROBE_PORT);
     const { findings, inventory } = await runProbe({
-      // A single host, always. qProbe refuses ranges and lists outright, and the
-      // action must not be the thing that turns a scanner into a sweeper.
-      targets: [{ host, port: 443 }],
+      targets: [parsed],
       mode: "auto",
-      attest: { iOwnThis: true }
+      attest: { iOwnThis }
     });
-    return scoredResult("probe", "qProbe", inventory.readinessScore, findings);
+    return scoredResult("qProbe", inventory.readinessScore, findings);
   } catch (err) {
     return crashedResult("qProbe", err.message);
   }
 }
 async function runConformanceCheck(impl, param, workflowPath) {
   try {
-    const report = await runSieve({
+    const report2 = await runSieve({
       // Split on whitespace: Sieve takes argv, and the input is a command line.
+      // There is no shell anywhere on this path — runSieve spawns argv directly
+      // — so this splits a command, it does not evaluate one.
       command: impl.trim().split(/\s+/),
       param: param.trim()
     });
-    return conformanceResult(report, workflowPath);
+    return conformanceResult(report2, workflowPath);
   } catch (err) {
     return crashedResult("Sieve", err.message);
   }
@@ -16529,6 +16631,9 @@ function appendStepSummary(markdown, env = process.env) {
     return false;
   }
 }
+function setSecret(value) {
+  if (value) console.log(`::add-mask::${escapeData(value)}`);
+}
 function setFailed(message) {
   error(message);
   process.exitCode = 1;
@@ -16573,10 +16678,15 @@ function readInputs(env = process.env) {
   const checks = parseChecks(getInput("checks", env));
   const probeTarget = getInput("probe-target", env);
   const conformanceImpl = getInput("conformance-impl", env);
-  assertCheckConfig(checks, { probeTarget, conformanceImpl });
+  assertCheckConfig(checks, {
+    probeTarget,
+    conformanceImpl,
+    probeIOwnThis: getBooleanInput("i-own-this", false, env)
+  });
   return {
     checks,
     probeTarget,
+    probeIOwnThis: getBooleanInput("i-own-this", false, env),
     conformanceImpl,
     conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
@@ -16884,21 +16994,47 @@ var DISPATCH_EVENT = {
 function dispatchAskedFor(eventType, check) {
   return eventType === DISPATCH_EVENT[check];
 }
+function checkForDispatchEvent(eventType) {
+  if (!eventType) return null;
+  for (const id of Object.keys(DISPATCH_EVENT)) {
+    if (DISPATCH_EVENT[id] === eventType) return id;
+  }
+  return null;
+}
+async function report(dispatch, result) {
+  if (!await postResult(dispatch, result)) {
+    warning(
+      `quantakrypto: could not report the result to ${dispatch.resultUrl}. The check ran; the dashboard will show this run as stale until it is re-run.`
+    );
+  }
+}
 async function run(env = process.env) {
   const inputs = readInputs(env);
   const dispatch = readDispatchContext(env);
+  if (dispatch) setSecret(dispatch.token);
   const extras = inputs.checks.filter((c) => c !== "scan");
   for (const check of extras) {
     info(`quantakrypto: running ${check}`);
-    const result2 = check === "probe" ? await runProbeCheck(inputs.probeTarget) : await runConformanceCheck(inputs.conformanceImpl, inputs.conformanceParam, WORKFLOW_PATH);
+    const result2 = check === "probe" ? await runProbeCheck(inputs.probeTarget, inputs.probeIOwnThis) : await runConformanceCheck(inputs.conformanceImpl, inputs.conformanceParam, WORKFLOW_PATH);
     info(`quantakrypto: ${check} \u2014 ${result2.summary}`);
     appendStepSummary(`## quantakrypto \u2014 ${check}
 
 ${result2.summary}
 `, env);
     if (dispatch && dispatchAskedFor(dispatch.eventType, check)) {
-      await postResult(dispatch, result2);
+      await report(dispatch, result2);
     }
+  }
+  const asked = checkForDispatchEvent(dispatch?.eventType ?? null);
+  if (dispatch && asked && !inputs.checks.includes(asked)) {
+    await report(
+      dispatch,
+      crashedResult(
+        "This workflow",
+        `is not configured to run the ${asked} check. Add "${asked}" to the checks: input in ${WORKFLOW_PATH} (currently: ${inputs.checks.join(",")}).`
+      )
+    );
+    return;
   }
   if (!inputs.checks.includes("scan")) return;
   const scanRoot = resolveInWorkspace(inputs.path, env);
@@ -16976,10 +17112,7 @@ ${result2.summary}
     );
   }
   if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
-    await postResult(
-      dispatch,
-      scoredResult("scan", "qScan", result.inventory.readinessScore, newFindings)
-    );
+    await report(dispatch, scoredResult("qScan", result.inventory.readinessScore, result.findings));
   }
   const gateOpts = { leadMonths: inputs.leadMonths, failNow: inputs.failNow };
   const mandateFailed = mandateEval !== void 0 && mandateGateFails(mandateEval, gateOpts);
@@ -16998,8 +17131,11 @@ ${result2.summary}
 }
 var invokedDirectly = process.argv[1] !== void 0 && import.meta.url === pathToFileURL(resolve2(process.argv[1])).href;
 if (invokedDirectly) {
-  run().catch((err) => {
-    setFailed(`quantakrypto: ${err.message}`);
+  run().catch(async (err) => {
+    const message = err.message;
+    const dispatch = readDispatchContext();
+    if (dispatch) await postResult(dispatch, crashedResult("The quantakrypto action", message));
+    setFailed(`quantakrypto: ${message}`);
     process.exit(1);
   });
 }
@@ -17009,6 +17145,7 @@ export {
   buildMandateSection,
   buildPlanComment,
   buildSummary,
+  checkForDispatchEvent,
   describeMandateFailure,
   dispatchAskedFor,
   fingerprintFinding as fingerprint,

@@ -1,6 +1,6 @@
 import { runProbe } from "@quantakrypto/qprobe";
+import { parseTarget } from "@quantakrypto/qprobe";
 import { runSieve, type ParamSet } from "@quantakrypto/sieve";
-import { normalizeProbeTarget } from "./checks.js";
 import { conformanceResult, crashedResult, scoredResult } from "./platform.js";
 import type { ResultPayload } from "./platform.js";
 
@@ -19,20 +19,47 @@ import type { ResultPayload } from "./platform.js";
 
 type Result = Omit<ResultPayload, "auditRunId" | "token">;
 
-/** qProbe against one host the workflow attests ownership of. */
-export async function runProbeCheck(target: string): Promise<Result> {
-  const host = normalizeProbeTarget(target);
+/** Default port when the target names none. qProbe picks the mode from it. */
+const DEFAULT_PROBE_PORT = 443;
+
+/**
+ * qProbe against one host the workflow attests ownership of.
+ *
+ * The target goes through qProbe's own `parseTarget`, which is the enforcement
+ * point for "one host at a time, named explicitly": it refuses CIDR blocks, IP
+ * ranges, wildcards, comma lists, URLs and embedded credentials, and the threat
+ * model calls that control code-enforced.
+ *
+ * An earlier version of this file normalised the target itself and handed
+ * `runProbe` a pre-built object, which skipped every one of those refusals.
+ * `our-api.example.com@evil.test` would have been reduced to `evil.test` and
+ * probed under a manufactured ownership claim, while a reviewer reading the
+ * workflow saw `our-api.example.com`. Never parse a security-relevant input
+ * twice; call the parser that owns the rule.
+ *
+ * `iOwnThis` is passed through from an explicit workflow input rather than
+ * hardcoded. The CLI makes an operator type `--i-own-this`, and that affirmative
+ * act is the whole control; the action must not manufacture it on their behalf.
+ */
+export async function runProbeCheck(target: string, iOwnThis: boolean): Promise<Result> {
   try {
+    if (!iOwnThis) {
+      throw new Error(
+        'probing requires an ownership attestation: set i-own-this: "true" in the workflow, ' +
+          "and only for an endpoint you are authorised to test.",
+      );
+    }
+    // Throws TargetError with an actionable message on anything that is not a
+    // single host (or host:port) named directly.
+    const parsed = parseTarget(target, DEFAULT_PROBE_PORT);
     const { findings, inventory } = await runProbe({
-      // A single host, always. qProbe refuses ranges and lists outright, and the
-      // action must not be the thing that turns a scanner into a sweeper.
-      targets: [{ host, port: 443 }],
+      targets: [parsed],
       mode: "auto",
-      attest: { iOwnThis: true },
+      attest: { iOwnThis },
     });
-    return scoredResult("probe", "qProbe", inventory.readinessScore, findings);
+    return scoredResult("qProbe", inventory.readinessScore, findings);
   } catch (err) {
-    // Ownership and target errors land here, and they are the operator's to fix.
+    // Target and attestation errors land here, and they are the operator's to fix.
     return crashedResult("qProbe", (err as Error).message);
   }
 }
@@ -46,6 +73,8 @@ export async function runConformanceCheck(
   try {
     const report = await runSieve({
       // Split on whitespace: Sieve takes argv, and the input is a command line.
+      // There is no shell anywhere on this path — runSieve spawns argv directly
+      // — so this splits a command, it does not evaluate one.
       command: impl.trim().split(/\s+/),
       param: param.trim() as ParamSet,
     });

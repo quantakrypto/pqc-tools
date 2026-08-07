@@ -23,6 +23,14 @@ inputs:
       accepted and reduced to its host. Required when "probe" is in checks.
     required: false
     default: ""
+  i-own-this:
+    description: >-
+      Attest that you are authorised to probe "probe-target". Required when
+      "probe" is in checks. This is an explicit statement by whoever edits this
+      workflow, exactly as the qProbe CLI requires; the action will not make it
+      on your behalf. Active probing of endpoints you do not own may be unlawful.
+    required: false
+    default: "false"
   conformance-impl:
     description: >-
       Command that runs your ML-KEM/ML-DSA/SLH-DSA implementation, e.g.

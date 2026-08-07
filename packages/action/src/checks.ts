@@ -80,11 +80,16 @@ export function normalizeProbeTarget(raw: string): string {
  */
 export function assertCheckConfig(
   checks: readonly CheckId[],
-  cfg: { probeTarget: string; conformanceImpl: string },
+  cfg: { probeTarget: string; conformanceImpl: string; probeIOwnThis?: boolean },
 ): void {
   const missing: string[] = [];
   if (checks.includes("probe") && !cfg.probeTarget.trim()) {
     missing.push('probe-target (a host you own, e.g. "api.example.com")');
+  }
+  if (checks.includes("probe") && cfg.probeIOwnThis === false) {
+    // The attestation is the control. Refusing here means it is caught when the
+    // workflow is written, not after a probe has already gone out.
+    missing.push('i-own-this: "true" (you must attest you are authorised to probe that host)');
   }
   if (checks.includes("conformance") && !cfg.conformanceImpl.trim()) {
     missing.push('conformance-impl (how to run your implementation, e.g. "node ./impl.js")');

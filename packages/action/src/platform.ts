@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import type { CheckId } from "./checks.js";
 
 /**
  * Reporting a check result back to quantakrypto.com.
@@ -35,6 +34,35 @@ export interface PayloadFinding {
   message?: string;
 }
 
+/**
+ * The only origin a result may be posted to.
+ *
+ * `resultUrl` arrives in the dispatch payload, and firing a repository_dispatch
+ * needs `contents: write` — which any repo collaborator has. Without this pin,
+ * whoever composes that payload chooses where a token-bearing POST lands: plain
+ * http, or an arbitrary host, or (on a self-hosted runner) an address inside the
+ * private network. Pinning turns an SSRF primitive into a fixed destination.
+ */
+export const RESULT_ORIGIN = "https://quantakrypto.com";
+
+/** How long to wait for the platform before giving up on a report. */
+const POST_TIMEOUT_MS = 10_000;
+
+/**
+ * Is this a result URL we are willing to send a credential to?
+ *
+ * https only, and only our own origin. Exported so the rule is testable and so
+ * there is exactly one place it lives.
+ */
+export function isAllowedResultUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && url.origin === RESULT_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 /** The dispatch context the platform sends when it triggers a run. */
 export interface DispatchContext {
   auditRunId: string;
@@ -44,7 +72,11 @@ export interface DispatchContext {
   eventType: string | null;
 }
 
-/** Cap matching the server's own truncation, so we never post more than it keeps. */
+/**
+ * Cap on posted findings. The server keeps up to 500, so this is our own limit,
+ * not its truncation point — chosen to match what the jq it replaces posted, so
+ * a repository sees the same number of findings before and after the migration.
+ */
 const MAX_FINDINGS = 200;
 
 /**
@@ -57,6 +89,9 @@ const MAX_FINDINGS = 200;
 export function readDispatchContext(env: NodeJS.ProcessEnv = process.env): DispatchContext | null {
   const path = env["GITHUB_EVENT_PATH"];
   if (!path) return null;
+  // Only a repository_dispatch carries a platform payload. Nothing else should
+  // be able to present one, and narrowing here costs nothing.
+  if (env["GITHUB_EVENT_NAME"] && env["GITHUB_EVENT_NAME"] !== "repository_dispatch") return null;
   try {
     const event = JSON.parse(readFileSync(path, "utf8")) as {
       action?: unknown;
@@ -70,6 +105,8 @@ export function readDispatchContext(env: NodeJS.ProcessEnv = process.env): Dispa
     // All three are required to report. A partial payload is not a half-report,
     // it is a run we cannot attribute, so we stay quiet rather than guess.
     if (!auditRunId || !token || !resultUrl) return null;
+    // Refuse to carry the token anywhere but our own origin over https.
+    if (!isAllowedResultUrl(resultUrl)) return null;
     return {
       auditRunId,
       token,
@@ -101,7 +138,6 @@ export function toPayloadFindings(
 
 /** A scored check (qScan, qProbe): score plus findings. */
 export function scoredResult(
-  check: CheckId,
   tool: string,
   score: number | null,
   findings: readonly Parameters<typeof toPayloadFindings>[0][number][],
@@ -212,6 +248,13 @@ export async function postResult(
       method: "POST",
       headers: { "content-type": "application/json", "user-agent": "quantakrypto-action" },
       body: JSON.stringify(payload),
+      // The token is in the BODY, so undici's cross-origin header stripping does
+      // not protect it: a 307/308 re-sends method and body to the new origin
+      // intact. Refusing redirects outright is the only thing that does.
+      redirect: "error",
+      // An unreachable endpoint must not burn the job's billed minutes up to
+      // GitHub's six-hour ceiling.
+      signal: AbortSignal.timeout(POST_TIMEOUT_MS),
     });
     return res.ok;
   } catch {
