@@ -245,6 +245,8 @@ jobs:
         run: node scripts/check-action-pins.mjs
       - name: Enforce the offline/agent boundary (ADR-0005)
         run: node scripts/check-offline-boundary.mjs
+      - name: action.yml pair in sync (root Marketplace copy vs packages/action)
+        run: node scripts/check-action-yml-sync.mjs
       - name: REUSE lint (SPDX / licensing) — advisory
         continue-on-error: true
         run: |
