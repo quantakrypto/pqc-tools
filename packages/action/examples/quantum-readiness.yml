@@ -14,7 +14,9 @@ on:
 
 permissions:
   contents: read
-  security-events: write # upload SARIF to the Security tab
+  security-events: write
+  # Required by upload-sarif to resolve the run it attaches results to.
+  actions: read # upload SARIF to the Security tab
   pull-requests: write # comment on pull requests
 
 jobs:
@@ -39,7 +41,12 @@ jobs:
           comment-pr: "true"
           github-token: ${{ github.token }}
 
-      - name: Upload SARIF to code scanning
+      # Code scanning needs GitHub Advanced Security on a PRIVATE repository
+      # (it is free on public ones). Without it this step fails with "Advanced
+      # Security must be enabled". continue-on-error keeps the scan useful
+      # meanwhile: the job summary and diff annotations are written regardless.
+      - name: Upload SARIF
+        continue-on-error: true to code scanning
         if: always() # upload even when the scan failed the job
         uses: github/codeql-action/upload-sarif@v3
         with:

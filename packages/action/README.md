@@ -21,6 +21,7 @@ on:
 permissions:
   contents: read
   security-events: write   # required to upload SARIF to code scanning
+  actions: read            # also required by upload-sarif (see note below)
   pull-requests: write     # only if you enable comment-pr
 
 jobs:
@@ -42,13 +43,30 @@ jobs:
           comment-pr: "true"
           github-token: ${{ github.token }}
 
-      # Upload to GitHub code scanning (Security tab). Runs even if the scan failed.
+      # Upload to GitHub code scanning (Security tab). Runs even if the scan
+      # failed. Needs actions: read above, and Advanced Security on a private
+      # repo — see the note below.
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ steps.quantakrypto.outputs.sarif-file }}
 ```
+
+> **The SARIF upload needs two things beyond this snippet.**
+>
+> `permissions:` must include **`actions: read`** as well as `security-events:
+> write`. Without it the upload validates your file, adds fingerprints, and then
+> fails with `Resource not accessible by integration`, which reads like a problem
+> with the SARIF rather than a missing scope.
+>
+> And code scanning itself requires **GitHub Advanced Security on private
+> repositories**. It is free and always on for public repos; on a private repo
+> without it the upload refuses with `Advanced Security must be enabled for this
+> repository`. If you do not have it, drop the upload step: the scan still writes
+> a job summary and annotates the diff, which is where most of the value is. Add
+> `continue-on-error: true` if you would rather leave the step in place so it
+> starts working the day it is enabled.
 
 A ready-to-copy workflow lives at
 [`examples/quantum-readiness.yml`](examples/quantum-readiness.yml).
