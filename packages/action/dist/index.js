@@ -16692,6 +16692,8 @@ function readInputs(env = process.env) {
     conformanceImpl,
     conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
+    ignore: splitPatterns(getInput("ignore", env)),
+    include: splitPatterns(getInput("include", env)),
     severityThreshold,
     failOnFindings: getBooleanInput("fail-on-findings", true, env),
     format,
@@ -17010,6 +17012,9 @@ async function report(dispatch, result) {
     );
   }
 }
+function splitPatterns(raw) {
+  return raw.split(/[\n,]+/).map((p) => p.trim()).filter(Boolean);
+}
 async function run(env = process.env) {
   const inputs = readInputs(env);
   const dispatch = readDispatchContext(env);
@@ -17063,7 +17068,9 @@ ${result2.summary}
   const { result } = await runQscan({
     path: scanRoot,
     format: inputs.format,
-    severityThreshold: inputs.severityThreshold
+    severityThreshold: inputs.severityThreshold,
+    ...inputs.ignore.length > 0 ? { ignore: inputs.ignore } : {},
+    ...inputs.include.length > 0 ? { include: inputs.include } : {}
   });
   const baseline = inputs.baseline ? await loadBaselineSet(inputs.baseline, env) : { version: 1, fingerprints: [] };
   const { newFindings } = applyBaseline(result.findings, baseline);
@@ -17155,5 +17162,6 @@ export {
   meetsThreshold,
   readInputs,
   run,
-  shouldFail
+  shouldFail,
+  splitPatterns
 };

@@ -81,6 +81,10 @@ interface ActionInputs {
   /** Parameter set for "conformance", e.g. ml-kem-768. */
   conformanceParam: string;
   path: string;
+  /** Extra exclude patterns. Empty means "just the built-in ignores". */
+  ignore: string[];
+  /** Restrict the walk to these patterns. Empty means "everything". */
+  include: string[];
   severityThreshold: Severity;
   failOnFindings: boolean;
   format: "sarif" | "json";
@@ -156,6 +160,8 @@ export function readInputs(env: NodeJS.ProcessEnv = process.env): ActionInputs {
     conformanceImpl,
     conformanceParam: getInput("conformance-param", env) || "ml-kem-768",
     path: getInput("path", env) || ".",
+    ignore: splitPatterns(getInput("ignore", env)),
+    include: splitPatterns(getInput("include", env)),
     severityThreshold,
     failOnFindings: getBooleanInput("fail-on-findings", true, env),
     format,
@@ -689,6 +695,19 @@ async function report(
   }
 }
 
+/**
+ * Split a comma- or newline-separated pattern list.
+ *
+ * Both separators, because a YAML block scalar is the natural way to write more
+ * than two of these and a single line is the natural way to write one.
+ */
+export function splitPatterns(raw: string): string[] {
+  return raw
+    .split(/[\n,]+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 /** The full action run, parameterised on `env` for testability. */
 export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const inputs = readInputs(env);
@@ -781,6 +800,8 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
     path: scanRoot,
     format: inputs.format,
     severityThreshold: inputs.severityThreshold,
+    ...(inputs.ignore.length > 0 ? { ignore: inputs.ignore } : {}),
+    ...(inputs.include.length > 0 ? { include: inputs.include } : {}),
   });
 
   // Apply the shared baseline so only NEW quantum-vulnerable crypto can fail.

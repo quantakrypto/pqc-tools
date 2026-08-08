@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { assertCheckConfig, isCheckId, normalizeProbeTarget, parseChecks } from "../src/checks.js";
-import { dispatchAskedFor } from "../src/main.js";
+import { dispatchAskedFor, splitPatterns } from "../src/main.js";
 
 /**
  * The `checks` input is what collapses three workflow files into one. Its
@@ -113,4 +113,30 @@ test("an unrecognised or absent dispatch reports nothing", () => {
     assert.ok(!dispatchAskedFor("", check));
     assert.ok(!dispatchAskedFor("some-other-event", check));
   }
+});
+
+/**
+ * The CLI has --ignore and --include; the action had neither, so a repository
+ * with content, fixtures or docs that DESCRIBE cryptography had no way to
+ * exclude them. Our own website proved it: two of its four high findings were
+ * marketing copy about RSA and HSMs. A baseline is the wrong tool for that — it
+ * records them as known debt rather than as not-code.
+ */
+test("pattern lists accept commas, newlines, and the mix of both YAML encourages", () => {
+  assert.deepEqual(splitPatterns("src/content"), ["src/content"]);
+  assert.deepEqual(splitPatterns("a,b"), ["a", "b"]);
+  assert.deepEqual(splitPatterns("a\nb"), ["a", "b"]);
+  assert.deepEqual(splitPatterns("a, b\nc"), ["a", "b", "c"]);
+});
+
+test("pattern lists tolerate the whitespace a block scalar leaves behind", () => {
+  assert.deepEqual(splitPatterns("  a  ,\n  b  \n"), ["a", "b"]);
+  assert.deepEqual(splitPatterns("a,,b"), ["a", "b"]);
+});
+
+test("an unset pattern list is empty, not a pattern matching everything", () => {
+  // [] must mean "no restriction"; [""] would restrict the walk to nothing.
+  assert.deepEqual(splitPatterns(""), []);
+  assert.deepEqual(splitPatterns("   "), []);
+  assert.deepEqual(splitPatterns(",\n,"), []);
 });
