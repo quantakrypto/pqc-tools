@@ -54,6 +54,21 @@ inputs:
     description: "Directory (or file) to scan, relative to the repository root."
     required: false
     default: "."
+  ignore:
+    description: >-
+      Extra paths to exclude, comma- or newline-separated (repeatable `--ignore`
+      on the CLI). Useful for content, fixtures or docs that DESCRIBE cryptography
+      without using it: those match the detectors and become findings you never
+      wanted scanned. A baseline is the wrong tool for that, because it records
+      them as known debt rather than as not-code.
+    required: false
+    default: ""
+  include:
+    description: >-
+      Restrict the scan to paths matching these patterns, comma- or
+      newline-separated. When empty, everything not excluded is scanned.
+    required: false
+    default: ""
   severity-threshold:
     description: >-
       Minimum severity that counts as a failure: critical, high, medium, low,
