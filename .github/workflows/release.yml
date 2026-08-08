@@ -119,16 +119,32 @@ jobs:
           done
           echo "Published ${count} new package version(s)."
 
-      # Keep the moving major-version Action tag (v1) pointing at the just-released
-      # commit so `uses: quantakrypto/pqc-tools/packages/action@v1` never serves a
+      # Keep EVERY moving major-version Action tag pointing at the just-released
+      # commit so no `uses: quantakrypto/pqc-tools/packages/action@vN` serves a
       # stale, pre-security-fix bundle (2026-07-15 supply-chain audit). Runs only on
       # a real published Release, not a manual dry-run/publish dispatch.
-      - name: Move the v1 Action tag to this release
+      #
+      # This moved v1 only, hardcoded. When v2 was cut, the 0.10.0 release left it
+      # a commit behind v1 - and v2 is the tag the platform's generated workflows
+      # pin, so the tag most consumers actually use was the stale one. Discovering
+      # the tags instead of listing them means a future v3 needs no edit here,
+      # which is exactly the failure this had.
+      - name: Move the major-version Action tags to this release
         if: ${{ github.event_name == 'release' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git tag -f v1 "${GITHUB_SHA}"
-          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/v1"
-          echo "moved the v1 Action tag -> ${GITHUB_SHA}"
+          # checkout does not fetch tags at fetch-depth 1, so `git tag --list`
+          # would quietly find nothing and this step would no-op while passing.
+          git fetch --tags --force --quiet
+          tags="$(git tag --list 'v[0-9]*' | grep -E '^v[0-9]+$' || true)"
+          if [ -z "$tags" ]; then
+            echo "::error::no major Action tag (vN) found - refusing to leave consumers on a stale bundle"
+            exit 1
+          fi
+          for t in ${tags}; do
+            git tag -f "${t}" "${GITHUB_SHA}"
+            git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${t}"
+            echo "moved the ${t} Action tag -> ${GITHUB_SHA}"
+          done
