@@ -6,6 +6,33 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-08
+
+Minor: three additive features and two user-facing bug fixes. Nothing existing
+changes shape, and no exit code moves.
+
+### Fixed - the SARIF we produced was rejected by GitHub code scanning, in full
+
+A result's `taxa[]` holds reportingDescriptorReference objects directly. We
+wrapped them in `target`, which is relationship shape, and GitHub rejected the
+entire file: "taxa[0] is not allowed to have the additional property target".
+Every consumer following the workflow we document - action writes SARIF,
+upload-sarif publishes it - had been getting nothing in their Security tab.
+
+Two safeguards agreed with the bug and are fixed with it: validate-sarif checked
+that taxa was an array without looking inside it, and the unit test asserted the
+broken shape. Found by running our own scanner against our own repository for
+the first time.
+
+### Added - `ignore` and `include` inputs on the action
+
+The CLI had both; the action had neither, so anything reachable only through the
+action could not exclude a path. Content, fixtures and docs that DESCRIBE
+cryptography match the detectors and become findings nobody wanted scanned. A
+baseline was the only workaround and it is the wrong tool: it records a finding
+as known debt, and a blog post mentioning RSA is not debt.
+
+
 ### Added - action: one workflow runs any combination of scan, conformance and probe
 
 The action takes a `checks` input (any subset of `scan`, `conformance`, `probe`)
