@@ -195,7 +195,13 @@ test("toSarif maps CWE into rule properties, result taxa, and run taxonomies", (
   assert.ok(run.tool.driver.rules[0].properties.tags.includes("CWE-327"));
 
   // results[].taxa references the CWE taxon.
-  assert.equal(run.results[0].taxa[0].target.id, "CWE-327");
+  // A result's taxa[] holds reportingDescriptorReference objects DIRECTLY.
+  // This assertion previously expected a `target` wrapper, which is the shape of
+  // a relationship rather than a reference — so the test agreed with the bug and
+  // GitHub rejected every SARIF we produced.
+  assert.equal(run.results[0].taxa[0].id, "CWE-327");
+  assert.equal(run.results[0].taxa[0].toolComponent.name, "CWE");
+  assert.equal(run.results[0].taxa[0].target, undefined);
   assert.equal(run.results[0].properties.cwe, "CWE-327");
 
   // run.taxonomies declares the CWE taxonomy component.

@@ -107,6 +107,9 @@ export function validateSarif(doc) {
 }
 
 /** Validate a single SARIF result object. */
+/** The only properties SARIF allows on a reportingDescriptorReference. */
+const TAXA_REF_KEYS = new Set(["id", "index", "guid", "toolComponent"]);
+
 function validateResult(res, path, v) {
   if (!isObject(res)) {
     v.add(path, "result must be an object");
@@ -124,6 +127,35 @@ function validateResult(res, path, v) {
   if (!isObject(res.message) || typeof res.message.text !== "string") {
     v.add(`${path}.message.text`, "missing message.text string");
   }
+  // A result's taxa[] holds reportingDescriptorReference objects. The schema
+  // allows only id/index/guid/toolComponent, and GitHub's upload enforces it —
+  // it rejected the ENTIRE file over a stray `target` property that this
+  // validator was happy with, so every documented upload-sarif workflow was
+  // silently getting nothing. Check inside taxa, not just that it is an array.
+  if (res.taxa !== undefined) {
+    if (!Array.isArray(res.taxa)) {
+      v.add(`${path}.taxa`, "taxa must be an array of reportingDescriptorReference");
+    } else {
+      res.taxa.forEach((ref, ti) => {
+        const at = `${path}.taxa[${ti}]`;
+        if (!isObject(ref)) {
+          v.add(at, "taxa entry must be an object");
+          return;
+        }
+        const extra = Object.keys(ref).filter((k) => !TAXA_REF_KEYS.has(k));
+        if (extra.length > 0) {
+          v.add(
+            at,
+            `unknown propert${extra.length === 1 ? "y" : "ies"} ${extra.join(", ")} (allowed: ${[...TAXA_REF_KEYS].join(", ")})`,
+          );
+        }
+        if (ref.id === undefined && ref.index === undefined && ref.guid === undefined) {
+          v.add(at, "reference must carry at least one of id, index, guid");
+        }
+      });
+    }
+  }
+
   if (!Array.isArray(res.locations) || res.locations.length === 0) {
     v.add(`${path}.locations`, "missing or empty locations[]");
   } else {

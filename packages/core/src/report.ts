@@ -228,15 +228,15 @@ export function toSarif(result: ScanResult, opts?: ReportOptions): SarifLog {
         ...(f.cwe ? { cwe: f.cwe } : {}),
         ...exposureProperties(exposureFor(f, opts?.hndl)),
       },
-      ...(f.cwe
-        ? {
-            taxa: [
-              {
-                target: { id: f.cwe, toolComponent: { name: "CWE" } },
-              },
-            ],
-          }
-        : {}),
+      // A result's `taxa` holds reportingDescriptorReference objects directly:
+      // { id, index, guid, toolComponent }. It used to wrap them in `target`,
+      // which is the shape of a reportingDescriptorRelationship (what a RULE
+      // uses in `relationships`), not of a reference. GitHub's code-scanning
+      // upload validates against the real schema and rejected the whole file:
+      // "taxa[0] is not allowed to have the additional property target". Our own
+      // validator did not check inside taxa, so this shipped, and every consumer
+      // following the documented upload-sarif workflow got nothing.
+      ...(f.cwe ? { taxa: [{ id: f.cwe, toolComponent: { name: "CWE" } }] } : {}),
       locations: [
         {
           physicalLocation: {
