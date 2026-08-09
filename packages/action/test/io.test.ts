@@ -137,6 +137,33 @@ test("setOutput appends a heredoc entry to $GITHUB_OUTPUT with a random delimite
   assert.doesNotMatch(contents, /ghadelimiter_findings-count/);
 });
 
+/**
+ * The fallback must not be a workflow command.
+ *
+ * It used to write `::set-output title=…::value`: a command GitHub removed in
+ * 2023, spelled with the wrong parameter, so the runner rejected it. Our own
+ * tests call setOutput with no GITHUB_OUTPUT, which put those commands on the
+ * real runner's stdout during CI, and whether the runner parsed them depended on
+ * how output happened to interleave. It failed a matrix leg with 1329 tests
+ * passing. Nothing a test can emit may be a command the runner will read.
+ */
+test("setOutput without $GITHUB_OUTPUT prints a plain line, never a workflow command", () => {
+  const written: string[] = [];
+  const original = process.stdout.write.bind(process.stdout);
+  (process.stdout as any).write = (chunk: any) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    setOutput("findings-count", "3", {});
+  } finally {
+    (process.stdout as any).write = original;
+  }
+  const out = written.join("");
+  assert.match(out, /findings-count=3/);
+  assert.ok(!out.includes("::"), `fallback emitted a workflow command: ${JSON.stringify(out)}`);
+});
+
 // ---------------------------------------------------------------------------
 // P0: output injection via a forged heredoc delimiter. With the old predictable
 // `ghadelimiter_<name>`, a value containing that exact line could close the
