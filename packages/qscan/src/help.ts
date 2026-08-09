@@ -144,8 +144,8 @@ EXAMPLES
   qscan .                       Scan the current directory
   qscan src --format sarif -o qscan.sarif
   qscan . --severity-threshold critical
-  qscan . --write-baseline qscan-baseline.json
-  qscan . --baseline qscan-baseline.json
+  qscan . --write-baseline .quantakrypto/baseline.json
+  qscan . --baseline .quantakrypto/baseline.json
   qscan . --include src --include lib
   qscan . --config ./ci/quantakrypto.config.json
   qscan . --changed --since origin/main
