@@ -3,7 +3,7 @@
  * The action ships two metadata files and nothing was checking they agree.
  *
  *   action.yml                 repository root, so the Marketplace can list it
- *   packages/action/action.yml the canonical path, `uses: …/packages/action@v2`
+ *   packages/action/action.yml the canonical path, `uses: …/packages/action@v1`
  *
  * They must declare the SAME inputs and outputs, because both entrypoints run
  * the same bundle. A drifting pair is silent and nasty: an input added to one

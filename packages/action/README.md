@@ -6,8 +6,14 @@ A zero-dependency GitHub Action that runs [qScan](../qscan) over your repository
 writes a [SARIF](https://sarifweb.azurewebsites.net/) report you can upload to
 GitHub code scanning, annotates every finding inline in the diff, and (optionally)
 comments a summary on the pull request. With a **baseline**, only *new*
-quantum-vulnerable crypto fails the build — so you can adopt it on a legacy
+quantum-vulnerable crypto fails the build, so you can adopt it on a legacy
 codebase without drowning in pre-existing findings.
+
+It also runs the other two checks, selected with [`checks`](#running-more-than-a-scan):
+**conformance** ([Sieve](../sieve), FIPS 203/204/205 against your own
+implementation) and **probe** ([qProbe](../qprobe), a live TLS/SSH handshake
+against an endpoint you own). `checks` defaults to `scan`, so a workflow that
+never sets it behaves exactly as it always has.
 
 ## Quick start
 
@@ -48,7 +54,7 @@ jobs:
       # repo — see the note below.
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.quantakrypto.outputs.sarif-file }}
 ```
@@ -82,6 +88,8 @@ A ready-to-copy workflow lives at
 | `conformance-param` | `ml-kem-768` | Parameter set for the conformance battery. |
 | `mode` | `scan` | `scan` writes a report and gates the build; `comment-plan` posts a deterministic PQC migration plan as a PR comment and **never** fails the build. |
 | `path` | `.` | Directory (or file) to scan, relative to the repo root. |
+| `ignore` | | Extra paths to exclude, comma- or newline-separated (the CLI's repeatable `--ignore`). Use it for content, fixtures or docs that *describe* cryptography without using it: they match the detectors and become findings you never wanted. A baseline is the wrong tool there, because it files them as known debt rather than as not-code. |
+| `include` | | Restrict the scan to paths matching these patterns, comma- or newline-separated. Empty scans everything not excluded. |
 | `severity-threshold` | `high` | Minimum severity that fails the build: `critical`, `high`, `medium`, `low`, `info`. Findings below this never fail. |
 | `fail-on-findings` | `true` | When `true`, exit non-zero if any finding at/above the threshold remains. Set `false` to report only. |
 | `format` | `sarif` | Report format written to `output`: `sarif` or `json`. |
@@ -102,6 +110,70 @@ A ready-to-copy workflow lives at
 | `findings-count` | Number of findings at/above the threshold, after baseline. |
 | `sarif-file` | Path of the report file that was written. |
 | `readiness-score` | Post-quantum readiness score, 0 (worst) – 100 (no classical asymmetric crypto found). |
+
+## Running more than a scan
+
+`checks` takes any comma-separated subset of `scan`, `conformance` and `probe`,
+so one step covers all seven combinations.
+
+The checks are **independent**, which is worth being precise about: each writes
+its own section of the job summary, and one failing does not take the others
+down with it. The SARIF report, the outputs, and the [exit
+behavior](#exit-behavior) below all come from `scan` alone. Conformance and probe
+report their verdicts to the job summary (and, on a platform-triggered run, to
+quantakrypto); a failing conformance battery or a weak endpoint does not fail
+the job. A *misconfiguration* still does, as it does for the scan: a missing
+`i-own-this`, an unknown check id, an unusable `conformance-impl`.
+
+```yaml
+      - uses: quantakrypto/pqc-tools/packages/action@v1
+        with:
+          checks: "scan,conformance,probe"
+
+          # conformance (Sieve) — drives YOUR implementation over the stdin/stdout
+          # JSON protocol, so the command must exist in this repository.
+          conformance-impl: "node ./pqc/impl.js"
+          conformance-param: "ml-kem-768"
+
+          # probe (qProbe) — a benign, unauthenticated handshake against one
+          # endpoint. `i-own-this` is your attestation and is REQUIRED; the action
+          # will not make it for you, and qProbe refuses to run without it.
+          probe-target: "api.example.com"
+          i-own-this: "true"
+```
+
+Three things are worth knowing before you enable them:
+
+- **`conformance` runs a command from your repository.** That is the whole point
+  of a conformance harness, but it means the step executes repository code. On a
+  `pull_request` from a fork, that code is the contributor's. Gate it
+  accordingly, or run conformance only on `push`.
+- **`i-own-this` is a legal statement, not a flag.** Active probing of endpoints
+  you are not authorised to test may be unlawful. It lives in the committed
+  workflow so it is attributable in `git blame`.
+- **A conformance run that cannot start is a failure, not a clean sheet.** If
+  `conformance-impl` does not resolve to a runnable command, every check in the
+  battery fails identically. The action reports that as one "the harness never
+  ran" finding rather than as hundreds of cryptographic defects.
+
+## Reporting to the quantakrypto platform
+
+When a repository is connected at [quantakrypto.com](https://quantakrypto.com),
+the platform triggers this action with a `repository_dispatch` and the action
+posts the result back. That is the **only** case in which it makes an outbound
+request, and it is constrained on purpose:
+
+- it runs only for a `repository_dispatch` event, never on `push`, `pull_request`
+  or `workflow_dispatch`;
+- the callback URL must be `https://quantakrypto.com`. Any other origin is
+  refused, so a forged dispatch cannot redirect the callback (which carries a
+  one-time token) to a host of the attacker's choosing;
+- redirects are refused rather than followed, and the request times out;
+- the token is registered as a secret with the runner, so it is masked in logs.
+
+Nothing about your source leaves CI: the payload is the readiness score, the
+finding list, and a one-line summary. You do not write any of this yourself.
+Committing the generated workflow is the whole integration.
 
 ## Comment-only migration plan (`mode: comment-plan`)
 
@@ -209,6 +281,18 @@ Typical adoption flow:
   [`@quantakrypto/core`](../core), so the Action and the `qscan` CLI produce identical
   findings, reports, and baseline semantics. This module is just the
   GitHub-runner glue (inputs, outputs, annotations, PR comment, exit policy).
+  The same holds for the other two checks: `conformance` calls
+  [`@quantakrypto/sieve`](../sieve) and `probe` calls
+  [`@quantakrypto/qprobe`](../qprobe), including qProbe's own target parser, so
+  the ownership rule that gates the CLI is the one that gates the Action rather
+  than a second copy of it here.
+- **One place decides what a result means** — the payload the platform receives
+  is built in [`src/platform.ts`](src/platform.ts), not in the user's workflow.
+  It used to be `jq` inside every repository that installed us, which meant a bug
+  in it could never be fixed for anyone who had already committed it. A
+  conformance run whose implementation could not start was reported as ~35
+  high-severity crypto defects; correcting the `jq` changed only what *new*
+  repositories would generate. Here, it is fixed for everyone on their next run.
 - **Output-injection hardened** — a finding's `file`/`message`/`ruleId` come from
   the *scanned* repo, so in a fork PR they are attacker-controlled. Two sinks the
   Action writes with a token are escaped accordingly:

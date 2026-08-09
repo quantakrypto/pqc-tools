@@ -13,8 +13,9 @@ inputs:
     description: >-
       Which checks to run: any comma-separated subset of "scan" (qScan static
       analysis), "conformance" (Sieve, FIPS 203/204/205) and "probe" (qProbe,
-      live TLS/SSH). Defaults to "scan", which is exactly what v1 did, so an
-      existing workflow keeps working unchanged.
+      live TLS/SSH). Defaults to "scan", which is what this action did before
+      this input existed, so an existing workflow keeps working unchanged. That
+      is why adding it did not move the @v1 tag: it is not a breaking change.
     required: false
     default: "scan"
   probe-target:

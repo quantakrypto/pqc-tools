@@ -14,6 +14,12 @@
 #      CBOM with a fresh scan CBOM into one combined "code + infrastructure + wire"
 #      CycloneDX bill of materials (`qscan --cbom --merge`) and uploads it.
 #
+# This example keeps qProbe on the CLI ON PURPOSE: it probes a LIST of hosts from a
+# committed manifest and merges the result into a combined CBOM, and the Action's
+# probe check does neither — it takes one `probe-target` and reports a verdict. If
+# a single endpoint and a verdict is all you need, drop the second job entirely and
+# add `checks: "scan,probe"` with `probe-target` and `i-own-this` to the first.
+#
 # qProbe only ever performs a benign, unauthenticated handshake and never modifies
 # an endpoint; it refuses to run without the ownership manifest. Commit the manifest
 # at `.quantakrypto/owned-hosts.txt` (one host per line, `#` comments allowed) — it
@@ -31,6 +37,7 @@ on:
 permissions:
   contents: read
   security-events: write # upload SARIF to the Security tab
+  actions: read # also required by upload-sarif, and its absence reads as a bad SARIF
 
 jobs:
   # 1) Scan code + infrastructure-as-code on every change.
@@ -41,6 +48,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scan for quantum-vulnerable crypto (code + infrastructure)
+        id: qscan
         uses: quantakrypto/pqc-tools/packages/action@v1
         with:
           path: "."
@@ -49,6 +57,16 @@ jobs:
           format: "sarif"
           output: "quantakrypto.sarif.json"
           github-token: ${{ github.token }}
+
+      # Code scanning needs GitHub Advanced Security on a PRIVATE repository (it
+      # is free on public ones). continue-on-error keeps the job useful without
+      # it: the summary and the diff annotations are written either way.
+      - name: Upload SARIF to code scanning
+        continue-on-error: true
+        if: always() # upload even when the scan failed the job
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.qscan.outputs.sarif-file }}
 
       - name: Generate code + config CBOM
         if: always()
