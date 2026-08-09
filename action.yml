@@ -160,5 +160,5 @@ outputs:
     description: "Post-quantum readiness score from 0 (worst) to 100 (no classical asymmetric crypto found)."
 
 runs:
-  using: "node20"
+  using: "node24"
   main: "packages/action/dist/index.js"

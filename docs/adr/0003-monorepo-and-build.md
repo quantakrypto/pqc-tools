@@ -39,8 +39,8 @@ contributors run three commands (`npm install` / `npm run build` / `npm test`).
 - **Project references add ceremony** — each new package needs its `references`
   wired and an entry in the root build. Accepted as the price of correct,
   incremental, contract-first builds.
-- **The Action's `dist/` must be committed/bundled to publish.** A `node20`
-  GitHub Action runs `dist/index.js` directly, so `uses: …/packages/action@v1`
+- **The Action's `dist/` must be committed/bundled to publish.** A JavaScript
+  GitHub Action (`using: node24`) runs `dist/index.js` directly, so `uses: …/packages/action@v1`
   does not work until the built JS is committed or single-file-bundled. **This gap
   is now closed:** `packages/action/dist/index.js` is committed and a CI
   **freshness gate** (`action-bundle` in [ci.yml](../../.github/workflows/ci.yml))

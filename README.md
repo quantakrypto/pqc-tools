@@ -66,7 +66,7 @@ npx @quantakrypto/sieve --impl "node ./my-impl.js" --param ml-kem-768
 # 4. Gate against a compliance mandate's dated deadlines (CNSA 2.0 / NIST IR 8547).
 #    Verdicts also ride in --format json/sarif/evidence; --policy lets an org
 #    acknowledge families it is knowingly migrating (exempt from early gating).
-npx @quantakrypto/qscan ./ --mandate cnsa-2.0 [--policy crypto-policy.json]
+npx @quantakrypto/qscan ./ --mandate cnsa-2.0 [--policy .quantakrypto/crypto-policy.json]
 ```
 
 Add the CI gate by dropping
