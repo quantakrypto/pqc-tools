@@ -16455,7 +16455,8 @@ function toPayloadFindings(findings) {
     ...f.severity ? { severity: f.severity } : {},
     ...f.location?.file ? { file: f.location.file } : {},
     ...typeof f.location?.line === "number" ? { line: f.location.line } : {},
-    ...f.title ? { message: f.title } : {}
+    ...f.title ? { message: f.title } : {},
+    ...f.remediation ? { remediation: f.remediation } : {}
   }));
 }
 function scoredResult(tool, score, findings) {
@@ -16487,7 +16488,8 @@ function conformanceResult(report2, workflowPath) {
         {
           rule: "harness/implementation-not-runnable",
           severity: "high",
-          message: `Sieve could not run the implementation under test, so this run says nothing about conformance. First error: ${failing[0]?.message ?? "unknown"}. Point conformance-impl (currently: ${impl || "unset"}) at a real executable in this repository, in ${workflowPath}.`
+          message: `Sieve could not run the implementation under test, so this run says nothing about conformance. First error: ${failing[0]?.message ?? "unknown"}.`,
+          remediation: `Point conformance-impl (currently: ${impl || "unset"}) at a real executable in this repository, in ${workflowPath}, then re-run.`
         }
       ]
     };

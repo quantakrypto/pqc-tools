@@ -32,6 +32,17 @@ export interface PayloadFinding {
   file?: string;
   line?: number;
   message?: string;
+  /**
+   * What to do about it.
+   *
+   * Every detector already produces this, either explicitly or derived from the
+   * algorithm family, and it is in the JSON report and the SARIF `help` text.
+   * It was not in this payload, so the platform showed people a list of
+   * problems and no next step, while the tool that found them knew one all
+   * along. "Your readiness is 97, here is why, here is what raises it" is the
+   * whole job; without this the platform could only do the first two thirds.
+   */
+  remediation?: string;
 }
 
 /**
@@ -124,6 +135,7 @@ export function toPayloadFindings(
     ruleId?: string;
     severity?: string;
     title?: string;
+    remediation?: string;
     location?: { file?: string; line?: number };
   }[],
 ): PayloadFinding[] {
@@ -133,6 +145,7 @@ export function toPayloadFindings(
     ...(f.location?.file ? { file: f.location.file } : {}),
     ...(typeof f.location?.line === "number" ? { line: f.location.line } : {}),
     ...(f.title ? { message: f.title } : {}),
+    ...(f.remediation ? { remediation: f.remediation } : {}),
   }));
 }
 
@@ -203,8 +216,10 @@ export function conformanceResult(
           severity: "high",
           message:
             `Sieve could not run the implementation under test, so this run says nothing about ` +
-            `conformance. First error: ${failing[0]?.message ?? "unknown"}. Point conformance-impl ` +
-            `(currently: ${impl || "unset"}) at a real executable in this repository, in ${workflowPath}.`,
+            `conformance. First error: ${failing[0]?.message ?? "unknown"}.`,
+          remediation:
+            `Point conformance-impl (currently: ${impl || "unset"}) at a real executable in this ` +
+            `repository, in ${workflowPath}, then re-run.`,
         },
       ],
     };
