@@ -13653,6 +13653,20 @@ function parseChecks(raw) {
   }
   return out;
 }
+function normalizeProbeTarget(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    if (url.username || url.password) return trimmed;
+    if (!url.hostname) return trimmed;
+    if (!url.port) return url.hostname.replace(/^\[|\]$/g, "");
+    return `${url.hostname}:${url.port}`;
+  } catch {
+    return trimmed;
+  }
+}
 function assertCheckConfig(checks, cfg) {
   const missing = [];
   if (checks.includes("probe") && !cfg.probeTarget.trim()) {
@@ -16523,7 +16537,7 @@ async function runProbeCheck(target, iOwnThis) {
         'probing requires an ownership attestation: set i-own-this: "true" in the workflow, and only for an endpoint you are authorised to test.'
       );
     }
-    const parsed = parseTarget(target, DEFAULT_PROBE_PORT);
+    const parsed = parseTarget(normalizeProbeTarget(target), DEFAULT_PROBE_PORT);
     const { findings, inventory } = await runProbe({
       targets: [parsed],
       mode: "auto",

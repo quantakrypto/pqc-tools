@@ -81,15 +81,44 @@ test("does not require config for checks that were not selected", () => {
   assert.doesNotThrow(() => assertCheckConfig(["scan"], { probeTarget: "", conformanceImpl: "" }));
 });
 
-test("normalizes a probe target to a bare host", () => {
+test("reduces an explicitly-written URL to the host qProbe takes", () => {
   assert.equal(normalizeProbeTarget("https://leonacosta.com"), "leonacosta.com");
-  assert.equal(normalizeProbeTarget("api.example.com"), "api.example.com");
-  assert.equal(normalizeProbeTarget("https://api.example.com:8443/v1?x=1#t"), "api.example.com");
-  // Credentials must not survive into a committed workflow or an attestation.
-  assert.equal(normalizeProbeTarget("https://user:secret@api.example.com/p"), "api.example.com");
-  assert.equal(normalizeProbeTarget("https://[2001:db8::1]:443/"), "2001:db8::1");
-  assert.equal(normalizeProbeTarget("  example.com  "), "example.com");
-  assert.equal(normalizeProbeTarget(""), "");
+  assert.equal(normalizeProbeTarget("https://api.example.com/v1?x=1#t"), "api.example.com");
+  // A non-default port is meaningful to qProbe, so it survives.
+  assert.equal(normalizeProbeTarget("https://api.example.com:8443/v1"), "api.example.com:8443");
+  // IPv6 keeps its brackets when a port follows, or qProbe reads the whole
+  // thing as one host on the default port.
+  assert.equal(normalizeProbeTarget("https://[2001:db8::1]:8443/"), "[2001:db8::1]:8443");
+  assert.equal(normalizeProbeTarget("https://[2001:db8::1]/"), "2001:db8::1");
+  assert.equal(normalizeProbeTarget("  https://example.com  "), "example.com");
+});
+
+test("leaves anything that is not a plain URL for parseTarget to judge", () => {
+  for (const raw of ["api.example.com", "api.example.com:8443", "  example.com  ", ""]) {
+    assert.equal(normalizeProbeTarget(raw), raw.trim(), raw);
+  }
+});
+
+/**
+ * The rule that makes this safe to call at all.
+ *
+ * `i-own-this` attests to the target as written in the committed workflow, so
+ * the host a reviewer reads has to be the host that gets probed. An earlier
+ * version normalised EVERYTHING by prepending a scheme, which turned
+ * `our-api.example.com@evil.test` into `evil.test`: a probe of someone else's
+ * endpoint under a manufactured attestation, invisible in review.
+ *
+ * Both forms now come out unchanged, so parseTarget refuses them and says why.
+ */
+test("never resolves userinfo into a different host", () => {
+  for (const hostile of [
+    "our-api.example.com@evil.test",
+    "https://our-api.example.com@evil.test",
+    "https://user:secret@evil.test/p",
+  ]) {
+    assert.equal(normalizeProbeTarget(hostile), hostile, hostile);
+    assert.ok(!normalizeProbeTarget(hostile).startsWith("evil.test"), hostile);
+  }
 });
 
 /**
@@ -139,4 +168,38 @@ test("an unset pattern list is empty, not a pattern matching everything", () => 
   assert.deepEqual(splitPatterns(""), []);
   assert.deepEqual(splitPatterns("   "), []);
   assert.deepEqual(splitPatterns(",\n,"), []);
+});
+
+/**
+ * The wiring, not just the helper.
+ *
+ * `normalizeProbeTarget` was exported, documented in both action.yml files, and
+ * covered by these tests, while nothing called it. A URL therefore reached
+ * qProbe raw and was refused, and the legacy workflow reported that as a bare
+ * "Check produced no valid report". Every one of those tests passed throughout.
+ *
+ * So this asserts the path an operator actually takes: a URL in `probe-target`
+ * must not fail with a target error. It reaches the network, which is why the
+ * assertion is on what the failure ISN'T.
+ */
+test("a URL in probe-target gets past target parsing", async () => {
+  const { runProbeCheck } = await import("../src/extra-checks.js");
+  const viaUrl = await runProbeCheck("https://example.invalid", true);
+  const viaHost = await runProbeCheck("example.invalid", true);
+  for (const r of [viaUrl, viaHost]) {
+    assert.doesNotMatch(r.summary, /takes a host, not a URL/);
+    assert.doesNotMatch(r.summary, /CIDR/);
+  }
+});
+
+test("a hostile target is still refused, URL-shaped or not", async () => {
+  const { runProbeCheck } = await import("../src/extra-checks.js");
+  for (const hostile of [
+    "our-api.example.com@evil.test",
+    "https://our-api.example.com@evil.test",
+  ]) {
+    const r = await runProbeCheck(hostile, true);
+    assert.equal(r.status, "failed", hostile);
+    assert.match(r.summary, /qProbe did not produce a result/, hostile);
+  }
 });

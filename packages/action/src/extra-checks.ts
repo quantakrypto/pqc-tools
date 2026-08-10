@@ -1,6 +1,7 @@
 import { runProbe } from "@quantakrypto/qprobe";
 import { parseTarget } from "@quantakrypto/qprobe";
 import { runSieve, type ParamSet } from "@quantakrypto/sieve";
+import { normalizeProbeTarget } from "./checks.js";
 import { conformanceResult, crashedResult, scoredResult } from "./platform.js";
 import type { ResultPayload } from "./platform.js";
 
@@ -49,9 +50,15 @@ export async function runProbeCheck(target: string, iOwnThis: boolean): Promise<
           "and only for an endpoint you are authorised to test.",
       );
     }
+    // An explicitly-written URL is reduced to its host first, which is what
+    // action.yml documents. It is a pure string-to-string step, not a second
+    // parse: whatever comes out still goes through parseTarget below, and
+    // anything that is not a plain scheme://host[:port] comes out unchanged so
+    // parseTarget refuses it. See the note on normalizeProbeTarget.
+    //
     // Throws TargetError with an actionable message on anything that is not a
     // single host (or host:port) named directly.
-    const parsed = parseTarget(target, DEFAULT_PROBE_PORT);
+    const parsed = parseTarget(normalizeProbeTarget(target), DEFAULT_PROBE_PORT);
     const { findings, inventory } = await runProbe({
       targets: [parsed],
       mode: "auto",
