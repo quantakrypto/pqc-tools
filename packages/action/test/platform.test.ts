@@ -128,8 +128,10 @@ test("a conformance run that never executed is reported as failed, not as a verd
   // 35 identical failures collapse to the one actionable item.
   assert.equal(r.findings.length, 1);
   assert.equal(r.findings[0]?.rule, "harness/implementation-not-runnable");
-  assert.match(r.findings[0]?.message ?? "", /node \.\/my-impl\.js/);
-  assert.match(r.findings[0]?.message ?? "", /quantakrypto\.yml/);
+  // The impl command and the file to edit are the instruction, so they live in
+  // `remediation` rather than in the description of what went wrong.
+  assert.match(r.findings[0]?.remediation ?? "", /node \.\/my-impl\.js/);
+  assert.match(r.findings[0]?.remediation ?? "", /quantakrypto\.yml/);
   assert.doesNotMatch(r.summary, /FAIL/);
 });
 
@@ -270,4 +272,56 @@ test("only a repository_dispatch may carry a platform payload", () => {
   assert.ok(readDispatchContext({ ...env, GITHUB_EVENT_NAME: "repository_dispatch" }));
   assert.equal(readDispatchContext({ ...env, GITHUB_EVENT_NAME: "pull_request" }), null);
   assert.equal(readDispatchContext({ ...env, GITHUB_EVENT_NAME: "workflow_dispatch" }), null);
+});
+
+/**
+ * The remediation has to survive the boundary.
+ *
+ * Every detector produces one, explicitly or derived from the algorithm family,
+ * and it is in the JSON report and the SARIF help text. It was dropped here, so
+ * the platform showed a list of problems and no next step while the tool that
+ * found them knew one all along. A repository probing a host with a classical
+ * certificate sees "readiness 97" and one low finding, and the thing that would
+ * tell them whether 97 is actionable ("plan migration to ML-DSA-65 as your CA
+ * adds support" - i.e. wait) never left the runner.
+ */
+test("toPayloadFindings carries the remediation", () => {
+  const [f] = toPayloadFindings([
+    {
+      ruleId: "qprobe-tls-classical-cert",
+      severity: "low",
+      title: "Classical certificate key",
+      remediation:
+        "Plan migration to ML-DSA-65 (FIPS 204) certificate keys as your CA adds support.",
+      location: { file: "example.com:443", line: 1 },
+    },
+  ]);
+  assert.equal(
+    f?.remediation,
+    "Plan migration to ML-DSA-65 (FIPS 204) certificate keys as your CA adds support.",
+  );
+});
+
+test("toPayloadFindings omits the remediation when there is none, rather than sending empty", () => {
+  const [f] = toPayloadFindings([{ ruleId: "r", severity: "low", title: "t" }]);
+  assert.ok(!("remediation" in (f ?? {})));
+});
+
+test("an unrunnable conformance harness says what to do, separately from what happened", () => {
+  const r = conformanceResult(
+    {
+      param: "ml-kem-768",
+      overall: "ERROR",
+      impl: ["node", "./missing.js"],
+      counts: { pass: 0, fail: 2 },
+      categories: [{ category: "kat", checks: [{ name: "a", status: "fail", detail: "ENOENT" }] }],
+    },
+    ".github/workflows/quantakrypto.yml",
+  );
+  // The message is the diagnosis; the remediation is the instruction. Keeping
+  // them apart is what lets the UI render "what to do" as its own thing.
+  assert.match(r.findings[0]?.message ?? "", /says nothing about conformance/);
+  assert.doesNotMatch(r.findings[0]?.message ?? "", /Point conformance-impl/);
+  assert.match(r.findings[0]?.remediation ?? "", /Point conformance-impl/);
+  assert.match(r.findings[0]?.remediation ?? "", /quantakrypto\.yml/);
 });
