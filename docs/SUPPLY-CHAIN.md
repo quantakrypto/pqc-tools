@@ -10,7 +10,7 @@ buys several assurance checks for free; the gaps are process, not dependencies.
 
 ## 1. Targets vs. current status
 
-> **Status as of 0.9.0 (prepared; 0.8.0 published):** provenance is **live**, the
+> **Status as of 0.10.0 (published):** provenance is **live**, the
 > Scorecard workflow is **wired**, `reuse lint` runs in CI (advisory), per-package
 > `LICENSE` files ship in the tarballs, and the `v1` Action tag is **auto-moved**
 > to each released commit on publish (see §3). The remaining gap is a repo
@@ -62,9 +62,12 @@ committed and guarded by a "dist is fresh" CI gate (`ci.yml`) + a pre-publish ga
 - **The `v1` Action tag auto-moves.** Since 0.4.3, `release.yml` force-moves `v1`
   to the released commit after a successful publish, so
   `uses: quantakrypto/pqc-tools/packages/action@v1` always runs the latest
-  released bundle.
+  released bundle. Since 0.10.0 the step *discovers* the `vN` tags rather than
+  naming `v1`, so a future major cannot be left behind on a stale bundle. `v1`
+  is the only one today: the action has had no breaking change, and a moving
+  major tag is the wrong place to record anything else.
 - **Immutable semver tags exist.** Every release since v0.4.3 cuts a `vX.Y.Z` tag
-  (v0.4.3 … v0.8.0), so consumers and provenance verifiers can pin a non-mutable
+  (v0.4.3 … v0.10.0), so consumers and provenance verifiers can pin a non-mutable
   ref. The residual refinement is publishing *from* the tag ref rather than `main`.
 
 ## 4. SPDX / REUSE licensing

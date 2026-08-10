@@ -124,11 +124,14 @@ jobs:
       # stale, pre-security-fix bundle (2026-07-15 supply-chain audit). Runs only on
       # a real published Release, not a manual dry-run/publish dispatch.
       #
-      # This moved v1 only, hardcoded. When v2 was cut, the 0.10.0 release left it
-      # a commit behind v1 - and v2 is the tag the platform's generated workflows
-      # pin, so the tag most consumers actually use was the stale one. Discovering
-      # the tags instead of listing them means a future v3 needs no edit here,
-      # which is exactly the failure this had.
+      # This moved v1 only, hardcoded. A short-lived v2 was cut for the `checks`
+      # input and the 0.10.0 release left it a commit behind v1 - while v2 was
+      # the tag the platform's generated workflows pinned, so the tag consumers
+      # actually used was the stale one. v2 has since been deleted (`checks`
+      # defaults to `scan`, so it was never a breaking change and never earned a
+      # new major), leaving v1 as the only moving tag. Discovering the tags
+      # rather than listing them is what keeps a real future v3 from repeating
+      # this, and costs nothing while v1 is the only one.
       - name: Move the major-version Action tags to this release
         if: ${{ github.event_name == 'release' }}
         env:

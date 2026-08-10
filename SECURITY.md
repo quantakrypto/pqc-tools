@@ -10,7 +10,7 @@ There are two consumption surfaces, versioned on two different schemes:
 
 - **npm packages** (`@quantakrypto/core`, `@quantakrypto/qscan`, `@quantakrypto/mcp`,
   `@quantakrypto/sieve`, `@quantakrypto/qprobe`, `@quantakrypto/agent`) are pre-1.0,
-  currently `0.9.x`. Only the latest `main` is supported while the API stabilises,
+  currently `0.10.x`. Only the latest `main` is supported while the API stabilises,
   and we make no backward-compatibility promises before 1.0. Versioned support
   windows for the packages will be defined at the 1.0 release. The full policy is
   in [`docs/VERSIONING.md`](docs/VERSIONING.md).

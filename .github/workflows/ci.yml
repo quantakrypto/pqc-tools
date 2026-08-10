@@ -247,6 +247,10 @@ jobs:
         run: node scripts/check-offline-boundary.mjs
       - name: action.yml pair in sync (root Marketplace copy vs packages/action)
         run: node scripts/check-action-yml-sync.mjs
+      # GitHub never parses packages/action/examples, so a broken one ships to
+      # every reader who copies it. One did.
+      - name: Example workflows are well-formed and pinned to a moving major
+        run: node scripts/check-example-workflows.mjs
       - name: REUSE lint (SPDX / licensing) — advisory
         continue-on-error: true
         run: |
