@@ -6,6 +6,65 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.0.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-10
+
+Minor: user-facing fixes to the Action, and the runtime it declares. Nothing
+existing changes shape, and no exit code moves.
+
+### Fixed - a URL in the Action's `probe-target` was refused, despite the docs
+
+Both `action.yml` files have always said "A full URL is accepted and reduced to
+its host". It was not. `normalizeProbeTarget` existed, was exported, was
+documented, and had its own passing tests, and nothing ever called it: it was
+left behind when the target was routed through qProbe's own parser to close an
+attestation bypass. So `probe-target: "https://example.com"` reached qProbe raw
+and was refused, and the run reported as a generic failure.
+
+It is now called, and narrowed so that calling it is safe. Only a string that
+already carries a scheme is treated as a URL, and only when its authority has no
+userinfo; everything else goes to `parseTarget` unchanged. That keeps
+`our-api.example.com@evil.test` refused rather than silently resolving to
+`evil.test` under a manufactured `i-own-this`.
+
+### Fixed - qProbe reported the wrong tool version in every JSON report and CBOM
+
+`packages/qprobe/src/version.ts` carried `0.7.0` while the package was at
+`0.10.0`. The only thing keeping it honest was a comment. Every qProbe JSON
+report and endpoint CBOM since 0.8.0 has carried a `toolVersion` that lies about
+the build, which is evidence data. Fixed, and the lockstep test core has always
+had is now on qProbe too.
+
+### Added - the result payload carries each finding's remediation
+
+Every detector produces a remediation, explicitly or derived from the algorithm
+family, and it rides in the JSON report and the SARIF `help` text. It was not in
+the payload posted to quantakrypto.com, so the platform received a list of
+problems and no next step while the tool that found them knew one. The
+unrunnable-conformance finding splits accordingly: `message` says what happened,
+`remediation` says what to do.
+
+### Changed - the Action runs on Node 24
+
+Both `action.yml` files declared `using: "node20"`. GitHub deprecated that
+runtime and already force-runs node20 actions on 24, warning on every run.
+Declaring what already happens removes a scheduled break. The re-bundled
+`dist/index.js` is byte-identical, so nothing needed downleveling. CI gains a
+node 24 leg, which found a real bug on its first run: the `setOutput` fallback
+wrote `::set-output`, a workflow command GitHub removed in 2023 and which it
+rejects, from unit tests onto the real runner's stdout. Whether the runner
+parsed it came down to output interleaving.
+
+### Docs
+
+The ready-to-copy `examples/quantum-readiness.yml` was syntactically broken
+(`continue-on-error: true to code scanning`) and nothing checked it; a new
+supply-chain gate now validates the examples and requires our own action to be
+pinned to a bare moving major. The Action README documents `checks`,
+`ignore`/`include`, and what the platform callback does. Every path example is
+`.quantakrypto/`, which `docs/CONFIG.md` now states as the convention. The
+short-lived `v2` Action tag is deleted: `checks` defaults to `scan`, so it was
+never a breaking change and never earned a new major.
+
 ## [0.10.0] - 2026-08-08
 
 Minor: three additive features and two user-facing bug fixes. Nothing existing
