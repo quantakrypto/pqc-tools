@@ -152,7 +152,7 @@ qscan crypto-agility emit . -o .well-known/crypto-agility.json
 qscan crypto-agility emit . \
   --attestation https://quantakrypto.com/attest/acme \
   --hybrid-kex \
-  --policy ./crypto-policy.json \
+  --policy .quantakrypto/crypto-policy.json \
   -o .well-known/crypto-agility.json
 ```
 

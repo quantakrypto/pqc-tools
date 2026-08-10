@@ -141,7 +141,20 @@ export function notice(message: string, properties?: AnnotationProperties): void
 /**
  * Set an action output. On a runner this appends `name<<DELIM\nvalue\nDELIM` to
  * the file named by `$GITHUB_OUTPUT`. With no such file (local/test runs) it
- * falls back to a deprecated-but-harmless stdout command so callers still see it.
+ * prints a plain line so callers still see the value.
+ *
+ * The fallback used to write `::set-output title=…::value`, which was wrong in
+ * three ways at once. GitHub REMOVED `set-output` from the runner in 2023, so it
+ * set nothing. Its parameter was `name=`, never `title=`, so the runner rejected
+ * it with "Required field 'name' is missing" and annotated the step. And because
+ * our own unit tests call this without a `GITHUB_OUTPUT`, those commands went to
+ * the real runner's stdout during CI: whether the runner parsed them came down
+ * to how the test reporter's output happened to interleave, so `npm test` could
+ * fail on a line-buffering coincidence. It did, on the Node 24 matrix leg, with
+ * every one of the 1329 tests passing.
+ *
+ * A fallback must never emit a workflow command. Nothing else here is
+ * conditional on being on a runner, so nothing else has this hazard.
  *
  * The heredoc delimiter is a fresh `ghadelimiter_<random-uuid>` per call (as in
  * `@actions/core`) so the value cannot contain a line that matches it. We also
@@ -170,7 +183,7 @@ export function setOutput(name: string, value: string, env: NodeJS.ProcessEnv = 
     });
     return;
   }
-  process.stdout.write(formatCommand("set-output", value, { title: name }) + EOL);
+  process.stdout.write(`quantakrypto: output ${name}=${value}${EOL}`);
 }
 
 /**

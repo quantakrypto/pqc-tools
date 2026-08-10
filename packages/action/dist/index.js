@@ -16621,7 +16621,7 @@ function setOutput(name, value, env = process.env) {
     });
     return;
   }
-  process.stdout.write(formatCommand("set-output", value, { title: name }) + EOL);
+  process.stdout.write(`quantakrypto: output ${name}=${value}${EOL}`);
 }
 function appendStepSummary(markdown, env = process.env) {
   const filePath = env["GITHUB_STEP_SUMMARY"];

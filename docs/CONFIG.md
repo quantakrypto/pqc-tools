@@ -31,6 +31,25 @@ and local runs agree without repeating long flag lists.
 - Exactly **one** config file applies per run; configs do **not** merge across
   directories (no cascading), to keep precedence simple and auditable.
 
+### The `.quantakrypto/` directory
+
+No tool requires it: `--baseline` and `--policy` take any path, and the config
+file itself is discovered at the scan root. But every example in this repository
+writes the files a project commits into **`.quantakrypto/`**:
+
+| File | Path |
+|---|---|
+| Baseline (`--write-baseline` / `--baseline`) | `.quantakrypto/baseline.json` |
+| Org cryptography policy (`--policy`) | `.quantakrypto/crypto-policy.json` |
+| qProbe ownership manifest (`--owned-hosts`) | `.quantakrypto/owned-hosts.txt` |
+
+One convention, so a reader who has seen one of our examples can guess the rest,
+and so a project's quantakrypto state is one reviewable directory rather than
+loose files at the repository root. The docs used to disagree with themselves
+here (`qscan-baseline.json`, `.quantakrypto/baseline.json` and `.qscan/` all
+appeared), which is worth nothing but costs a reader a moment of doubt every
+time.
+
 ## 3. Precedence
 
 Effective options are resolved with a strict, documented order. **Flags beat

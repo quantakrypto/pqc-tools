@@ -166,10 +166,10 @@ timestamps.
 
 ```bash
 # 1. Accept the current state of the world.
-qscan . --write-baseline qscan-baseline.json
+qscan . --write-baseline .quantakrypto/baseline.json
 
 # 2. From now on, fail only on findings that are NOT in the baseline.
-qscan . --baseline qscan-baseline.json
+qscan . --baseline .quantakrypto/baseline.json
 ```
 
 The baseline file is plain JSON:
@@ -368,7 +368,7 @@ jobs:
         with:
           node-version: 20
       - name: Scan for quantum-vulnerable crypto
-        run: npx @quantakrypto/qscan . --severity-threshold high --baseline qscan-baseline.json
+        run: npx @quantakrypto/qscan . --severity-threshold high --baseline .quantakrypto/baseline.json
 
       # Optional: upload SARIF to GitHub code scanning.
       - name: Generate SARIF
@@ -391,7 +391,7 @@ const { result, exitCode, suppressed } = await runQscan({
   path: "src",
   format: "json",
   severityThreshold: "high",
-  baseline: "qscan-baseline.json",
+  baseline: ".quantakrypto/baseline.json",
 });
 
 console.log(`${result.findings.length} findings, exit ${exitCode}`);

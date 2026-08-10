@@ -64,4 +64,4 @@ invariant from eroding. The `runtime deps: 0` README badge is a public commitmen
   assurance property.
 - **Bundle dependencies at build time** (vendoring). Rejected for runtime code as
   unnecessary given the built-ins suffice; bundling *is* used for the Action's
-  `dist/` for a different reason (a `node20` action must run committed JS — see).
+  `dist/` for a different reason (a JavaScript action must run committed JS — see).
