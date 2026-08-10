@@ -50,22 +50,48 @@ export function parseChecks(raw: string): CheckId[] {
 }
 
 /**
- * Reduce whatever was typed to the bare hostname qProbe expects.
+ * Reduce an explicitly-written URL to the host qProbe expects. Anything else is
+ * returned untouched, for qProbe's own parser to accept or refuse.
  *
- * A full URL is the obvious thing to paste, and qProbe refuses it — correctly,
- * since `--i-own-this` is an ownership attestation and `https://mine@theirs.com`
- * resolves to `theirs.com`. Normalising here means the attestation still names
- * one host explicitly, and the host it names is the one that gets probed.
+ * A URL is the obvious thing to paste into `probe-target`, and `action.yml` has
+ * always said one is accepted. It was not: this function existed, was exported,
+ * was tested, and was never called, so `https://example.com` reached qProbe raw
+ * and was refused. A blog repo probing `https://leonacosta.com` failed on every
+ * run for that reason, reported as the generic "Check produced no valid report".
+ *
+ * Why the narrow rule, rather than normalising everything:
+ *
+ * An earlier version of this DID normalise everything, by prepending `https://`
+ * to a bare string and reading the URL's host. That turned
+ * `our-api.example.com@evil.test` into `evil.test`, so a reviewer reading the
+ * committed workflow saw one host attested and a different host was probed.
+ * `i-own-this` is an ownership attestation; the committed line has to name the
+ * host that gets probed.
+ *
+ * So: only a string that already carries a scheme is treated as a URL, and only
+ * when its authority has no userinfo. `https://mine@theirs.com` is refused for
+ * the same reason as the bare form, rather than silently becoming `theirs.com`.
+ * Everything else goes to `parseTarget` unchanged, which is still the single
+ * enforcement point for "one host, named explicitly".
  */
 export function normalizeProbeTarget(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
   try {
-    // `hostname` keeps IPv6 literals bracketed; qProbe wants the address itself.
-    return new URL(withScheme).hostname.replace(/^\[|\]$/g, "");
+    const url = new URL(trimmed);
+    // Userinfo makes the probed host different from the one a reader sees first.
+    // Hand it back untouched so parseTarget refuses it and says why.
+    if (url.username || url.password) return trimmed;
+    if (!url.hostname) return trimmed;
+    // `hostname` keeps IPv6 literals bracketed. qProbe wants the bare address
+    // when there is no port, and the bracketed form when there is: stripping
+    // the brackets off `[2001:db8::1]:8443` would leave `2001:db8::1:8443`,
+    // which qProbe reads as one long host with the default port.
+    if (!url.port) return url.hostname.replace(/^\[|\]$/g, "");
+    return `${url.hostname}:${url.port}`;
   } catch {
-    return trimmed.split(/[/?#]/)[0]?.split("@").pop()?.split(":")[0] ?? trimmed;
+    return trimmed;
   }
 }
 
