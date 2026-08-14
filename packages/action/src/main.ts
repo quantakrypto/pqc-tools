@@ -911,7 +911,19 @@ export async function run(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // readiness 40/100". The mandate gate already refuses to let a baseline waive
   // a deadline for the same reason.
   if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
-    await report(dispatch, scoredResult("qScan", result.inventory.readinessScore, result.findings));
+    await report(
+      dispatch,
+      // The pre-baseline findings, deliberately: a repo that baselined
+      // everything must not earn a badge from an empty list. The inventory
+      // rides along, so the platform can say what this repository uses and not
+      // only what is wrong with it.
+      scoredResult(
+        "qScan",
+        result.inventory.readinessScore,
+        result.findings,
+        result.inventory.assets,
+      ),
+    );
   }
 
   // The two gates OR: a passed compliance deadline fails the build even when

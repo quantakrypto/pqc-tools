@@ -375,3 +375,40 @@ test("a finding with no file is sent without a fingerprint rather than a fake on
   const [out] = toPayloadFindings([{ ruleId: "harness/implementation-not-runnable" }]);
   assert.ok(!("fingerprint" in (out ?? {})));
 });
+
+/**
+ * The inventory has to survive the boundary too.
+ *
+ * This is the third field the payload silently dropped, after the remediation
+ * and the fingerprint, and each time the tool knew something the platform could
+ * not say. "What cryptography do we use" is a different question from "what is
+ * wrong with it", and the platform could only ever answer the second.
+ */
+test("scoredResult carries the inventory, capped and trimmed", () => {
+  const assets = [
+    {
+      algorithm: "ML-KEM",
+      kind: "kem",
+      posture: "quantum-safe",
+      count: 94,
+      locations: Array.from({ length: 20 }, (_, i) => ({ file: `a${i}.rs`, line: i })),
+    },
+  ];
+  const r = scoredResult("qScan", 100, [], assets);
+  assert.equal(r.assets?.length, 1);
+  assert.equal(r.assets?.[0]?.count, 94, "the count is the scale and is not truncated");
+  assert.ok(
+    (r.assets?.[0]?.locations.length ?? 0) <= 5,
+    "the locations are evidence, not every site",
+  );
+});
+
+/**
+ * Absent and empty must stay distinguishable: a check with no inventory to
+ * report (conformance, probe) and a run from a version that predates the field
+ * are not the same as "scanned and found no cryptography".
+ */
+test("omits the inventory rather than sending an empty one", () => {
+  assert.ok(!("assets" in scoredResult("qProbe", 97, [])));
+  assert.ok(!("assets" in scoredResult("qScan", 100, [], [])));
+});
