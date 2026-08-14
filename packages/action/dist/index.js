@@ -16414,6 +16414,7 @@ async function runSieve(opts) {
 }
 
 // src/platform.ts
+init_dist();
 import { readFileSync as readFileSync2 } from "node:fs";
 var RESULT_ORIGIN = "https://quantakrypto.com";
 var POST_TIMEOUT_MS = 1e4;
@@ -16456,8 +16457,16 @@ function toPayloadFindings(findings) {
     ...f.location?.file ? { file: f.location.file } : {},
     ...typeof f.location?.line === "number" ? { line: f.location.line } : {},
     ...f.title ? { message: f.title } : {},
-    ...f.remediation ? { remediation: f.remediation } : {}
+    ...f.remediation ? { remediation: f.remediation } : {},
+    ...fingerprintOf(f) ? { fingerprint: fingerprintOf(f) } : {}
   }));
+}
+function fingerprintOf(f) {
+  if (!f.ruleId || !f.location?.file) return void 0;
+  return fingerprintFinding({
+    ruleId: f.ruleId,
+    location: { file: f.location.file, snippet: f.location.snippet }
+  });
 }
 function scoredResult(tool, score, findings) {
   const n = findings.length;

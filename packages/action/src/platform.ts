@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { fingerprintFinding } from "@quantakrypto/core";
+
 /**
  * Reporting a check result back to quantakrypto.com.
  *
@@ -32,6 +34,20 @@ export interface PayloadFinding {
   file?: string;
   line?: number;
   message?: string;
+  /**
+   * Stable identity for this finding across runs.
+   *
+   * The same SHA-256 of (rule, file, normalized snippet) that the baseline uses,
+   * deliberately excluding line and column so an unrelated edit that shifts code
+   * up or down a file does not resurface a finding as new.
+   *
+   * The platform needs it to say anything durable about a specific finding:
+   * "this one is accepted risk until March", "this one is the same one you saw
+   * last week". Without it the platform falls back to rule + path, which breaks
+   * the moment the code moves file and cannot tell two hits of one rule in one
+   * file apart.
+   */
+  fingerprint?: string;
   /**
    * What to do about it.
    *
@@ -136,7 +152,7 @@ export function toPayloadFindings(
     severity?: string;
     title?: string;
     remediation?: string;
-    location?: { file?: string; line?: number };
+    location?: { file?: string; line?: number; snippet?: string };
   }[],
 ): PayloadFinding[] {
   return findings.slice(0, MAX_FINDINGS).map((f) => ({
@@ -146,7 +162,30 @@ export function toPayloadFindings(
     ...(typeof f.location?.line === "number" ? { line: f.location.line } : {}),
     ...(f.title ? { message: f.title } : {}),
     ...(f.remediation ? { remediation: f.remediation } : {}),
+    ...(fingerprintOf(f) ? { fingerprint: fingerprintOf(f) } : {}),
   }));
+}
+
+/**
+ * The finding's baseline fingerprint, when we have enough to compute one.
+ *
+ * Reuses core's `fingerprintFinding` rather than hashing here, so the id the
+ * platform stores is the SAME id `qscan --write-baseline` produces. One
+ * identity for a finding across CI and the dashboard, not two that agree until
+ * one of them is edited.
+ *
+ * qProbe findings have no snippet; the hash is still stable for them because
+ * the rule and the target host are.
+ */
+function fingerprintOf(f: {
+  ruleId?: string;
+  location?: { file?: string; snippet?: string };
+}): string | undefined {
+  if (!f.ruleId || !f.location?.file) return undefined;
+  return fingerprintFinding({
+    ruleId: f.ruleId,
+    location: { file: f.location.file, snippet: f.location.snippet },
+  } as Parameters<typeof fingerprintFinding>[0]);
 }
 
 /** A scored check (qScan, qProbe): score plus findings. */

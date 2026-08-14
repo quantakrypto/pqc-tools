@@ -81,7 +81,9 @@ test("maps findings to the payload shape and caps them", () => {
   }));
   const out = toPayloadFindings(many);
   assert.equal(out.length, 200, "must not post more than the server keeps");
-  assert.deepEqual(out[0], { rule: "r0", severity: "high", file: "a.ts", line: 0, message: "t" });
+  const { fingerprint, ...fields } = out[0] ?? {};
+  assert.deepEqual(fields, { rule: "r0", severity: "high", file: "a.ts", line: 0, message: "t" });
+  assert.match(fingerprint ?? "", /^[0-9a-f]{64}$/, "a finding with a file carries a fingerprint");
 });
 
 test("omits absent fields rather than emitting nulls", () => {
@@ -324,4 +326,52 @@ test("an unrunnable conformance harness says what to do, separately from what ha
   assert.doesNotMatch(r.findings[0]?.message ?? "", /Point conformance-impl/);
   assert.match(r.findings[0]?.remediation ?? "", /Point conformance-impl/);
   assert.match(r.findings[0]?.remediation ?? "", /quantakrypto\.yml/);
+});
+
+/**
+ * The platform cannot say anything durable about a specific finding without a
+ * stable id for it. "Accepted risk until March" and "this is the same one you
+ * saw last week" both need one, and the payload carried none, so the platform
+ * fell back to rule + path: broken the moment the code moves file, and unable
+ * to tell two hits of one rule in one file apart.
+ *
+ * It must be the SAME id `qscan --write-baseline` writes, so CI and the
+ * dashboard agree on what a finding is rather than each having its own idea.
+ */
+test("toPayloadFindings carries the baseline fingerprint", async () => {
+  const { fingerprintFinding } = await import("@quantakrypto/core");
+  const finding = {
+    ruleId: "python-rsa-keygen",
+    severity: "high",
+    title: "RSA key generation",
+    location: { file: "src/crypto.py", line: 12, snippet: "rsa.generate_private_key(" },
+  };
+  const [out] = toPayloadFindings([finding]);
+  assert.equal(
+    out?.fingerprint,
+    fingerprintFinding(finding as Parameters<typeof fingerprintFinding>[0]),
+  );
+});
+
+/** Line and column are excluded, so unrelated edits do not resurface a finding. */
+test("the fingerprint survives the finding moving down the file", () => {
+  const at = (line: number) =>
+    toPayloadFindings([
+      {
+        ruleId: "python-rsa-keygen",
+        location: { file: "src/crypto.py", line, snippet: "rsa.generate_private_key(" },
+      },
+    ])[0]?.fingerprint;
+  assert.equal(at(12), at(300));
+});
+
+test("two different rules in one file get different fingerprints", () => {
+  const [a] = toPayloadFindings([{ ruleId: "a", location: { file: "f.py", snippet: "x" } }]);
+  const [b] = toPayloadFindings([{ ruleId: "b", location: { file: "f.py", snippet: "x" } }]);
+  assert.notEqual(a?.fingerprint, b?.fingerprint);
+});
+
+test("a finding with no file is sent without a fingerprint rather than a fake one", () => {
+  const [out] = toPayloadFindings([{ ruleId: "harness/implementation-not-runnable" }]);
+  assert.ok(!("fingerprint" in (out ?? {})));
 });
