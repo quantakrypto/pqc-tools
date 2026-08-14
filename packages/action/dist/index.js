@@ -30,6 +30,184 @@ var init_version = __esm({
   }
 });
 
+// ../core/dist/inventory-scan.js
+function isKeyPosition(content, end) {
+  const after = content.slice(end, end + 3);
+  return /^["']?\s*:(?!:)/.test(after);
+}
+function lineOf(content, index) {
+  let line = 1;
+  for (let i = 0; i < index && i < content.length; i++)
+    if (content[i] === "\n")
+      line++;
+  return line;
+}
+function inventoryFile(file, content) {
+  const byAlgorithm = /* @__PURE__ */ new Map();
+  const claimed = [];
+  for (const p of PATTERNS) {
+    p.re.lastIndex = 0;
+    let m;
+    while ((m = p.re.exec(content)) !== null) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (claimed.some(([s, e]) => start < e && end > s))
+        continue;
+      if (isKeyPosition(content, end))
+        continue;
+      claimed.push([start, end]);
+      const entry = byAlgorithm.get(p.algorithm) ?? {
+        algorithm: p.algorithm,
+        kind: p.kind,
+        posture: p.posture,
+        count: 0,
+        locations: []
+      };
+      entry.count += 1;
+      if (entry.locations.length < MAX_LOCATIONS) {
+        entry.locations.push({ file, line: lineOf(content, start), snippet: m[0] });
+      }
+      byAlgorithm.set(p.algorithm, entry);
+    }
+  }
+  return [...byAlgorithm.values()];
+}
+function mergeAssets(all) {
+  const merged = /* @__PURE__ */ new Map();
+  for (const list of all) {
+    for (const a of list) {
+      const at = merged.get(a.algorithm);
+      if (!at) {
+        merged.set(a.algorithm, { ...a, locations: [...a.locations] });
+        continue;
+      }
+      at.count += a.count;
+      for (const loc of a.locations) {
+        if (at.locations.length < MAX_LOCATIONS)
+          at.locations.push(loc);
+      }
+    }
+  }
+  const rank = { "quantum-vulnerable": 0, "quantum-safe": 1, "not-quantum-relevant": 2 };
+  return [...merged.values()].sort((a, b) => rank[a.posture] - rank[b.posture] || b.count - a.count || a.algorithm.localeCompare(b.algorithm));
+}
+var MAX_LOCATIONS, PQC, SYMMETRIC, PATTERNS;
+var init_inventory_scan = __esm({
+  "../core/dist/inventory-scan.js"() {
+    "use strict";
+    MAX_LOCATIONS = 5;
+    PQC = [
+      {
+        re: /\bML[-_]?KEM[-_]?(512|768|1024)\b/gi,
+        algorithm: "ML-KEM",
+        kind: "kem",
+        posture: "quantum-safe"
+      },
+      {
+        re: /\bML[-_]?DSA[-_]?(44|65|87)\b/gi,
+        algorithm: "ML-DSA",
+        kind: "signature",
+        posture: "quantum-safe"
+      },
+      {
+        re: /\bSLH[-_]?DSA[-_]?(?:SHA2|SHAKE)[-_]?\d+[fs]?\b/gi,
+        algorithm: "SLH-DSA",
+        kind: "signature",
+        posture: "quantum-safe"
+      },
+      // Hybrids: the deployed shape of PQC key agreement today, and the thing a
+      // reader most wants confirmed. Named separately from bare ML-KEM because the
+      // classical half is the point.
+      {
+        re: /\bX25519(?:ML)?KEM768\b|\bX25519_?KYBER768\b|\bsecp256r1mlkem768\b/gi,
+        algorithm: "X25519MLKEM768 (hybrid)",
+        kind: "key-agreement",
+        posture: "quantum-safe"
+      },
+      // Pre-standard CRYSTALS. Quantum-safe in the sense that matters here (not
+      // broken by Shor) but NOT FIPS, so it is named for what it is.
+      {
+        re: /\bKyber(?:512|768|1024)\b|\bpqc_kyber\b|\bcrystals[-_]kyber\b/gi,
+        algorithm: "Kyber (pre-standard)",
+        kind: "kem",
+        posture: "quantum-safe"
+      },
+      {
+        re: /\bDilithium[2-5]\b|\bcrystals[-_]dilithium\b/gi,
+        algorithm: "Dilithium (pre-standard)",
+        kind: "signature",
+        posture: "quantum-safe"
+      },
+      {
+        re: /\bSPHINCS\+?[-_]/gi,
+        algorithm: "SPHINCS+ (pre-standard)",
+        kind: "signature",
+        posture: "quantum-safe"
+      },
+      {
+        re: /\bFALCON[-_]?(512|1024)\b/gi,
+        algorithm: "FALCON",
+        kind: "signature",
+        posture: "quantum-safe"
+      }
+    ];
+    SYMMETRIC = [
+      {
+        re: /\bAES[-_]?256\b|\bAES256\b/gi,
+        algorithm: "AES-256",
+        kind: "symmetric",
+        posture: "not-quantum-relevant"
+      },
+      {
+        re: /\bAES[-_]?192\b/gi,
+        algorithm: "AES-192",
+        kind: "symmetric",
+        posture: "not-quantum-relevant"
+      },
+      {
+        re: /\bAES[-_]?128\b|\bAES128\b/gi,
+        algorithm: "AES-128",
+        kind: "symmetric",
+        posture: "not-quantum-relevant"
+      },
+      {
+        re: /\bChaCha20\b/gi,
+        algorithm: "ChaCha20",
+        kind: "symmetric",
+        posture: "not-quantum-relevant"
+      },
+      {
+        re: /\b3DES\b|\bTripleDES\b|\bDES[-_]?EDE3\b/gi,
+        algorithm: "3DES",
+        kind: "symmetric",
+        posture: "not-quantum-relevant"
+      },
+      { re: /\bRC4\b/gi, algorithm: "RC4", kind: "symmetric", posture: "not-quantum-relevant" },
+      {
+        re: /\bSHA[-_]?3[-_]?(224|256|384|512)\b/gi,
+        algorithm: "SHA-3",
+        kind: "hash",
+        posture: "not-quantum-relevant"
+      },
+      {
+        re: /\bSHA[-_]?(384|512)\b/gi,
+        algorithm: "SHA-2 (384/512)",
+        kind: "hash",
+        posture: "not-quantum-relevant"
+      },
+      { re: /\bSHA[-_]?256\b/gi, algorithm: "SHA-256", kind: "hash", posture: "not-quantum-relevant" },
+      {
+        re: /\bSHA[-_]?1\b|\bsha1\b/gi,
+        algorithm: "SHA-1",
+        kind: "hash",
+        posture: "not-quantum-relevant"
+      },
+      { re: /\bMD5\b/gi, algorithm: "MD5", kind: "hash", posture: "not-quantum-relevant" }
+    ];
+    PATTERNS = [...PQC, ...SYMMETRIC];
+  }
+});
+
 // ../core/dist/remediation.js
 function remediationFor(algorithm) {
   return REMEDIATIONS[algorithm];
@@ -9392,7 +9570,7 @@ function readinessScore(findings) {
   }
   return Math.max(0, Math.min(100, Math.round(100 * Math.exp(-penalty / SCORE_SCALE))));
 }
-function buildInventory(findings) {
+function buildInventory(findings, assets) {
   const byAlgorithm = {};
   const byCategory = {};
   const bySeverity = {
@@ -9418,13 +9596,35 @@ function buildInventory(findings) {
     byCategory,
     bySeverity,
     hndlCount,
-    readinessScore: readinessScore(findings)
+    readinessScore: readinessScore(findings),
+    // The classical half comes from the findings themselves: they already carry
+    // the algorithm, the file and the line, so the vulnerable side of the
+    // inventory is free. `assets` supplies the half findings cannot see.
+    assets: mergeAssets([assets ?? [], assetsFromFindings(findings)])
   };
+}
+function assetsFromFindings(findings) {
+  const kindOf = {
+    kem: "kem",
+    "key-exchange": "key-agreement",
+    signature: "signature",
+    hash: "hash"
+  };
+  return mergeAssets(findings.filter((f) => f.algorithm && f.algorithm !== "unknown").map((f) => [
+    {
+      algorithm: f.algorithm,
+      kind: kindOf[f.category] ?? "other",
+      posture: "quantum-vulnerable",
+      count: 1,
+      locations: [f.location]
+    }
+  ]));
 }
 var SEVERITIES, SEVERITY_WEIGHT, SCORE_SCALE, TEST_PATH_WEIGHT;
 var init_inventory = __esm({
   "../core/dist/inventory.js"() {
     "use strict";
+    init_inventory_scan();
     SEVERITIES = ["critical", "high", "medium", "low", "info"];
     SEVERITY_WEIGHT = {
       critical: 30,
@@ -9505,6 +9705,7 @@ async function scan(options) {
   const baseDir = rootIsFile ? path3.dirname(options.root) : options.root;
   const singleFileName = rootIsFile ? path3.basename(options.root) : null;
   const findings = [];
+  const assetsPerFile = [];
   let filesScanned = 0;
   let analyzedFiles = 0;
   let bytesScanned = 0;
@@ -9572,11 +9773,12 @@ async function scan(options) {
       fileFindings = detectFile(reportedPath, content, dets, { source: doSource, config: doConfig, deps: doDeps }, options.disabledRules);
     }
     findings.push(...fileFindings);
+    assetsPerFile.push(inventoryFile(reportedPath, content));
   }
   if (cacheFile && nextEntries)
     await saveCache(cacheFile, ruleset, nextEntries);
   findings.sort(compareFindings);
-  const inventory = buildInventory(findings);
+  const inventory = buildInventory(findings, mergeAssets(assetsPerFile));
   const finishedAt = /* @__PURE__ */ new Date();
   return {
     root: options.root,
@@ -9618,6 +9820,7 @@ var CODE_ONLY_RULES;
 var init_scan = __esm({
   "../core/dist/scan.js"() {
     "use strict";
+    init_inventory_scan();
     init_walk();
     init_detect_utils();
     init_comments();
@@ -11476,7 +11679,13 @@ function toJson(result, opts) {
       hndlCount: result.inventory.hndlCount,
       bySeverity: result.inventory.bySeverity,
       byCategory: result.inventory.byCategory,
-      byAlgorithm: result.inventory.byAlgorithm
+      byAlgorithm: result.inventory.byAlgorithm,
+      // The actual inventory: every algorithm found, safe and unsafe. The
+      // counts above are derived from findings, so on their own they can only
+      // describe what is wrong. Omitted when empty rather than sent as [], so a
+      // consumer can tell "scanned, found no cryptography" from "produced by a
+      // version that predates this".
+      ...result.inventory.assets?.length ? { assets: result.inventory.assets } : {}
     },
     ...hndl ? { hndl: hndlSummaryBlock(hndl) } : {},
     // Compliance-mandate evaluation (`--mandate`): the machine-readable verdicts

@@ -322,6 +322,43 @@ export interface ParallelScanOptions extends ScanOptions {
 }
 
 /** Aggregated counts produced from a scan's findings. */
+/**
+ * What a piece of cryptography means for a quantum adversary.
+ *
+ * Three states, not two, because "not a finding" and "safe" are different
+ * claims. AES-256 is not quantum-vulnerable in any useful sense, but calling it
+ * "quantum-safe" alongside ML-KEM would flatten a real distinction: one is a
+ * PQC primitive, the other is symmetric and was never at risk from Shor.
+ */
+export type CryptoPosture =
+  /** Broken by a CRQC: classical asymmetric. */
+  | "quantum-vulnerable"
+  /** A NIST PQC primitive, or a hybrid that contains one. */
+  | "quantum-safe"
+  /** Symmetric or hash: weakened by Grover at most, not broken. */
+  | "not-quantum-relevant";
+
+/**
+ * One algorithm this repository actually uses, with where it appears.
+ *
+ * Grouped by algorithm rather than one entry per call site. A large repository
+ * has thousands of AES calls, and a list of all of them is not an inventory, it
+ * is a concordance: nobody reads it and the signal drowns. The count is the
+ * scale, the locations are the evidence, and a reader who wants every site has
+ * `--format json` and the findings.
+ */
+export interface InventoryAsset {
+  /** As named in the code, e.g. "RSA", "ML-KEM-768", "AES-256". */
+  algorithm: string;
+  /** What it is used for. */
+  kind: "kem" | "signature" | "key-agreement" | "symmetric" | "hash" | "other";
+  posture: CryptoPosture;
+  /** How many times it was matched across the scan. */
+  count: number;
+  /** Up to a handful of example sites. Evidence, not an exhaustive list. */
+  locations: SourceLocation[];
+}
+
 export interface CryptoInventory {
   byAlgorithm: Partial<Record<AlgorithmFamily, number>>;
   byCategory: Partial<Record<FindingCategory, number>>;
@@ -330,6 +367,18 @@ export interface CryptoInventory {
   hndlCount: number;
   /** 0–100 readiness score (100 = no classical asymmetric crypto found). */
   readinessScore: number;
+  /**
+   * Every algorithm found, safe and unsafe, grouped and posture-classified.
+   *
+   * The counts above are derived from FINDINGS, so they only ever describe what
+   * is wrong. That made a repository which had migrated correctly indisputable
+   * from one that uses no cryptography at all: both showed an empty inventory
+   * and 100/100. This is the other half, so "we did the work" is something the
+   * tool can show rather than something the owner has to assert.
+   *
+   * Optional for backward compatibility with hand-built results.
+   */
+  assets?: InventoryAsset[];
 }
 
 /**

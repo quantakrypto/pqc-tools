@@ -12,7 +12,8 @@
 import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 
-import type { Detector, Finding, ScanOptions, ScanResult } from "./types.js";
+import type { Detector, Finding, InventoryAsset, ScanOptions, ScanResult } from "./types.js";
+import { inventoryFile, mergeAssets } from "./inventory-scan.js";
 import {
   walkFiles,
   toPosix,
@@ -137,6 +138,9 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const singleFileName = rootIsFile ? path.basename(options.root) : null;
 
   const findings: Finding[] = [];
+  // Cryptography that is FINE, which no finding detector can report. Collected
+  // per file and merged once at the end. See inventory-scan.ts.
+  const assetsPerFile: InventoryAsset[][] = [];
   let filesScanned = 0;
   let analyzedFiles = 0;
   let bytesScanned = 0;
@@ -255,6 +259,11 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       );
     }
     findings.push(...fileFindings);
+    // Deliberately outside the findings cache: that cache is keyed on the
+    // ruleset, and the inventory pass is not part of it. Re-running a cheap
+    // regex sweep is the honest cost of not silently serving a stale inventory
+    // from a cache that never knew about it.
+    assetsPerFile.push(inventoryFile(reportedPath, content));
   }
 
   // Persist the cache (best effort) before ordering/returning.
@@ -263,7 +272,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   // Stable ordering: by file, then line, then ruleId.
   findings.sort(compareFindings);
 
-  const inventory = buildInventory(findings);
+  const inventory = buildInventory(findings, mergeAssets(assetsPerFile));
   const finishedAt = new Date();
 
   return {

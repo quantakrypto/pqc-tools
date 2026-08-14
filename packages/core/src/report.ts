@@ -330,6 +330,12 @@ export function toJson(result: ScanResult, opts?: ReportOptions): Record<string,
       bySeverity: result.inventory.bySeverity,
       byCategory: result.inventory.byCategory,
       byAlgorithm: result.inventory.byAlgorithm,
+      // The actual inventory: every algorithm found, safe and unsafe. The
+      // counts above are derived from findings, so on their own they can only
+      // describe what is wrong. Omitted when empty rather than sent as [], so a
+      // consumer can tell "scanned, found no cryptography" from "produced by a
+      // version that predates this".
+      ...(result.inventory.assets?.length ? { assets: result.inventory.assets } : {}),
     },
     ...(hndl ? { hndl: hndlSummaryBlock(hndl) } : {}),
     // Compliance-mandate evaluation (`--mandate`): the machine-readable verdicts
