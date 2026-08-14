@@ -6,4 +6,4 @@
  * qProbe JSON report and every endpoint CBOM since 0.8.0 carried toolVersion
  * 0.7.0, which is evidence data, not cosmetics.
  */
-export const VERSION = "0.11.0";
+export const VERSION = "0.12.0";
