@@ -16677,13 +16677,29 @@ function fingerprintOf(f) {
     location: { file: f.location.file, snippet: f.location.snippet }
   });
 }
-function scoredResult(tool, score, findings) {
+function scoredResult(tool, score, findings, assets) {
   const n = findings.length;
   return {
     status: "complete",
     score,
     summary: `${tool}: ${n} finding(s), readiness ${score ?? "?"}/100`,
-    findings: toPayloadFindings(findings)
+    findings: toPayloadFindings(findings),
+    // Capped for the same reason the findings are: this is evidence, not a
+    // dump. An inventory with more distinct algorithms than this is not a
+    // repository, it is a corpus.
+    ...assets?.length ? { assets: assets.slice(0, MAX_ASSETS).map(toPayloadAsset) } : {}
+  };
+}
+var MAX_ASSETS = 100;
+function toPayloadAsset(a) {
+  return {
+    algorithm: a.algorithm,
+    kind: a.kind,
+    posture: a.posture,
+    count: a.count,
+    // A few example sites, not every one: the count already carries the scale,
+    // and the locations are only there so a reader can go and look.
+    locations: (a.locations ?? []).slice(0, 5).map((l) => ({ file: l.file, line: l.line }))
   };
 }
 function conformanceResult(report2, workflowPath) {
@@ -17355,7 +17371,19 @@ ${result2.summary}
     );
   }
   if (dispatch && dispatchAskedFor(dispatch.eventType, "scan")) {
-    await report(dispatch, scoredResult("qScan", result.inventory.readinessScore, result.findings));
+    await report(
+      dispatch,
+      // The pre-baseline findings, deliberately: a repo that baselined
+      // everything must not earn a badge from an empty list. The inventory
+      // rides along, so the platform can say what this repository uses and not
+      // only what is wrong with it.
+      scoredResult(
+        "qScan",
+        result.inventory.readinessScore,
+        result.findings,
+        result.inventory.assets
+      )
+    );
   }
   const gateOpts = { leadMonths: inputs.leadMonths, failNow: inputs.failNow };
   const mandateFailed = mandateEval !== void 0 && mandateGateFails(mandateEval, gateOpts);

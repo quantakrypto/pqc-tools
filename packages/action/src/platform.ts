@@ -26,6 +26,28 @@ export interface ResultPayload {
   score: number | null;
   summary: string;
   findings: PayloadFinding[];
+  /**
+   * Every algorithm the scan found, safe and unsafe, grouped and posture-classified.
+   *
+   * Sent because "what cryptography do we use" is a different question from
+   * "what is wrong with it", and the platform could only ever answer the second.
+   * A repository that had migrated correctly looked identical to one using no
+   * cryptography at all: both showed nothing and 100/100.
+   *
+   * Absent on a check that has no inventory to report (conformance, probe) and
+   * on any run from a version of the action that predates it, so the platform
+   * has to treat missing and empty as different.
+   */
+  assets?: PayloadAsset[];
+}
+
+/** One algorithm in use, with how much of it there is and a few example sites. */
+export interface PayloadAsset {
+  algorithm: string;
+  kind: string;
+  posture: string;
+  count: number;
+  locations: { file: string; line?: number }[];
 }
 
 export interface PayloadFinding {
@@ -193,6 +215,7 @@ export function scoredResult(
   tool: string,
   score: number | null,
   findings: readonly Parameters<typeof toPayloadFindings>[0][number][],
+  assets?: readonly PayloadAsset[],
 ): Omit<ResultPayload, "auditRunId" | "token"> {
   const n = findings.length;
   return {
@@ -200,6 +223,26 @@ export function scoredResult(
     score,
     summary: `${tool}: ${n} finding(s), readiness ${score ?? "?"}/100`,
     findings: toPayloadFindings(findings),
+    // Capped for the same reason the findings are: this is evidence, not a
+    // dump. An inventory with more distinct algorithms than this is not a
+    // repository, it is a corpus.
+    ...(assets?.length ? { assets: assets.slice(0, MAX_ASSETS).map(toPayloadAsset) } : {}),
+  };
+}
+
+/** Cap on distinct algorithms posted. */
+const MAX_ASSETS = 100;
+
+/** Trim an inventory asset to what the platform renders. */
+function toPayloadAsset(a: PayloadAsset): PayloadAsset {
+  return {
+    algorithm: a.algorithm,
+    kind: a.kind,
+    posture: a.posture,
+    count: a.count,
+    // A few example sites, not every one: the count already carries the scale,
+    // and the locations are only there so a reader can go and look.
+    locations: (a.locations ?? []).slice(0, 5).map((l) => ({ file: l.file, line: l.line })),
   };
 }
 
