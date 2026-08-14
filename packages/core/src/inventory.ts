@@ -8,8 +8,10 @@ import type {
   CryptoInventory,
   Finding,
   FindingCategory,
+  InventoryAsset,
   Severity,
 } from "./types.js";
+import { mergeAssets } from "./inventory-scan.js";
 
 /** All severities, most → least severe (used to seed the counts record). */
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -103,7 +105,7 @@ export function readinessScore(findings: Finding[]): number {
 }
 
 /** Build the full inventory (counts + HNDL + score) from a set of findings. */
-export function buildInventory(findings: Finding[]): CryptoInventory {
+export function buildInventory(findings: Finding[], assets?: InventoryAsset[]): CryptoInventory {
   const byAlgorithm: Partial<Record<AlgorithmFamily, number>> = {};
   const byCategory: Partial<Record<FindingCategory, number>> = {};
   const bySeverity: Record<Severity, number> = {
@@ -134,5 +136,40 @@ export function buildInventory(findings: Finding[]): CryptoInventory {
     bySeverity,
     hndlCount,
     readinessScore: readinessScore(findings),
+    // The classical half comes from the findings themselves: they already carry
+    // the algorithm, the file and the line, so the vulnerable side of the
+    // inventory is free. `assets` supplies the half findings cannot see.
+    assets: mergeAssets([assets ?? [], assetsFromFindings(findings)]),
   };
+}
+
+/**
+ * Inventory entries for the classical cryptography the findings already found.
+ *
+ * Every finding with an algorithm IS an inventory entry: something this
+ * repository uses, and its posture is exactly why it is a finding. Deriving
+ * them here rather than re-detecting keeps one source of truth, so the
+ * inventory can never disagree with the findings list about what is in the
+ * repository.
+ */
+function assetsFromFindings(findings: readonly Finding[]): InventoryAsset[] {
+  const kindOf: Partial<Record<string, InventoryAsset["kind"]>> = {
+    kem: "kem",
+    "key-exchange": "key-agreement",
+    signature: "signature",
+    hash: "hash",
+  };
+  return mergeAssets(
+    findings
+      .filter((f) => f.algorithm && f.algorithm !== "unknown")
+      .map((f) => [
+        {
+          algorithm: f.algorithm as string,
+          kind: kindOf[f.category] ?? "other",
+          posture: "quantum-vulnerable" as const,
+          count: 1,
+          locations: [f.location],
+        },
+      ]),
+  );
 }

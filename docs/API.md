@@ -10,7 +10,7 @@ point is internal and may change in a patch. The machine-readable frozen surface
 
 ## @quantakrypto/core
 
-Public entry: `packages/core/src/index.ts` - 209 exported symbols.
+Public entry: `packages/core/src/index.ts` - 211 exported symbols.
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -43,8 +43,9 @@ Public entry: `packages/core/src/index.ts` - 209 exported symbols.
 | `CryptoAgilityManifestOptions` | interface | Inputs the CLI/runtime supplies that are not derivable from the scan. |
 | `CryptoAgilityPolicy` | interface | The migration policy the project declares it is measured against. |
 | `CryptoAgilityPosture` | interface | The project's cryptographic posture, distilled from the scan inventory. |
-| `CryptoInventory` | interface | Aggregated counts produced from a scan's findings. |
+| `CryptoInventory` | interface |  |
 | `CryptoPolicy` | interface | An organization-supplied cryptography policy (from a JSON file). |
+| `CryptoPosture` | type | What a piece of cryptography means for a quantum adversary. |
 | `CycloneDxBom` | interface | A CycloneDX 1.6 cryptographic bill of materials (kept permissive). |
 | `DEFAULT_MIGRATION_HORIZON_YEARS` | const | Default years to complete the org's PQC migration (Y in Mosca's inequality). |
 | `DEFAULT_PROFILE_ID` | const | The default profile id when `--profile` is not given. |
@@ -79,6 +80,7 @@ Public entry: `packages/core/src/index.ts` - 209 exported symbols.
 | `HndlScope` | type | Logical scope a finding belongs to, used for optional scope-bound assets. The |
 | `HndlSummary` | interface | Repo-level HNDL summary. |
 | `HybridStance` | type | Whether classical+PQC hybridization is required during the transition, per regime. |
+| `InventoryAsset` | interface | One algorithm this repository actually uses, with where it appears. |
 | `LoadConfigResult` | interface | Result of {@link loadConfig}: the resolved config plus where it came from. |
 | `MANDATES` | const | The bundled mandate catalog. Keyed by `--mandate <id>`. |
 | `Mandate` | interface |  |
