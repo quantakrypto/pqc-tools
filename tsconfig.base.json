@@ -17,6 +17,7 @@
     "noUnusedParameters": false,
     "noImplicitOverride": true,
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"]
   }
 }
