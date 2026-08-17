@@ -164,12 +164,7 @@ interface ErrorResult {
 
 /** Any response the SUT may emit. */
 export type Response =
-  | KeygenResult
-  | EncapsResult
-  | DecapsResult
-  | SignResult
-  | VerifyResult
-  | ErrorResult;
+  KeygenResult | EncapsResult | DecapsResult | SignResult | VerifyResult | ErrorResult;
 
 // ---------------------------------------------------------------------------
 // Serialization
