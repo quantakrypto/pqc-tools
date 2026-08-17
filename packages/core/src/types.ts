@@ -25,16 +25,7 @@ export type FindingCategory =
 
 /** Classical asymmetric algorithm families that are not quantum-safe. */
 export type AlgorithmFamily =
-  | "RSA"
-  | "ECDH"
-  | "ECDSA"
-  | "EdDSA"
-  | "DH"
-  | "DSA"
-  | "X25519"
-  | "X448"
-  | "ECIES"
-  | "unknown";
+  "RSA" | "ECDH" | "ECDSA" | "EdDSA" | "DH" | "DSA" | "X25519" | "X448" | "ECIES" | "unknown";
 
 /** A precise location inside a scanned file. */
 export interface SourceLocation {
@@ -96,14 +87,7 @@ export interface Finding {
 
 /** Package ecosystems the dependency scanner understands. */
 export type DependencyEcosystem =
-  | "npm"
-  | "pypi"
-  | "cargo"
-  | "go"
-  | "maven"
-  | "rubygems"
-  | "nuget"
-  | "composer";
+  "npm" | "pypi" | "cargo" | "go" | "maven" | "rubygems" | "nuget" | "composer";
 
 /** A known quantum-vulnerable dependency entry. */
 export interface VulnerableDependency {
