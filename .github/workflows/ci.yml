@@ -20,10 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 24 because that is what the Action declares (`using: node24`) and what
-        # GitHub already runs every action on. 20 stays because every package
-        # declares `engines: node >=20`; drop it here only when that drops too.
-        node: ["20", "22", "24"]
+        # Organization CI policy requires Node 24 or newer, including test jobs.
+        # Package engines remain unchanged; older runtimes are not tested here.
+        node: ["24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,7 +42,7 @@ jobs:
         run: npm run standards:check
 
   lint:
-    name: lint + format (node 20)
+    name: lint + format (node 24)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +50,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       # ESLint's type-aware rules (no-floating-promises etc.) need the project
@@ -66,12 +65,11 @@ jobs:
         run: npm run api:check
 
   coverage:
-    name: coverage (node 22, advisory)
+    name: coverage (node 24, advisory)
     runs-on: ubuntu-latest
     # Non-gating: Node's --experimental-test-coverage is informational for now.
-    # Pinned to Node 22 — `npm run test:coverage` needs native root-glob
-    # expansion (Node 21+) and Node 20's coverage reporter crashes on the
-    # cross-package dist source maps. See the //test:coverage note in package.json.
+    # Node 24 provides native root-glob expansion and satisfies the CI minimum.
+    # See the //test:coverage note in package.json.
     continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,7 +77,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -96,7 +94,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -112,7 +110,7 @@ jobs:
           node scripts/validate-sarif.mjs /tmp/dogfood.sarif.json
 
   bench:
-    name: scan benchmark (node 20, advisory)
+    name: scan benchmark (node 24, advisory)
     runs-on: ubuntu-latest
     needs: build-test
     # Advisory: timings are noisy on shared CI runners, so this never gates.
@@ -123,7 +121,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -131,7 +129,7 @@ jobs:
         run: npm run bench
 
   sarif:
-    name: SARIF structural validation (node 20)
+    name: SARIF structural validation (node 24)
     runs-on: ubuntu-latest
     needs: build-test
     steps:
@@ -140,7 +138,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -164,7 +162,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - name: Build (workspace deps the bundle resolves)
@@ -224,7 +222,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
       - run: npm ci
       - name: Build (postbuild pins bin modes)
@@ -241,7 +239,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Enforce zero runtime dependencies (ADR-0001)
         run: node scripts/check-zero-deps.mjs
       - name: Enforce SHA-pinned GitHub Actions (Scorecard Pinned-Dependencies)
